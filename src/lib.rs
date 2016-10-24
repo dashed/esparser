@@ -106,4 +106,13 @@ fn unicode_id_start_test() {
             assert!(false);
         }
     }
+
+    match parse_only(unicode_id_start, b"1") {
+        Ok(_) => {
+            assert!(false);
+        }
+        Err(_) => {
+            assert!(true);
+        }
+    }
 }
