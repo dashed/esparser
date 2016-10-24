@@ -38,7 +38,7 @@ fn parse_utf8_char<I: U8Input>(mut i: I) -> SimpleResult<I, char> {
 
     let b = i.consume_while(|c| {
         if valid || internal_buf.len() >= 4 {
-            false
+            false // break from while
         } else {
 
             internal_buf.push(c);
@@ -53,7 +53,7 @@ fn parse_utf8_char<I: U8Input>(mut i: I) -> SimpleResult<I, char> {
                 }
             }
 
-            true
+            true // continue while
         }
     });
 
