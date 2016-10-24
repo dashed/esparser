@@ -199,6 +199,26 @@ fn hex_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
     )
 }
 
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Hex4Digits
+fn hex_4_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
+    parse!{i;
+
+        let digit_1 = hex_digit();
+        let digit_2 = hex_digit();
+        let digit_3 = hex_digit();
+        let digit_4 = hex_digit();
+
+        ret {
+            let digit_1 = digit_1 as char;
+            let digit_2 = digit_2 as char;
+            let digit_3 = digit_3 as char;
+            let digit_4 = digit_4 as char;
+            let formatted = format!("{}{}{}{}", digit_1, digit_2, digit_3, digit_4);
+            i32::from_str_radix(&formatted, 16).unwrap()
+        }
+    }
+}
+
 #[test]
 fn hex_digits_test() {
 
@@ -214,6 +234,15 @@ fn hex_digits_test() {
     match parse_only(hex_digits, b"e") {
         Ok(result) => {
             assert_eq!(result, 14);
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    match parse_only(hex_4_digits, b"adad") {
+        Ok(result) => {
+            assert_eq!(result, 44461);
         }
         Err(_) => {
             assert!(false);
