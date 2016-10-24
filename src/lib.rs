@@ -253,6 +253,7 @@ fn unicode_id_continue_test() {
 
 // == 11.6.2 Reserved Words
 
+// TODO: test case: A code point in a ReservedWord cannot be expressed by a \UnicodeEscapeSequence.
 // http://www.ecma-international.org/ecma-262/7.0/#sec-reserved-words
 fn reserved_word() {
     parse!{i;
