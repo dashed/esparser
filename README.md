@@ -3,6 +3,8 @@ espice (work in progress)
 
 > JavaScript Parser in rust
 
+**NOTE:** This is a toy project for me.
+
 ## TO DO
 
 - [ ] parse language conforming to ECMAScript 2016 v7.0 spec
