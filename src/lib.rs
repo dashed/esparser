@@ -253,17 +253,13 @@ fn unicode_id_continue_test() {
 
 // == 11.6.2 Reserved Words
 
-// http://www.ecma-international.org/ecma-262/7.0/#prod-ReservedWord
+// http://www.ecma-international.org/ecma-262/7.0/#sec-reserved-words
 fn reserved_word() {
-
-}
-
-// == 11.6.2.1 Keywords
-
-// http://www.ecma-international.org/ecma-262/7.0/#prod-Keyword
-fn keyword<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
     parse!{i;
-        let keyword = string(b"break") <|>
+        let keyword =
+            // == 11.6.2.1 Keywords ==
+            // http://www.ecma-international.org/ecma-262/7.0/#prod-Keyword
+            string(b"break") <|>
             string(b"do") <|>
             string(b"in") <|>
             string(b"typeof") <|>
@@ -295,7 +291,21 @@ fn keyword<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
             string(b"throw") <|>
             string(b"delete") <|>
             string(b"import") <|>
-            string(b"try");
+            string(b"try") <|>
+
+            // == 11.6.2.2 Future Reserved Words ==
+            // http://www.ecma-international.org/ecma-262/7.0/#sec-future-reserved-words
+            string(b"enum") <|>
+            string(b"await") <|>
+
+            // == 11.8.1 Null Literals ==
+            // http://www.ecma-international.org/ecma-262/7.0/#prod-NullLiteral
+            string(b"null") <|>
+
+            // == 11.8.2 Boolean Literals ==
+            // http://www.ecma-international.org/ecma-262/7.0/#prod-BooleanLiteral
+            string(b"true") <|>
+            string(b"false");
 
         ret keyword
     }
