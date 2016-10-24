@@ -7,13 +7,11 @@ extern crate unicode_xid;
 // == 3rd-party imports ==
 
 use chomp::parsers::{SimpleResult, scan, token, any, take_till, string, satisfy};
-use chomp::combinators::{look_ahead, many_till, many1};
+use chomp::combinators::{look_ahead, many_till, many1, or};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
 use chomp::parse_only;
 use chomp::parsers::Error as ChompError;
 use chomp::primitives::Primitives;
-
-use unicode_xid::UnicodeXID;
 
 /*
 
@@ -38,7 +36,7 @@ fn parse_utf8_char<I: U8Input>(mut i: I) -> SimpleResult<I, char> {
 
     let mut result = "".to_string();
 
-    let b = i.consume_while(|c| {
+    let _b = i.consume_while(|c| {
         if valid || internal_buf.len() >= 4 {
             false // break from while
         } else {
@@ -82,7 +80,7 @@ fn parse_utf8_char_test() {
     }
 }
 
-// == Names and Keywords ==
+// == 11.6 Names and Keywords ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-names-and-keywords
 
@@ -159,3 +157,70 @@ fn unicode_id_continue_test() {
         }
     }
 }
+
+// == 11.8.3 Numeric Literals ==
+
+#[inline]
+fn is_hex_digit(c: u8) -> bool {
+    (b'0' <= c && c <= b'9') ||
+    (b'a' <= c && c <= b'f') ||
+    (b'A' <= c && c <= b'F')
+}
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-HexDigit
+#[inline]
+fn hex_digit<I: U8Input>(i: I) -> SimpleResult<I, u8> {
+    satisfy(i, is_hex_digit)
+}
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-HexDigits
+fn hex_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
+    or(i,
+        |i| parse!{i;
+
+            let digit_1 = hex_digit();
+            let digit_2 = hex_digit();
+
+            ret {
+                let digit_1 = digit_1 as char;
+                let digit_2 = digit_2 as char;
+                i32::from_str_radix(&format!("{}{}", digit_1, digit_2), 16).unwrap()
+            }
+        },
+        |i| parse!{i;
+
+            let digit_1 = hex_digit();
+
+            ret {
+                let digit_1 = digit_1 as char;
+                i32::from_str_radix(&format!("{}", digit_1), 16).unwrap()
+            }
+        }
+    )
+}
+
+#[test]
+fn hex_digits_test() {
+
+    match parse_only(hex_digits, b"ad") {
+        Ok(result) => {
+            assert_eq!(result, 173);
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    match parse_only(hex_digits, b"e") {
+        Ok(result) => {
+            assert_eq!(result, 14);
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+}
+
+// == 11.8.4 String Literals ==
+
+
