@@ -1,0 +1,11 @@
+[package]
+name = "espice"
+version = "0.1.0"
+authors = ["Alberto Leal <mailforalberto@gmail.com>"]
+
+[lib]
+doctest = false
+
+[dependencies]
+chomp = "0.3.1"
+unicode-xid = "0.0.3"
