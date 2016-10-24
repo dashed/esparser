@@ -116,3 +116,40 @@ fn unicode_id_start_test() {
         }
     }
 }
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDContinue
+fn unicode_id_continue<I: U8Input>(i: I) -> SimpleResult<I, char> {
+
+    parse_utf8_char(i)
+        .bind(|i, c: char| {
+
+            if c.is_xid_continue() {
+                i.ret(c)
+            } else {
+                i.err(ChompError::unexpected())
+            }
+
+        })
+}
+
+#[test]
+fn unicode_id_continue_test() {
+
+    match parse_only(unicode_id_continue, b"a") {
+        Ok(result) => {
+            assert_eq!(result, 'a');
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    match parse_only(unicode_id_continue, b"1") {
+        Ok(result) => {
+            assert_eq!(result, '1');
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+}
