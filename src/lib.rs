@@ -28,6 +28,8 @@ http://www.ecma-international.org/ecma-262/7.0/#sec-lexical-and-regexp-grammars
 
  */
 
+// == parser helpers ==
+
 #[inline]
 fn parse_utf8_char<I: U8Input>(mut i: I) -> SimpleResult<I, char> {
 
@@ -79,6 +81,10 @@ fn parse_utf8_char_test() {
         }
     }
 }
+
+// == Names and Keywords ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-names-and-keywords
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDStart
 fn unicode_id_start<I: U8Input>(i: I) -> SimpleResult<I, char> {
