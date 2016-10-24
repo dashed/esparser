@@ -250,6 +250,56 @@ fn unicode_id_continue_test() {
     }
 }
 
+// == 11.6.2 Reserved Words
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ReservedWord
+fn reserved_word() {
+
+}
+
+// == 11.6.2.1 Keywords
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Keyword
+fn keyword<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
+    parse!{i;
+        let keyword = string(b"break") <|>
+            string(b"do") <|>
+            string(b"in") <|>
+            string(b"typeof") <|>
+            string(b"case") <|>
+            string(b"else") <|>
+            string(b"instanceof") <|>
+            string(b"var") <|>
+            string(b"catch") <|>
+            string(b"export") <|>
+            string(b"new") <|>
+            string(b"void") <|>
+            string(b"class") <|>
+            string(b"extends") <|>
+            string(b"return") <|>
+            string(b"while") <|>
+            string(b"const") <|>
+            string(b"finally") <|>
+            string(b"super") <|>
+            string(b"with") <|>
+            string(b"continue") <|>
+            string(b"for") <|>
+            string(b"switch") <|>
+            string(b"yield") <|>
+            string(b"debugger") <|>
+            string(b"function") <|>
+            string(b"this") <|>
+            string(b"default") <|>
+            string(b"if") <|>
+            string(b"throw") <|>
+            string(b"delete") <|>
+            string(b"import") <|>
+            string(b"try");
+
+        ret keyword
+    }
+}
+
 // == 11.8.3 Numeric Literals ==
 
 #[inline]
