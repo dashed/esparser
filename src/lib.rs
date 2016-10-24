@@ -7,7 +7,7 @@ extern crate unicode_xid;
 // == 3rd-party imports ==
 
 use chomp::parsers::{SimpleResult, scan, token, any, take_till, string, satisfy};
-use chomp::combinators::{look_ahead, many_till, many1, or};
+use chomp::combinators::{look_ahead, many_till, many1, many, or};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
 use chomp::parse_only;
 use chomp::parsers::Error as ChompError;
@@ -24,9 +24,39 @@ http://www.ecma-international.org/ecma-262/7.0/#sec-types-of-source-code
 
 http://www.ecma-international.org/ecma-262/7.0/#sec-lexical-and-regexp-grammars
 
+Bookmark:
+- http://www.ecma-international.org/ecma-262/7.0/#prod-VariableStatement
+
  */
 
 // == parser helpers ==
+
+#[inline]
+fn string_to_unicode_char(s: &str) -> Option<char> {
+    u32::from_str_radix(s, 16)
+        .ok()
+        .and_then(std::char::from_u32)
+}
+
+#[inline]
+fn token_as_char<I: U8Input>(i: I, c: u8) -> SimpleResult<I, char> {
+    parse!{i;
+        let i = token(c);
+        ret {
+            i as char
+        }
+    }
+}
+
+// TODO: test
+#[inline]
+fn parse_utf8_char_of_bytes<I: U8Input>(mut i: I, needle: &[u8]) -> SimpleResult<I, char> {
+    parse!{i;
+        look_ahead(|i| string(i, needle));
+        let c = parse_utf8_char();
+        ret c
+    }
+}
 
 #[inline]
 fn parse_utf8_char<I: U8Input>(mut i: I) -> SimpleResult<I, char> {
@@ -83,6 +113,68 @@ fn parse_utf8_char_test() {
 // == 11.6 Names and Keywords ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-names-and-keywords
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierStart
+fn identifier_start<I: U8Input>(i: I) -> SimpleResult<I, char> {
+
+    #[inline]
+    fn identifier_start_unicode<I: U8Input>(i: I) -> SimpleResult<I, char> {
+        parse!{i;
+            token(b'\\');
+            let sequence = unicode_escape_seq();
+            ret sequence
+        }
+    }
+
+    parse!{i;
+
+        let start = unicode_id_start() <|>
+        token_as_char(b'$') <|>
+        token_as_char(b'_') <|>
+        identifier_start_unicode();
+
+        ret start
+    }
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierPart
+fn identifier_part<I: U8Input>(i: I) -> SimpleResult<I, char> {
+
+    #[inline]
+    fn identifier_part_unicode<I: U8Input>(i: I) -> SimpleResult<I, char> {
+        parse!{i;
+            token(b'\\');
+            let sequence = unicode_escape_seq();
+            ret sequence
+        }
+    }
+
+    parse!{i;
+
+        let part = unicode_id_continue() <|>
+        token_as_char(b'$') <|>
+        token_as_char(b'_') <|>
+        identifier_part_unicode() <|>
+        parse_utf8_char_of_bytes(b"\x200C") <|> // <ZWNJ>
+        parse_utf8_char_of_bytes(b"\x200D"); // <ZWJ>
+
+        ret part
+    }
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierName
+fn identifier_name<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+    parse!{i;
+
+        let _l: Vec<char> = many1(identifier_start);
+        let _ll: Vec<char> = many(identifier_part);
+
+        ret {()}
+    }
+}
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDStart
 fn unicode_id_start<I: U8Input>(i: I) -> SimpleResult<I, char> {
@@ -225,13 +317,15 @@ fn hex_digits_test() {
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeEscapeSequence
 // TODO: needs test
-fn unicode_escape_seq<I: U8Input>(i: I) -> SimpleResult<I, i32> {
+fn unicode_escape_seq<I: U8Input>(i: I) -> SimpleResult<I, char> {
     or(i,
         |i| parse!{i;
             // e.g. u9A9A
             token(b'u');
             let sequence = hex_4_digits();
-            ret sequence
+            ret {
+                string_to_unicode_char(&sequence).unwrap()
+            }
         },
         |i| parse!{i;
             // e.g. u{9A9A}
@@ -239,13 +333,15 @@ fn unicode_escape_seq<I: U8Input>(i: I) -> SimpleResult<I, i32> {
             token(b'{');
             let sequence = hex_4_digits();
             token(b'}');
-            ret sequence
+            ret {
+                string_to_unicode_char(&sequence).unwrap()
+            }
         }
     )
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Hex4Digits
-fn hex_4_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
+fn hex_4_digits<I: U8Input>(i: I) -> SimpleResult<I, String> {
     parse!{i;
 
         let digit_1 = hex_digit();
@@ -258,8 +354,8 @@ fn hex_4_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
             let digit_2 = digit_2 as char;
             let digit_3 = digit_3 as char;
             let digit_4 = digit_4 as char;
-            let formatted = format!("{}{}{}{}", digit_1, digit_2, digit_3, digit_4);
-            i32::from_str_radix(&formatted, 16).unwrap()
+
+            format!("{}{}{}{}", digit_1, digit_2, digit_3, digit_4)
         }
     }
 }
@@ -268,10 +364,15 @@ fn hex_4_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
 fn hex_4_digits_test() {
     match parse_only(hex_4_digits, b"adad") {
         Ok(result) => {
-            assert_eq!(result, 44461);
+            assert_eq!(result, "adad".to_string());
         }
         Err(_) => {
             assert!(false);
         }
     }
 }
+
+
+// == 13.3.2 Variable Statement ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#prod-VariableStatement
