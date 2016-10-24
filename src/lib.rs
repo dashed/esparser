@@ -255,7 +255,7 @@ fn unicode_id_continue_test() {
 
 // TODO: test case: A code point in a ReservedWord cannot be expressed by a \UnicodeEscapeSequence.
 // http://www.ecma-international.org/ecma-262/7.0/#sec-reserved-words
-fn reserved_word() {
+fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
     parse!{i;
         let keyword =
             // == 11.6.2.1 Keywords ==
