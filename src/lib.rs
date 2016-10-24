@@ -199,6 +199,51 @@ fn hex_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
     )
 }
 
+#[test]
+fn hex_digits_test() {
+
+    match parse_only(hex_digits, b"ad") {
+        Ok(result) => {
+            assert_eq!(result, 173);
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    match parse_only(hex_digits, b"e") {
+        Ok(result) => {
+            assert_eq!(result, 14);
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+}
+
+// == 11.8.4 String Literals ==
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeEscapeSequence
+// TODO: needs test
+fn unicode_escape_seq<I: U8Input>(i: I) -> SimpleResult<I, i32> {
+    or(i,
+        |i| parse!{i;
+            // e.g. u9A9A
+            token(b'u');
+            let sequence = hex_4_digits();
+            ret sequence
+        },
+        |i| parse!{i;
+            // e.g. u{9A9A}
+            token(b'u');
+            token(b'{');
+            let sequence = hex_4_digits();
+            token(b'}');
+            ret sequence
+        }
+    )
+}
+
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Hex4Digits
 fn hex_4_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
     parse!{i;
@@ -220,26 +265,7 @@ fn hex_4_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
 }
 
 #[test]
-fn hex_digits_test() {
-
-    match parse_only(hex_digits, b"ad") {
-        Ok(result) => {
-            assert_eq!(result, 173);
-        }
-        Err(_) => {
-            assert!(false);
-        }
-    }
-
-    match parse_only(hex_digits, b"e") {
-        Ok(result) => {
-            assert_eq!(result, 14);
-        }
-        Err(_) => {
-            assert!(false);
-        }
-    }
-
+fn hex_4_digits_test() {
     match parse_only(hex_4_digits, b"adad") {
         Ok(result) => {
             assert_eq!(result, 44461);
@@ -249,7 +275,3 @@ fn hex_digits_test() {
         }
     }
 }
-
-// == 11.8.4 String Literals ==
-
-
