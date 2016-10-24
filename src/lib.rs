@@ -320,19 +320,19 @@ fn hex_digits_test() {
 fn unicode_escape_seq<I: U8Input>(i: I) -> SimpleResult<I, char> {
     or(i,
         |i| parse!{i;
-            // e.g. u9A9A
-            token(b'u');
-            let sequence = hex_4_digits();
-            ret {
-                string_to_unicode_char(&sequence).unwrap()
-            }
-        },
-        |i| parse!{i;
             // e.g. u{9A9A}
             token(b'u');
             token(b'{');
             let sequence = hex_4_digits();
             token(b'}');
+            ret {
+                string_to_unicode_char(&sequence).unwrap()
+            }
+        },
+        |i| parse!{i;
+            // e.g. u9A9A
+            token(b'u');
+            let sequence = hex_4_digits();
             ret {
                 string_to_unicode_char(&sequence).unwrap()
             }
