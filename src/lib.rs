@@ -3,7 +3,8 @@
 // == crates ==
 #[macro_use]
 extern crate chomp;
-extern crate unicode_xid;
+// TODO: remove
+// extern crate unicode_xid;
 
 // == 3rd-party imports ==
 
@@ -52,7 +53,7 @@ fn token_as_char<I: U8Input>(i: I, c: u8) -> SimpleResult<I, char> {
 
 // TODO: test
 #[inline]
-fn parse_utf8_char_of_bytes<I: U8Input>(mut i: I, needle: &[u8]) -> SimpleResult<I, char> {
+fn parse_utf8_char_of_bytes<I: U8Input>(i: I, needle: &[u8]) -> SimpleResult<I, char> {
     parse!{i;
         look_ahead(|i| string(i, needle));
         let c = parse_utf8_char();
@@ -109,6 +110,41 @@ fn parse_utf8_char_test() {
         Err(_) => {
             assert!(false);
         }
+    }
+}
+
+// == 11.2 White Space ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-white-space
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-WhiteSpace
+fn whitespace<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+
+    #[inline]
+    fn other_whitespace<I: U8Input>(i: I) -> SimpleResult<I, char> {
+        parse_utf8_char(i)
+            .bind(|i, c: char| {
+                if c.is_whitespace() {
+                    i.ret(c)
+                } else {
+                    i.err(ChompError::unexpected())
+                }
+            })
+    }
+
+    parse!{i;
+
+        let _result =
+            parse_utf8_char_of_bytes(b"\x0009") <|> // <TAB>; CHARACTER TABULATION
+            parse_utf8_char_of_bytes(b"\x000B") <|> // <VT>; LINE TABULATION
+            parse_utf8_char_of_bytes(b"\x000C") <|> // <FF>; FORM FEED (FF)
+            parse_utf8_char_of_bytes(b"\x0020") <|> // <SP>; SPACE
+            parse_utf8_char_of_bytes(b"\x00A0") <|> // <NBSP>; NO-BREAK SPACE
+            parse_utf8_char_of_bytes(b"\xFEFF") <|> // <ZWNBSP>; ZERO WIDTH NO-BREAK SPACE
+            other_whitespace(); // Any other Unicode "Separator, space" code point
+
+        // TODO: whitespace token
+        ret {()}
     }
 }
 
@@ -180,16 +216,13 @@ fn identifier_part<I: U8Input>(i: I) -> SimpleResult<I, char> {
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDStart
 fn unicode_id_start<I: U8Input>(i: I) -> SimpleResult<I, char> {
-
     parse_utf8_char(i)
         .bind(|i, c: char| {
-
             if c.is_xid_start() {
                 i.ret(c)
             } else {
                 i.err(ChompError::unexpected())
             }
-
         })
 }
 
@@ -221,7 +254,6 @@ fn unicode_id_start_test() {
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDContinue
 fn unicode_id_continue<I: U8Input>(i: I) -> SimpleResult<I, char> {
-
     parse_utf8_char(i)
         .bind(|i, c: char| {
 
