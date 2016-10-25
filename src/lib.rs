@@ -116,6 +116,18 @@ fn parse_utf8_char_test() {
 // http://www.ecma-international.org/ecma-262/7.0/#sec-names-and-keywords
 
 // TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierName
+fn identifier_name<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+    parse!{i;
+
+        let _l: Vec<char> = many1(identifier_start);
+        let _ll: Vec<char> = many(identifier_part);
+
+        ret {()}
+    }
+}
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierStart
 fn identifier_start<I: U8Input>(i: I) -> SimpleResult<I, char> {
 
@@ -162,18 +174,6 @@ fn identifier_part<I: U8Input>(i: I) -> SimpleResult<I, char> {
         parse_utf8_char_of_bytes(b"\x200D"); // <ZWJ>
 
         ret part
-    }
-}
-
-// TODO: test
-// http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierName
-fn identifier_name<I: U8Input>(i: I) -> SimpleResult<I, ()> {
-    parse!{i;
-
-        let _l: Vec<char> = many1(identifier_start);
-        let _ll: Vec<char> = many(identifier_part);
-
-        ret {()}
     }
 }
 
