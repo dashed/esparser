@@ -311,6 +311,11 @@ fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
             string(b"import") <|>
             string(b"try") <|>
 
+            // TODO: is this right?
+            // http://www.ecma-international.org/ecma-262/7.0/#sec-keywords
+            string(b"let") <|>
+            string(b"static") <|>
+
             // == 11.6.2.2 Future Reserved Words ==
             // http://www.ecma-international.org/ecma-262/7.0/#sec-future-reserved-words
             string(b"enum") <|>
