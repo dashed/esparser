@@ -331,16 +331,17 @@ fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
 
 // == 11.8.3 Numeric Literals ==
 
-#[inline]
-fn is_hex_digit(c: u8) -> bool {
-    (b'0' <= c && c <= b'9') ||
-    (b'a' <= c && c <= b'f') ||
-    (b'A' <= c && c <= b'F')
-}
-
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexDigit
 #[inline]
 fn hex_digit<I: U8Input>(i: I) -> SimpleResult<I, u8> {
+
+    #[inline]
+    fn is_hex_digit(c: u8) -> bool {
+        (b'0' <= c && c <= b'9') ||
+        (b'a' <= c && c <= b'f') ||
+        (b'A' <= c && c <= b'F')
+    }
+
     satisfy(i, is_hex_digit)
 }
 
