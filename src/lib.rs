@@ -204,12 +204,16 @@ fn unicode_id_start_test() {
         }
     }
 
-    match parse_only(unicode_id_start, b"1") {
-        Ok(_) => {
-            assert!(false);
-        }
-        Err(_) => {
-            assert!(true);
+    let fails = vec![b"1", b" ", b"\t"];
+
+    for case_fail in fails {
+        match parse_only(unicode_id_start, case_fail) {
+            Ok(_) => {
+                assert!(false);
+            }
+            Err(_) => {
+                assert!(true);
+            }
         }
     }
 }
@@ -247,6 +251,19 @@ fn unicode_id_continue_test() {
         }
         Err(_) => {
             assert!(false);
+        }
+    }
+
+    let fails = vec![b" ", b"\t"];
+
+    for case_fail in fails {
+        match parse_only(unicode_id_start, case_fail) {
+            Ok(_) => {
+                assert!(false);
+            }
+            Err(_) => {
+                assert!(true);
+            }
         }
     }
 }
