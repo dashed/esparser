@@ -354,9 +354,10 @@ fn hex_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
             let digit_2 = hex_digit();
 
             ret {
-                let digit_1 = digit_1 as char;
-                let digit_2 = digit_2 as char;
-                i32::from_str_radix(&format!("{}{}", digit_1, digit_2), 16).unwrap()
+                let mut result = String::with_capacity(2);
+                result.push(digit_1 as char);
+                result.push(digit_2 as char);
+                i32::from_str_radix(&result, 16).unwrap()
             }
         },
         |i| parse!{i;
@@ -364,8 +365,9 @@ fn hex_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
             let digit_1 = hex_digit();
 
             ret {
-                let digit_1 = digit_1 as char;
-                i32::from_str_radix(&format!("{}", digit_1), 16).unwrap()
+                let mut result = String::with_capacity(1);
+                result.push(digit_1 as char);
+                i32::from_str_radix(&result, 16).unwrap()
             }
         }
     )
@@ -430,12 +432,12 @@ fn hex_4_digits<I: U8Input>(i: I) -> SimpleResult<I, String> {
         let digit_4 = hex_digit();
 
         ret {
-            let digit_1 = digit_1 as char;
-            let digit_2 = digit_2 as char;
-            let digit_3 = digit_3 as char;
-            let digit_4 = digit_4 as char;
-
-            format!("{}{}{}{}", digit_1, digit_2, digit_3, digit_4)
+            let mut result = String::with_capacity(4);
+            result.push(digit_1 as char);
+            result.push(digit_2 as char);
+            result.push(digit_3 as char);
+            result.push(digit_4 as char);
+            result
         }
     }
 }
