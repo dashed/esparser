@@ -8,11 +8,12 @@ extern crate unicode_xid;
 // == 3rd-party imports ==
 
 use chomp::parsers::{SimpleResult, scan, token, any, take_till, string, satisfy};
-use chomp::combinators::{look_ahead, many_till, many1, many, or};
+use chomp::combinators::{look_ahead, many_till, many1, many, or, either};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
 use chomp::parse_only;
 use chomp::parsers::Error as ChompError;
 use chomp::primitives::Primitives;
+use chomp::prelude::{Either};
 
 /*
 
@@ -270,6 +271,8 @@ fn unicode_id_continue_test() {
 
 // == 11.6.2 Reserved Words
 
+// TODO: enum Keyword type
+
 // TODO: test case: A code point in a ReservedWord cannot be expressed by a \UnicodeEscapeSequence.
 // http://www.ecma-international.org/ecma-262/7.0/#sec-reserved-words
 fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
@@ -459,7 +462,57 @@ fn hex_4_digits_test() {
     }
 }
 
+// == 12.1 Identifiers ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-identifiers
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Identifier
+fn identifier<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+    either(i,
+        |i| reserved_word(i),  // left
+        |i| identifier_name(i) // right
+    )
+    .bind(|i, result| {
+        match result {
+            Either::Left(_) => {
+                i.err(ChompError::unexpected())
+            },
+            Either::Right(_) => {
+                i.ret(())
+            }
+        }
+    })
+}
+
 
 // == 13.3.2 Variable Statement ==
 //
+// http://www.ecma-international.org/ecma-262/7.0/#sec-variable-statement
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableStatement
+fn variable_statement<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+    parse!{i;
+
+        let _var = string(b"var");
+
+        // TODO: whitespace
+
+        // TODO: var declaration list
+
+        semicolon();
+
+        ret {()}
+    }
+}
+
+// TODO: test for ASI behaviour
+#[inline]
+fn semicolon<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+    parse!{i;
+        // TODO: ASI rule
+        token(b';');
+        ret {()}
+    }
+}
