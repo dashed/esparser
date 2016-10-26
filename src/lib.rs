@@ -6,10 +6,15 @@ extern crate chomp;
 // TODO: remove
 // extern crate unicode_xid;
 
+// == rust std imports ==
+
+use std::rc::Rc;
+use std::cell::RefCell;
+
 // == 3rd-party imports ==
 
 use chomp::parsers::{SimpleResult, scan, token, any, take_till, string, satisfy};
-use chomp::combinators::{look_ahead, many_till, many1, many, or, either};
+use chomp::combinators::{option, look_ahead, many_till, many1, many, or, either};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
 use chomp::parse_only;
 use chomp::parsers::Error as ChompError;
@@ -40,6 +45,61 @@ fn string_to_unicode_char(s: &str) -> Option<char> {
     u32::from_str_radix(s, 16)
         .ok()
         .and_then(std::char::from_u32)
+}
+
+// == delimeted list parser ==
+//
+// invariant:
+// - item does not consume eof (may lookahead eof to stop)
+// - item does not consume delim (may lookahead delim to stop)
+// - delim does not consume eof
+// - delim does not consume item
+//
+// pseudo grammar:
+//
+// list(delim, item, rest) = item rest(delim, item) | item
+// rest(delim, item) = delim item rest(delim) | delim item
+//
+// list(delim, reducer) = reducer(accumulator) rest(delim) | reducer(accumulator)
+// rest(delim, accumulator, reducer) = delim reducer(accumulator) rest(delim, accumulator, reducer) |
+//                                     delim reducer(accumulator)
+// TODO: needs test
+#[inline]
+fn parse_list<I: U8Input, D, Delim, A, R>(input: I, delimiter: D, reducer: R) -> SimpleResult<I, A>
+    where D: Fn(I) -> SimpleResult<I, Delim>,
+          R: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, ()>,
+          A: Default
+{
+
+    let accumulator: A = Default::default();
+    let initial_accumulator: Rc<RefCell<A>> = Rc::new(RefCell::new(accumulator));
+
+    parse!{input;
+        reducer(initial_accumulator.clone());
+        option(|i| parse_list_rest(i, delimiter, initial_accumulator.clone(), reducer), ());
+
+        ret {
+            Rc::try_unwrap(initial_accumulator)
+                .ok()
+                .unwrap()
+                .into_inner()
+        }
+    }
+}
+
+#[inline]
+fn parse_list_rest<I: U8Input, D, Delim, A, R>(input: I, delimiter: D, accumulator: Rc<RefCell<A>>,
+    reducer: R) -> SimpleResult<I, ()>
+    where D: Fn(I) -> SimpleResult<I, Delim>,
+          R: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, ()>,
+          A: Default
+{
+    parse!{input;
+        delimiter();
+        reducer(accumulator.clone());
+        option(|i| parse_list_rest(i, delimiter, accumulator, reducer), ());
+        ret {()}
+    }
 }
 
 // == parser helpers ==
