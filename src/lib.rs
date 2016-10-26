@@ -152,10 +152,7 @@ fn common_delim<I: U8Input>(i: I) -> SimpleResult<I, Vec<Token>> {
         }
     }
 
-    parse!{i;
-        let delims: Vec<Token> = many(__common_delim);
-        ret delims
-    }
+    many(i, __common_delim)
 }
 
 
