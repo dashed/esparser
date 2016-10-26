@@ -73,17 +73,16 @@ fn parse_list<I: U8Input, D, Delim, A, R>(input: I, delimiter: D, reducer: R) ->
     let accumulator: A = Default::default();
     let initial_accumulator: Rc<RefCell<A>> = Rc::new(RefCell::new(accumulator));
 
-    parse!{input;
-        reducer(initial_accumulator.clone());
-        option(|i| parse_list_rest(i, delimiter, initial_accumulator.clone(), reducer), ());
-
-        ret {
+    reducer(input, initial_accumulator.clone())
+        .then(|i| {
+            option(i, |i| parse_list_rest(i, delimiter, initial_accumulator.clone(), reducer), ())
+        })
+        .map(|_| {
             Rc::try_unwrap(initial_accumulator)
                 .ok()
                 .unwrap()
                 .into_inner()
-        }
-    }
+        })
 }
 
 #[inline]
