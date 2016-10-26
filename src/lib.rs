@@ -53,11 +53,8 @@ fn token_as_char<I: U8Input>(i: I, c: u8) -> SimpleResult<I, char> {
 // TODO: test
 #[inline]
 fn parse_utf8_char_of_bytes<I: U8Input>(i: I, needle: &[u8]) -> SimpleResult<I, char> {
-    parse!{i;
-        look_ahead(|i| string(i, needle));
-        let c = parse_utf8_char();
-        ret c
-    }
+    look_ahead(i, |i| string(i, needle))
+        .then(parse_utf8_char)
 }
 
 #[inline]
