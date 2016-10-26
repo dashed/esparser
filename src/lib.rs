@@ -66,32 +66,32 @@ fn parse_utf8_char_of_bytes<I: U8Input>(i: I, needle: &[u8]) -> SimpleResult<I, 
 fn parse_utf8_char<I: U8Input>(mut i: I) -> SimpleResult<I, char> {
 
     let mut internal_buf = vec![];
-    let mut valid = false;
+    let mut valid_utf8 = false;
 
     let mut result = "".to_string();
 
     let _b = i.consume_while(|c| {
-        if valid || internal_buf.len() >= 4 {
-            false // break from while
+        if valid_utf8 || internal_buf.len() >= 4 {
+            false // break from consume_while
         } else {
 
             internal_buf.push(c);
 
             match std::str::from_utf8(&internal_buf) {
                 Err(_) => {
-                    // not valid
+                    // not valid_utf8
                 },
                 Ok(__result) => {
                     result = __result.to_string();
-                    valid = true;
+                    valid_utf8 = true;
                 }
             }
 
-            true // continue while
+            true // continue consume_while
         }
     });
 
-    if valid && internal_buf.len() <= 4 && result.len() >= 1 {
+    if valid_utf8 && internal_buf.len() <= 4 && result.len() >= 1 {
         return i.ret(result.chars().next().unwrap());
     }
 
@@ -105,6 +105,19 @@ fn parse_utf8_char_test() {
     let sparkle_heart = vec![240, 159, 146, 150];
 
     match parse_only(parse_utf8_char, &sparkle_heart) {
+        Ok(result) => {
+            assert_eq!(result, '\u{1f496}');
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    // case: only one sparkle heart is parsed
+
+    let two_sparkle_hearts = vec![240, 159, 146, 150, 240, 159, 146, 150];
+
+    match parse_only(parse_utf8_char, &two_sparkle_hearts) {
         Ok(result) => {
             assert_eq!(result, '\u{1f496}');
         }
@@ -642,14 +655,15 @@ fn conditional_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> Simpl
             token(b'?');
             let _whitespace: Vec<_> = many(whitespace);
 
-            let true_branch = assignment_expression(&params);
+            let consequent = assignment_expression(&params);
 
             let _whitespace: Vec<_> = many(whitespace);
             token(b':');
             let _whitespace: Vec<_> = many(whitespace);
 
-            let otherwise_branch = assignment_expression(&params);
+            let alternative = assignment_expression(&params);
 
+            // TODO: token
             ret {()}
 
         },
@@ -658,6 +672,7 @@ fn conditional_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> Simpl
 
             logical_or_expression(&params);
 
+            // TODO: token
             ret {()}
         }
     )
