@@ -581,6 +581,27 @@ fn identifier<I: U8Input>(i: I) -> SimpleResult<I, ()> {
     })
 }
 
+// == 12.2 Primary Expression ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-primary-expression
+
+// == 12.2.6 Object Initializer
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Initializer
+fn initializer<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, ()> {
+    parse!{i;
+
+        token(b'=');
+
+        let _whitespace: Vec<_> = many(whitespace);
+
+        // TODO: assignment_expression(params);
+
+        // TODO: token
+        ret {()}
+    }
+}
 
 // == 13.3.2 Variable Statement ==
 //
@@ -593,10 +614,10 @@ fn variable_statement<I: U8Input>(i: I) -> SimpleResult<I, ()> {
 
         let _var = string(b"var");
 
-        let _whitespace: Vec<Token> = many1(whitespace);
+        let _whitespace: Vec<_> = many1(whitespace);
 
         // TODO: var declaration list
-
+        // sep_by(decimal, |i| token(i, b';'))
 
         semicolon();
 
