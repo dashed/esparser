@@ -113,9 +113,14 @@ fn parse_utf8_char_test() {
         }
     }
 
-    // case: only one sparkle heart is parsed
+    // case: only sparkle heart is parsed
 
-    let sparkle_heart_and_smile = vec![240, 159, 146, 150, 240, 159, 152, 128];
+    let sparkle_heart_and_smile = vec![
+        // http://graphemica.com/%F0%9F%92%96
+        240, 159, 146, 150,
+        // http://graphemica.com/%F0%9F%98%80
+        240, 159, 152, 128
+    ];
 
     match parse_only(parse_utf8_char, &sparkle_heart_and_smile) {
         Ok(result) => {
