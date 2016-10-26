@@ -50,6 +50,9 @@ fn string_to_unicode_char(s: &str) -> Option<char> {
 
 // == delimeted list parser ==
 //
+// Source: http://www.engr.mun.ca/~theo/Misc/exp_parsing.htm#classic
+// Source: https://en.wikipedia.org/wiki/Operator-precedence_parser#Precedence_climbing_method
+//
 // invariant:
 // - item does not consume eof (may lookahead eof to stop)
 // - item does not consume delim (may lookahead delim to stop)
