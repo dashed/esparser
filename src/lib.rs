@@ -132,6 +132,33 @@ enum Token {
     WhiteSpace
 }
 
+// Since there is no separate lexing step apart from parsing step,
+// common_delim() is used where appropriate.
+//
+// The appropriate delimeters are derived from the 'goal symbols':
+// - InputElementDiv
+// - InputElementRegExp
+// - InputElementRegExpOrTemplateTail
+// - InputElementTemplateTail
+//
+// as defined in: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-lexical-grammar
+fn common_delim<I: U8Input>(i: I) -> SimpleResult<I, Vec<Token>> {
+
+    #[inline]
+    fn __common_delim<I: U8Input>(i: I) -> SimpleResult<I, Token> {
+        parse!{i;
+            let delim: Token = whitespace();
+            ret delim
+        }
+    }
+
+    parse!{i;
+        let delims: Vec<Token> = many(__common_delim);
+        ret delims
+    }
+}
+
+
 // == Parameters ==
 // Based on: http://www.ecma-international.org/ecma-262/7.0/#sec-grammar-notation
 enum Parameter {
@@ -619,7 +646,7 @@ fn initializer<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, 
 
         token(b'=');
 
-        let _whitespace: Vec<_> = many(whitespace);
+        let delim_1 = common_delim();
 
         // TODO: assignment_expression(params);
 
@@ -651,15 +678,15 @@ fn conditional_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> Simpl
 
             logical_or_expression(&params);
 
-            let _whitespace: Vec<_> = many(whitespace);
+            let delim_1 = common_delim();
             token(b'?');
-            let _whitespace: Vec<_> = many(whitespace);
+            let delim_2 = common_delim();
 
             let consequent = assignment_expression(&params);
 
-            let _whitespace: Vec<_> = many(whitespace);
+            let delim_3 = common_delim();
             token(b':');
-            let _whitespace: Vec<_> = many(whitespace);
+            let delim_4 = common_delim();
 
             let alternative = assignment_expression(&params);
 
@@ -750,7 +777,7 @@ fn variable_statement<I: U8Input>(i: I) -> SimpleResult<I, ()> {
 
         let _var = string(b"var");
 
-        let _whitespace: Vec<_> = many1(whitespace);
+        let delim_1 = common_delim();
 
         // TODO: var declaration list
         // sep_by(decimal, |i| token(i, b';'))
