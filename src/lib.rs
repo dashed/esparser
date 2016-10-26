@@ -378,7 +378,8 @@ enum Token {
     WhiteSpace(char),
     LineTerminator(char),
     Comment(Comment),
-    This
+    This,
+    Null
 }
 
 // Since there is no separate lexing step apart from parsing step,
@@ -844,6 +845,19 @@ fn reserved_word_test() {
         }
     }
 
+}
+
+// == 11.8 Literals ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-lexical-grammar-literals
+
+// == 11.8.1 Null Literals ==
+// http://www.ecma-international.org/ecma-262/7.0/#sec-null-literals
+// http://www.ecma-international.org/ecma-262/7.0/#prod-NullLiteral
+#[inline]
+fn null_literal<I: U8Input>(i: I) -> SimpleResult<I, Token> {
+    string(i, b"null")
+        .map(|_| Token::Null)
 }
 
 // == 11.8.3 Numeric Literals ==
