@@ -113,12 +113,17 @@ fn parse_utf8_char_test() {
     }
 }
 
+// == Tokens ==
+enum Token {
+    WhiteSpace
+}
+
 // == 11.2 White Space ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-white-space
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-WhiteSpace
-fn whitespace<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+fn whitespace<I: U8Input>(i: I) -> SimpleResult<I, Token> {
 
     #[inline]
     fn other_whitespace<I: U8Input>(i: I) -> SimpleResult<I, char> {
@@ -143,8 +148,7 @@ fn whitespace<I: U8Input>(i: I) -> SimpleResult<I, ()> {
             parse_utf8_char_of_bytes(b"\xFEFF") <|> // <ZWNBSP>; ZERO WIDTH NO-BREAK SPACE
             other_whitespace(); // Any other Unicode "Separator, space" code point
 
-        // TODO: whitespace token
-        ret {()}
+        ret {Token::WhiteSpace}
     }
 }
 
@@ -529,9 +533,10 @@ fn variable_statement<I: U8Input>(i: I) -> SimpleResult<I, ()> {
 
         let _var = string(b"var");
 
-        // TODO: whitespace
+        let _whitespace = many1(whitespace);
 
         // TODO: var declaration list
+
 
         semicolon();
 
