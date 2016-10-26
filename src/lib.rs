@@ -14,13 +14,14 @@ use std::cell::RefCell;
 
 // == 3rd-party imports ==
 
-use chomp::parsers::{SimpleResult, scan, token, any, take_till, string, satisfy};
+use chomp::parsers::{SimpleResult, scan, token, any, take_till, string, satisfy, take_while1};
 use chomp::combinators::{option, look_ahead, many_till, many1, many, or, either};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
 use chomp::parse_only;
 use chomp::parsers::Error as ChompError;
 use chomp::primitives::Primitives;
 use chomp::prelude::{Either};
+use chomp::types::numbering::{InputPosition, LineNumber, Numbering};
 
 /*
 
@@ -47,6 +48,45 @@ fn string_to_unicode_char(s: &str) -> Option<char> {
         .ok()
         .and_then(std::char::from_u32)
 }
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
+struct CurrentPosition(
+    // The current line, zero-indexed.
+    u64,
+    // The current col, zero-indexed.
+    u64
+);
+
+impl CurrentPosition {
+    // Creates a new (line, col) counter with zero.
+    pub fn new() -> Self {
+        CurrentPosition(0, 0)
+    }
+}
+
+impl Numbering for CurrentPosition {
+    type Token  = u8;
+
+    fn update<'a, B>(&mut self, b: &'a B)
+        where B: Buffer<Token=Self::Token> {
+            b.iterate(|c| if c == b'\n' {
+                self.0 += 1; // line num
+                self.1 = 0;  // col num
+            } else {
+                self.1 += 1; // col num
+            });
+    }
+
+    fn add(&mut self, t: Self::Token) {
+        if t == b'\n' {
+            self.0 += 1; // line num
+            self.1 = 0;  // col num
+        } else {
+            self.1 += 1; // col num
+        }
+    }
+}
+
 
 // == delimeted list parser ==
 //
