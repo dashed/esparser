@@ -527,13 +527,20 @@ fn comment<I: U8Input>(i: I) -> SimpleResult<I, Token> {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierName
-fn identifier_name<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+struct IdentifierName(String);
+fn identifier_name<I: U8Input>(i: I) -> SimpleResult<I, IdentifierName> {
     parse!{i;
 
-        let _l: Vec<char> = many1(identifier_start);
-        let _ll: Vec<char> = many(identifier_part);
+        let start: Vec<char> = many1(identifier_start);
+        let rest: Vec<char> = many(identifier_part);
 
-        ret {()}
+        ret {
+            // TODO: room for optimization
+            let mut start: String = start.into_iter().collect();
+            let rest: String = rest.into_iter().collect();
+            start.push_str(&rest);
+            IdentifierName(start)
+        }
     }
 }
 
