@@ -585,11 +585,21 @@ fn identifier<I: U8Input>(i: I) -> SimpleResult<I, ()> {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-primary-expression
 
-// == 12.2.6 Object Initializer
+// == 12.2.6 Object Initializer ==
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Initializer
 fn initializer<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, ()> {
+
+    // validation
+    match params {
+        Parameter::In |
+        Parameter::Yield => {},
+        _ => {
+            panic!("misuse of initializer");
+        }
+    }
+
     parse!{i;
 
         token(b'=');
