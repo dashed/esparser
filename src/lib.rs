@@ -349,7 +349,7 @@ fn unicode_id_continue_test() {
     }
 }
 
-// == 11.6.2 Reserved Words
+// == 11.6.2 Reserved Words ==
 
 // TODO: enum Keyword type
 
