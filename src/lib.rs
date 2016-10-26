@@ -508,7 +508,7 @@ fn hex_4_digits_test() {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingIdentifier
-fn binding_identifier<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, ()> {
+fn binding_identifier<I: U8Input>(i: I, maybe_params: &Option<Parameter>) -> SimpleResult<I, ()> {
 
     #[inline]
     fn __binding<I: U8Input>(i: I) -> SimpleResult<I, ()> {
@@ -520,7 +520,7 @@ fn binding_identifier<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResu
         }
     }
 
-    match params {
+    match *maybe_params {
         None => {
             either(i,
                 // left
@@ -547,8 +547,8 @@ fn binding_identifier<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResu
                 }
             })
         },
-        Some(params) => {
-            match params {
+        Some(ref params) => {
+            match *params {
                 Parameter::Yield => {},
                 _ => {
                     panic!("misuse of binding_identifier");
@@ -589,10 +589,10 @@ fn identifier<I: U8Input>(i: I) -> SimpleResult<I, ()> {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Initializer
-fn initializer<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, ()> {
+fn initializer<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, ()> {
 
     // validation
-    match params {
+    match *params {
         None |
         Some(Parameter::In) |
         Some(Parameter::Yield) => {},
@@ -619,10 +619,10 @@ fn initializer<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, (
 // http://www.ecma-international.org/ecma-262/7.0/#sec-conditional-operator
 
 // TODO: test
-fn conditional_expression<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, ()> {
+fn conditional_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, ()> {
 
     // validation
-    match params {
+    match *params {
         None |
         Some(Parameter::In) |
         Some(Parameter::Yield) => {},
@@ -631,10 +631,72 @@ fn conditional_expression<I: U8Input>(i: I, params: Option<Parameter>) -> Simple
         }
     }
 
+    either(i,
+        // left
+        |i| parse!{i;
+
+            logical_or_expression(&params);
+
+            let _whitespace: Vec<_> = many(whitespace);
+            token(b'?');
+            let _whitespace: Vec<_> = many(whitespace);
+
+            let true_branch = assignment_expression(&params);
+
+            let _whitespace: Vec<_> = many(whitespace);
+            token(b':');
+            let _whitespace: Vec<_> = many(whitespace);
+
+            let otherwise_branch = assignment_expression(&params);
+
+            ret {()}
+
+        },
+        // right
+        |i| parse!{i;
+
+            logical_or_expression(&params);
+
+            ret {()}
+        }
+    )
+        .bind(|i, result| {
+            match result {
+                Either::Left(_) => {
+                    // TODO: fix
+                    i.ret(())
+                },
+                Either::Right(_) => {
+                    // TODO: fix
+                    i.ret(())
+                }
+            }
+        })
+}
+
+// == 12.13 Binary Logical Operators ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-binary-logical-operators
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalORExpression
+fn logical_or_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, ()> {
+
+    // validation
+    match *params {
+        None |
+        Some(Parameter::In) |
+        Some(Parameter::Yield) => {},
+        _ => {
+            panic!("misuse of logical_or_expression");
+        }
+    }
+
     parse!{i;
 
         ret {()}
     }
+
 }
 
 // == 12.15 Assignment Operators ==
@@ -643,10 +705,10 @@ fn conditional_expression<I: U8Input>(i: I, params: Option<Parameter>) -> Simple
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-AssignmentExpression
-fn assignment_expression<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, ()> {
+fn assignment_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, ()> {
 
     // validation
-    match params {
+    match *params {
         None |
         Some(Parameter::In) |
         Some(Parameter::Yield) => {},
@@ -685,15 +747,15 @@ fn variable_statement<I: U8Input>(i: I) -> SimpleResult<I, ()> {
 
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableDeclaration
-fn variable_declaration<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, ()> {
-    match params {
+fn variable_declaration<I: U8Input>(i: I, maybe_params: &Option<Parameter>) -> SimpleResult<I, ()> {
+    match *maybe_params {
         None => {
             parse!{i;
                 // TODO: complete
                 ret {()}
             }
         },
-        Some(params) => {
+        Some(ref params) => {
             parse!{i;
                 // TODO: complete
                 ret {()}
