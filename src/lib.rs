@@ -499,6 +499,41 @@ fn hex_4_digits_test() {
 // http://www.ecma-international.org/ecma-262/7.0/#sec-identifiers
 
 // TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BindingIdentifier
+fn binding_identifier<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+    either(i,
+        // left
+        |i| parse!{i;
+
+            string(b"yield");
+
+            // TODO: token
+            ret {()}
+        },
+        // right
+        |i| parse!{i;
+
+            identifier();
+
+            // TODO: token
+            ret {()}
+        }
+    )
+    .bind(|i, result| {
+        match result {
+            Either::Left(_) => {
+                // TODO: fix
+                i.ret(())
+            },
+            Either::Right(_) => {
+                // TODO: fix
+                i.ret(())
+            }
+        }
+    })
+}
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Identifier
 fn identifier<I: U8Input>(i: I) -> SimpleResult<I, ()> {
     either(i,
