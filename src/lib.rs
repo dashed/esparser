@@ -533,7 +533,7 @@ fn variable_statement<I: U8Input>(i: I) -> SimpleResult<I, ()> {
 
         let _var = string(b"var");
 
-        let _whitespace = many1(whitespace);
+        let _whitespace: Vec<Token> = many1(whitespace);
 
         // TODO: var declaration list
 
