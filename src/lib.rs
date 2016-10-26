@@ -64,9 +64,9 @@ fn string_to_unicode_char(s: &str) -> Option<char> {
 // rest(delim, accumulator, reducer) = delim reducer(accumulator) rest(delim, accumulator, reducer) |
 //                                     delim reducer(accumulator)
 #[inline]
-fn parse_list<I: U8Input, D, Delim, A, R>(input: I, delimiter: D, reducer: R) -> SimpleResult<I, A>
+fn parse_list<I: U8Input, D, Delim, A, R, Reduced>(input: I, delimiter: D, reducer: R) -> SimpleResult<I, A>
     where D: Fn(I) -> SimpleResult<I, Delim>,
-          R: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, ()>,
+          R: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, Reduced>,
           A: Default
 {
 
@@ -86,16 +86,17 @@ fn parse_list<I: U8Input, D, Delim, A, R>(input: I, delimiter: D, reducer: R) ->
 }
 
 #[inline]
-fn parse_list_rest<I: U8Input, D, Delim, A, R>(input: I, delimiter: D, accumulator: Rc<RefCell<A>>,
+fn parse_list_rest<I: U8Input, D, Delim, A, R, Reduced>(input: I, delimiter: D, accumulator: Rc<RefCell<A>>,
     reducer: R) -> SimpleResult<I, ()>
     where D: Fn(I) -> SimpleResult<I, Delim>,
-          R: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, ()>,
+          R: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, Reduced>,
           A: Default
 {
 
     let mut should_continue = true;
     let mut parse_result = delimiter(input)
         .then(|i| reducer(i, accumulator.clone()))
+        .map(|_| ())
         .map_err(|e| {
             should_continue = false;
             e
@@ -106,7 +107,7 @@ fn parse_list_rest<I: U8Input, D, Delim, A, R>(input: I, delimiter: D, accumulat
             .then(|i| {
                 either(i,
                     // left
-                    |i| delimiter(i).then(|i| reducer(i, accumulator.clone())),
+                    |i| delimiter(i).then(|i| reducer(i, accumulator.clone())).map(|_| ()),
                     // right
                     |i| i.ret(())
                 )
