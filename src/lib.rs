@@ -593,8 +593,9 @@ fn initializer<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, (
 
     // validation
     match params {
-        Parameter::In |
-        Parameter::Yield => {},
+        None |
+        Some(Parameter::In) |
+        Some(Parameter::Yield) => {},
         _ => {
             panic!("misuse of initializer");
         }
@@ -609,6 +610,30 @@ fn initializer<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, (
         // TODO: assignment_expression(params);
 
         // TODO: token
+        ret {()}
+    }
+}
+
+// == 12.15 Assignment Operators ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-assignment-operators
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-AssignmentExpression
+fn assignment_expression<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, ()> {
+
+    // validation
+    match params {
+        None |
+        Some(Parameter::In) |
+        Some(Parameter::Yield) => {},
+        _ => {
+            panic!("misuse of assignment_expression");
+        }
+    }
+
+    parse!{i;
+
         ret {()}
     }
 }
