@@ -674,8 +674,6 @@ fn unicode_id_continue_test() {
 
 // TODO: enum Keyword type
 
-// TODO: test case: A code point in a ReservedWord cannot be expressed by a \UnicodeEscapeSequence.
-// TODO: \u0076\u0061\u0072 (var)
 // http://www.ecma-international.org/ecma-262/7.0/#sec-reserved-words
 fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
 
@@ -825,6 +823,8 @@ fn reserved_word_test() {
             assert!(false);
         }
     }
+
+    // A code point in a ReservedWord cannot be expressed by a \UnicodeEscapeSequence.
 
     let fails = vec![
         r"\u0076\u0061\u0072",
