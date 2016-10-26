@@ -19,7 +19,8 @@ use chomp::prelude::{Either};
 /*
 
 Reference:
-http://www.ecma-international.org/ecma-262/7.0
+- http://www.ecma-international.org/ecma-262/7.0
+- http://www.ecma-international.org/ecma-262/7.0/#sec-grammar-notation
 
 Start:
 http://www.ecma-international.org/ecma-262/7.0/#sec-types-of-source-code
