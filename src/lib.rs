@@ -36,6 +36,18 @@ Bookmark:
 // == parser helpers ==
 
 #[inline]
+fn string_till<I: U8Input, F>(input: I, mut stop_at: F) -> SimpleResult<I, String>
+    where F: Fn(I) -> SimpleResult<I, ()>  {
+
+    many_till(input, any, |i| look_ahead(i, &mut stop_at))
+        .bind(|i, line: Vec<u8>| {
+            let string: String = String::from_utf8_lossy(line.as_slice()).into_owned();
+            i.ret(string)
+        })
+
+}
+
+#[inline]
 fn string_to_unicode_char(s: &str) -> Option<char> {
     u32::from_str_radix(s, 16)
         .ok()
@@ -128,9 +140,15 @@ fn parse_utf8_char_test() {
 }
 
 // == Tokens ==
+enum Comment {
+    MultiLineComment(String),
+    SingleLineComment(String)
+}
+
 enum Token {
     WhiteSpace(char),
-    LineTerminator(char)
+    LineTerminator(char),
+    Comment(Comment)
 }
 
 // Since there is no separate lexing step apart from parsing step,
@@ -150,7 +168,8 @@ fn common_delim<I: U8Input>(i: I) -> SimpleResult<I, Vec<Token>> {
         parse!{i;
             let delim: Token =
                 whitespace() <|>
-                line_terminator();
+                line_terminator() <|>
+                comment();
             ret delim
         }
     }
@@ -216,6 +235,57 @@ fn line_terminator<I: U8Input>(i: I) -> SimpleResult<I, Token> {
             parse_utf8_char_of_bytes(b"\x2029");    // <PS>; PARAGRAPH SEPARATOR
 
         ret Token::LineTerminator(line_terminator_char)
+    }
+}
+
+// == 11.4 Comments ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-comments
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Comment
+fn comment<I: U8Input>(i: I) -> SimpleResult<I, Token> {
+
+    // http://www.ecma-international.org/ecma-262/7.0/#prod-MultiLineComment
+    #[inline]
+    fn multiline_comment<I: U8Input>(i: I) -> SimpleResult<I, Comment> {
+
+        #[inline]
+        fn stop_at<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+            string(i, b"*/").then(|i| i.ret(()))
+        }
+
+        // TODO: verify production rule satisfaction
+        // http://www.ecma-international.org/ecma-262/7.0/#prod-MultiLineCommentChars
+
+        parse!{i;
+            string(b"/*");
+            let contents = string_till(stop_at);
+            string(b"*/");
+            ret Comment::MultiLineComment(contents)
+        }
+    }
+
+    // http://www.ecma-international.org/ecma-262/7.0/#prod-SingleLineComment
+    #[inline]
+    fn singleline_comment<I: U8Input>(i: I) -> SimpleResult<I, Comment> {
+
+        #[inline]
+        fn stop_at<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+            line_terminator(i).then(|i| i.ret(()))
+        }
+
+        parse!{i;
+            string(b"//");
+            let contents = string_till(stop_at);
+            // NOTE: buffer contents matching line_terminator is not consumed
+            ret Comment::SingleLineComment(contents)
+        }
+    }
+
+    parse!{i;
+        let contents = multiline_comment() <|>
+            singleline_comment();
+        ret Token::Comment(contents)
     }
 }
 
