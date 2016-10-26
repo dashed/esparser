@@ -249,9 +249,11 @@ fn comment<I: U8Input>(i: I) -> SimpleResult<I, Token> {
     #[inline]
     fn multiline_comment<I: U8Input>(i: I) -> SimpleResult<I, Comment> {
 
+        const END: &'static [u8; 2] = b"*/";
+
         #[inline]
         fn stop_at<I: U8Input>(i: I) -> SimpleResult<I, ()> {
-            string(i, b"*/").then(|i| i.ret(()))
+            string(i, END).then(|i| i.ret(()))
         }
 
         // TODO: verify production rule satisfaction
@@ -260,7 +262,7 @@ fn comment<I: U8Input>(i: I) -> SimpleResult<I, Token> {
         parse!{i;
             string(b"/*");
             let contents = string_till(stop_at);
-            string(b"*/");
+            string(END);
             ret Comment::MultiLineComment(contents)
         }
     }
