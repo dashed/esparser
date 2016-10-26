@@ -1074,7 +1074,7 @@ fn initializer<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, 
 
         let delim_1 = common_delim();
 
-        // TODO: assignment_expression(params);
+        assignment_expression(params);
 
         // TODO: token
         ret {()}
@@ -1223,7 +1223,8 @@ impl LogicOrExpression {
             },
             LogicOrExpression::Or(_, _, _, _) => {
 
-                if let LogicOrExpression::Or(lhs, delim_1, delim_2, _) = mem::replace(self, LogicOrExpression::None) {
+                if let LogicOrExpression::Or(lhs, delim_1, delim_2, _) =
+                    mem::replace(self, LogicOrExpression::None) {
 
                     let new_val = LogicOrExpression::Or(
                         lhs,
@@ -1271,18 +1272,15 @@ fn logical_or_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> Simple
     }
 
     #[inline]
-    fn reducer<I: U8Input>(input: I, accumulator: Accumulator) -> SimpleResult<I, ()> {
-        parse!{input;
-
-            // TODO: fix
-            let _l = string(b"a");
-
+    let reducer = |i: I, accumulator: Accumulator| -> SimpleResult<I, ()> {
+        parse!{i;
+            let rhs = logical_and_expression(params);
             ret {
                 accumulator.borrow_mut().add_item(false);
                 ()
             }
         }
-    }
+    };
 
     parse!{i;
 
@@ -1303,7 +1301,7 @@ fn logical_or_expression_test() {
     match parse_only(|i| logical_or_expression(i, &None), b"a||a ||    a") {
         Ok(result) => {
             println!("{:?}", result);
-            assert!(false);
+            assert!(true);
         }
         Err(_) => {
             assert!(true);
@@ -1330,6 +1328,10 @@ fn assignment_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> Simple
     }
 
     parse!{i;
+
+        conditional_expression(params);
+
+        // TODO: complete
 
         ret {()}
     }
