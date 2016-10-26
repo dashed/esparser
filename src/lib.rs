@@ -242,7 +242,7 @@ fn unicode_id_start_test() {
         }
     }
 
-    let fails = vec![b"1", b" ", b"\t"];
+    let fails = vec![b"1", b" ", b"\t", b"\n", b"\r"];
 
     for case_fail in fails {
         match parse_only(unicode_id_start, case_fail) {
@@ -291,7 +291,7 @@ fn unicode_id_continue_test() {
         }
     }
 
-    let fails = vec![b" ", b"\t"];
+    let fails = vec![b" ", b"\t", b"\n", b"\r"];
 
     for case_fail in fails {
         match parse_only(unicode_id_start, case_fail) {
