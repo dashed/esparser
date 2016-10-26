@@ -1,5 +1,5 @@
-esrocks (work in progress)
-==========================
+esparser (work in progress)
+===========================
 
 > JavaScript Parser in rust
 
