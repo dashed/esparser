@@ -1277,7 +1277,6 @@ impl LogicOrExpression {
                 mem::replace(self, rhs);
             },
             LogicOrExpression::Or(_, _, _, _) => {
-
                 if let LogicOrExpression::Or(lhs, delim_1, delim_2, _) =
                     mem::replace(self, LogicOrExpression::None) {
 
@@ -1290,8 +1289,9 @@ impl LogicOrExpression {
                     );
 
                     mem::replace(self, new_val);
+                } else {
+                    unreachable!();
                 }
-
             }
         }
     }
