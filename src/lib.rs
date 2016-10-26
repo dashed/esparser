@@ -242,10 +242,10 @@ fn unicode_id_start_test() {
         }
     }
 
-    let fails = vec![b"1", b" ", b"\t", b"\n", b"\r"];
+    let fails = vec!["1", " ", "\t", "\n", "\r", ";", "?", "_"];
 
-    for case_fail in fails {
-        match parse_only(unicode_id_start, case_fail) {
+    for input in fails {
+        match parse_only(unicode_id_start, input.as_bytes()) {
             Ok(_) => {
                 assert!(false);
             }
@@ -273,28 +273,23 @@ fn unicode_id_continue<I: U8Input>(i: I) -> SimpleResult<I, char> {
 #[test]
 fn unicode_id_continue_test() {
 
-    match parse_only(unicode_id_continue, b"a") {
-        Ok(result) => {
-            assert_eq!(result, 'a');
-        }
-        Err(_) => {
-            assert!(false);
+    let success: Vec<&str> = vec!["a", "1"];
+
+    for input in success {
+        match parse_only(unicode_id_continue, input.as_bytes()) {
+            Ok(result) => {
+                assert_eq!(result, input.chars().next().unwrap());
+            }
+            Err(_) => {
+                assert!(false);
+            }
         }
     }
 
-    match parse_only(unicode_id_continue, b"1") {
-        Ok(result) => {
-            assert_eq!(result, '1');
-        }
-        Err(_) => {
-            assert!(false);
-        }
-    }
+    let fails: Vec<&str> = vec![" ", "\t", "\n", "\r", ";", "?", "_"];
 
-    let fails = vec![b" ", b"\t", b"\n", b"\r"];
-
-    for case_fail in fails {
-        match parse_only(unicode_id_start, case_fail) {
+    for input in fails {
+        match parse_only(unicode_id_start, input.as_bytes()) {
             Ok(_) => {
                 assert!(false);
             }
