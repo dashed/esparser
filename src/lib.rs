@@ -44,12 +44,10 @@ fn string_to_unicode_char(s: &str) -> Option<char> {
 
 #[inline]
 fn token_as_char<I: U8Input>(i: I, c: u8) -> SimpleResult<I, char> {
-    parse!{i;
-        let i = token(c);
-        ret {
-            i as char
-        }
-    }
+    token(i, c)
+        .bind(|i, c| {
+            i.ret(c as char)
+        })
 }
 
 // TODO: test
