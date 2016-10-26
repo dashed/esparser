@@ -315,11 +315,7 @@ fn identifier_start<I: U8Input>(i: I) -> SimpleResult<I, char> {
 
     #[inline]
     fn identifier_start_unicode<I: U8Input>(i: I) -> SimpleResult<I, char> {
-        parse!{i;
-            token(b'\\');
-            let sequence = unicode_escape_seq();
-            ret sequence
-        }
+        escaped_unicode_escape_seq(i)
     }
 
     parse!{i;
@@ -601,6 +597,12 @@ fn unicode_escape_seq<I: U8Input>(i: I) -> SimpleResult<I, char> {
             }
         }
     )
+}
+
+
+fn escaped_unicode_escape_seq<I: U8Input>(i: I) -> SimpleResult<I, char> {
+    token(i, b'\\')
+        .then(unicode_escape_seq)
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Hex4Digits
