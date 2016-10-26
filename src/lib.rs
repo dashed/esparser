@@ -129,7 +129,8 @@ fn parse_utf8_char_test() {
 
 // == Tokens ==
 enum Token {
-    WhiteSpace
+    WhiteSpace(char),
+    LineTerminator(char)
 }
 
 // Since there is no separate lexing step apart from parsing step,
@@ -147,7 +148,9 @@ fn common_delim<I: U8Input>(i: I) -> SimpleResult<I, Vec<Token>> {
     #[inline]
     fn __common_delim<I: U8Input>(i: I) -> SimpleResult<I, Token> {
         parse!{i;
-            let delim: Token = whitespace();
+            let delim: Token =
+                whitespace() <|>
+                line_terminator();
             ret delim
         }
     }
@@ -185,7 +188,7 @@ fn whitespace<I: U8Input>(i: I) -> SimpleResult<I, Token> {
 
     parse!{i;
 
-        let _result =
+        let whitespace_char =
             parse_utf8_char_of_bytes(b"\x0009") <|> // <TAB>; CHARACTER TABULATION
             parse_utf8_char_of_bytes(b"\x000B") <|> // <VT>; LINE TABULATION
             parse_utf8_char_of_bytes(b"\x000C") <|> // <FF>; FORM FEED (FF)
@@ -194,7 +197,25 @@ fn whitespace<I: U8Input>(i: I) -> SimpleResult<I, Token> {
             parse_utf8_char_of_bytes(b"\xFEFF") <|> // <ZWNBSP>; ZERO WIDTH NO-BREAK SPACE
             other_whitespace(); // Any other Unicode "Separator, space" code point
 
-        ret {Token::WhiteSpace}
+        ret Token::WhiteSpace(whitespace_char)
+    }
+}
+
+// == 11.3 Line Terminators ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-line-terminators
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LineTerminator
+fn line_terminator<I: U8Input>(i: I) -> SimpleResult<I, Token> {
+    parse!{i;
+
+        let line_terminator_char =
+            parse_utf8_char_of_bytes(b"\x000A") <|> // <LF>; LINE FEED (LF)
+            parse_utf8_char_of_bytes(b"\x000D") <|> // <CR>; CARRIAGE RETURN (CR)
+            parse_utf8_char_of_bytes(b"\x2028") <|> // <LS>; LINE SEPARATOR
+            parse_utf8_char_of_bytes(b"\x2029");    // <PS>; PARAGRAPH SEPARATOR
+
+        ret Token::LineTerminator(line_terminator_char)
     }
 }
 
