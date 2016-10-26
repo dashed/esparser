@@ -604,6 +604,19 @@ fn variable_statement<I: U8Input>(i: I) -> SimpleResult<I, ()> {
     }
 }
 
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-VariableDeclaration
+fn variable_declaration<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, ()> {
+    match params {
+        None => {
+            // TODO: complete
+        },
+        Some(params) => {
+            // TODO: complete
+        }
+    }
+}
+
 // TODO: test for ASI behaviour
 #[inline]
 fn semicolon<I: U8Input>(i: I) -> SimpleResult<I, ()> {
