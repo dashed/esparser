@@ -119,6 +119,14 @@ enum Token {
     WhiteSpace
 }
 
+// == Parameters ==
+// Based on: http://www.ecma-international.org/ecma-262/7.0/#sec-grammar-notation
+enum Parameter {
+    In,
+    Yield,
+    Return
+}
+
 // == 11.2 White Space ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-white-space
@@ -500,37 +508,58 @@ fn hex_4_digits_test() {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingIdentifier
-fn binding_identifier<I: U8Input>(i: I) -> SimpleResult<I, ()> {
-    either(i,
-        // left
-        |i| parse!{i;
+fn binding_identifier<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, ()> {
 
-            string(b"yield");
-
-            // TODO: token
-            ret {()}
-        },
-        // right
-        |i| parse!{i;
-
+    #[inline]
+    fn __binding<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+        parse!{i;
             identifier();
 
             // TODO: token
             ret {()}
         }
-    )
-    .bind(|i, result| {
-        match result {
-            Either::Left(_) => {
-                // TODO: fix
-                i.ret(())
-            },
-            Either::Right(_) => {
-                // TODO: fix
-                i.ret(())
+    }
+
+    match params {
+        None => {
+            either(i,
+                // left
+                |i| parse!{i;
+
+                    string(b"yield");
+
+                    // TODO: token
+                    ret {()}
+                },
+                // right
+                __binding
+            )
+            .bind(|i, result| {
+                match result {
+                    Either::Left(_) => {
+                        // TODO: fix
+                        i.ret(())
+                    },
+                    Either::Right(_) => {
+                        // TODO: fix
+                        i.ret(())
+                    }
+                }
+            })
+        },
+        Some(params) => {
+            match params {
+                Parameter::Yield => {},
+                _ => {
+                    panic!("misuse of binding_identifier");
+                }
             }
+
+            __binding(i)
         }
-    })
+    }
+
+
 }
 
 // TODO: test
