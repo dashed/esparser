@@ -609,10 +609,16 @@ fn variable_statement<I: U8Input>(i: I) -> SimpleResult<I, ()> {
 fn variable_declaration<I: U8Input>(i: I, params: Option<Parameter>) -> SimpleResult<I, ()> {
     match params {
         None => {
-            // TODO: complete
+            parse!{i;
+                // TODO: complete
+                ret {()}
+            }
         },
         Some(params) => {
-            // TODO: complete
+            parse!{i;
+                // TODO: complete
+                ret {()}
+            }
         }
     }
 }
