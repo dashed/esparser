@@ -8,6 +8,7 @@ extern crate chomp;
 
 // == rust std imports ==
 
+use std::mem;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -211,7 +212,7 @@ fn parse_single_quote_string_look_ahead<I: U8Input>(input: I) -> SimpleResult<I,
 fn parse_single_quote_string_test() {
 
     match parse_only(parse_single_quote_string, br#"foo"#) {
-        Ok(result) => {
+        Ok(_) => {
             assert!(false);
         }
         Err(_) => {
@@ -366,11 +367,13 @@ fn parse_utf8_char_test() {
 }
 
 // == Tokens ==
+#[derive(Debug)]
 enum Comment {
     MultiLineComment(String),
     SingleLineComment(String)
 }
 
+#[derive(Debug)]
 enum Token {
     WhiteSpace(char),
     LineTerminator(char),
@@ -1145,8 +1148,102 @@ fn conditional_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> Simpl
 // http://www.ecma-international.org/ecma-262/7.0/#sec-binary-logical-operators
 
 // TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalANDExpression
+fn logical_and_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, ()> {
+
+    // validation
+    match *params {
+        None |
+        Some(Parameter::In) |
+        Some(Parameter::Yield) => {},
+        _ => {
+            panic!("misuse of logical_and_expression");
+        }
+    }
+
+    parse!{i;
+
+        ret {()}
+    }
+
+}
+
+#[derive(Debug)]
+enum LogicOrExpression {
+    Or(
+        Box<LogicOrExpression>,
+        Vec<Token>, // common_delim
+        /* || */
+        Vec<Token>, // common_delim
+        Box<LogicOrExpression>
+    ),
+    Leaf(bool),
+    None
+}
+
+impl Default for LogicOrExpression {
+    fn default() -> Self {
+        LogicOrExpression::None
+    }
+}
+
+impl LogicOrExpression {
+    fn add_delim(&mut self, delim_1: Vec<Token>, delim_2: Vec<Token>) {
+
+        match *self {
+            LogicOrExpression::None => {
+                panic!("invariant violation");
+            },
+            _ => {}
+        }
+
+        let lhs = mem::replace(self, LogicOrExpression::None);
+
+        let new_val = LogicOrExpression::Or(
+            Box::new(lhs),
+            delim_1,
+            /* || */
+            delim_2,
+            Box::new(LogicOrExpression::None)
+        );
+
+        mem::replace(self, new_val);
+    }
+
+    fn add_item(&mut self, rhs_val: bool) {
+
+        let rhs = LogicOrExpression::Leaf(rhs_val);
+
+        match *self {
+            LogicOrExpression::Leaf(_) => {
+                panic!("invariant violation");
+            },
+            LogicOrExpression::None => {
+                mem::replace(self, rhs);
+            },
+            LogicOrExpression::Or(_, _, _, _) => {
+
+                if let LogicOrExpression::Or(lhs, delim_1, delim_2, _) = mem::replace(self, LogicOrExpression::None) {
+
+                    let new_val = LogicOrExpression::Or(
+                        lhs,
+                        delim_1,
+                        /* || */
+                        delim_2,
+                        Box::new(rhs)
+                    );
+
+                    mem::replace(self, new_val);
+                }
+
+            }
+        }
+    }
+}
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalORExpression
-fn logical_or_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, ()> {
+fn logical_or_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, LogicOrExpression> {
 
     // validation
     match *params {
@@ -1158,11 +1255,60 @@ fn logical_or_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> Simple
         }
     }
 
-    parse!{i;
+    type Accumulator = Rc<RefCell<LogicOrExpression>>;
 
-        ret {()}
+    #[inline]
+    fn delimiter<I: U8Input>(i: I, accumulator: Accumulator) -> SimpleResult<I, ()> {
+        parse!{i;
+            let delim_1 = common_delim();
+            let _or = string(b"||");
+            let delim_2 = common_delim();
+            ret {
+                accumulator.borrow_mut().add_delim(delim_1, delim_2);
+                ()
+            }
+        }
     }
 
+    #[inline]
+    fn reducer<I: U8Input>(input: I, accumulator: Accumulator) -> SimpleResult<I, ()> {
+        parse!{input;
+
+            // TODO: fix
+            let _l = string(b"a");
+
+            ret {
+                accumulator.borrow_mut().add_item(false);
+                ()
+            }
+        }
+    }
+
+    parse!{i;
+
+        let line = parse_list(
+            delimiter,
+            reducer
+        );
+
+        ret line
+    }
+
+}
+
+#[test]
+fn logical_or_expression_test() {
+
+    // TODO: fix
+    match parse_only(|i| logical_or_expression(i, &None), b"a||a ||    a") {
+        Ok(result) => {
+            println!("{:?}", result);
+            assert!(false);
+        }
+        Err(_) => {
+            assert!(true);
+        }
+    }
 }
 
 // == 12.15 Assignment Operators ==
