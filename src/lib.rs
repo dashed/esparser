@@ -555,11 +555,8 @@ fn identifier_part<I: U8Input>(i: I) -> SimpleResult<I, char> {
 
     #[inline]
     fn identifier_part_unicode<I: U8Input>(i: I) -> SimpleResult<I, char> {
-        parse!{i;
-            token(b'\\');
-            let sequence = unicode_escape_seq();
-            ret sequence
-        }
+        token(i, b'\\')
+            .then(unicode_escape_seq)
     }
 
     parse!{i;
