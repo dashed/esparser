@@ -529,9 +529,10 @@ fn comment<I: U8Input>(i: I) -> SimpleResult<I, Token> {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-names-and-keywords
 
+struct IdentifierName(String);
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierName
-struct IdentifierName(String);
 fn identifier_name<I: U8Input>(i: I) -> SimpleResult<I, IdentifierName> {
     parse!{i;
 
@@ -998,6 +999,11 @@ fn hex_4_digits_test() {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-identifiers
 
+enum IdentifierReference {
+    Identifier,
+    Yield
+}
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierReference
 fn identifier_reference<I: U8Input>(i: I, maybe_params: &Option<Parameter>) -> SimpleResult<I, ()> {
@@ -1109,9 +1115,11 @@ fn binding_identifier<I: U8Input>(i: I, maybe_params: &Option<Parameter>) -> Sim
 
 }
 
+struct Identifier(IdentifierName);
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Identifier
-fn identifier<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+fn identifier<I: U8Input>(i: I) -> SimpleResult<I, Identifier> {
     either(i,
         |i| reserved_word(i),  // left
         |i| identifier_name(i) // right
@@ -1121,8 +1129,8 @@ fn identifier<I: U8Input>(i: I) -> SimpleResult<I, ()> {
             Either::Left(_) => {
                 i.err(ChompError::unexpected())
             },
-            Either::Right(_) => {
-                i.ret(())
+            Either::Right(name) => {
+                i.ret(Identifier(name))
             }
         }
     })
