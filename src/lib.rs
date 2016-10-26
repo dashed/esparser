@@ -442,68 +442,172 @@ fn unicode_id_continue_test() {
 // TODO: enum Keyword type
 
 // TODO: test case: A code point in a ReservedWord cannot be expressed by a \UnicodeEscapeSequence.
+// TODO: \u0076\u0061\u0072 (var)
 // http://www.ecma-international.org/ecma-262/7.0/#sec-reserved-words
 fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
+
+    #[inline]
+    fn string_not_utf8<I: U8Input>(i: I, needle: &[u8]) -> SimpleResult<I, I::Buffer> {
+
+        let mark = i.mark();
+        let mut current_needle = needle;
+        let mut should_continue = true;
+
+        let mut parse_result = either(i,
+            // left
+            escaped_unicode_escape_seq,
+            // right
+            parse_utf8_char
+        ).map_err(|e| {
+            should_continue = false;
+            e
+        });
+
+        while should_continue {
+
+            parse_result = parse_result
+                .bind(|i, result| {
+                    match result {
+                        Either::Left(c) => {
+                            // TODO: Reserved keyword must not contain escaped characters.
+                            i.err(ChompError::unexpected())
+                        },
+                        Either::Right(c) => {
+
+                            let mut buf = String::with_capacity(1);
+                            buf.push(c);
+                            let bytes = buf.as_bytes();
+
+                            if current_needle.starts_with(bytes) {
+                                current_needle = current_needle.split_at(bytes.len()).1;
+                                i.ret(Either::Right(c))
+                            } else {
+                                i.err(ChompError::unexpected())
+                            }
+                        }
+                    }
+                });
+
+            if current_needle.len() <= 0 {
+                should_continue = false;
+                break;
+            }
+
+            parse_result = parse_result
+                .then(|i| {
+                    either(i,
+                        // left
+                        escaped_unicode_escape_seq,
+                        // right
+                        parse_utf8_char
+                    )
+                })
+                .map_err(|e| {
+                    should_continue = false;
+                    e
+                });
+        }
+
+        parse_result
+        .then(|mut i| {
+            let res = (&mut i).consume_from(mark);
+            i.ret(res)
+        })
+    }
+
     parse!{i;
         let keyword =
             // == 11.6.2.1 Keywords ==
             // http://www.ecma-international.org/ecma-262/7.0/#prod-Keyword
-            string(b"break") <|>
-            string(b"do") <|>
-            string(b"in") <|>
-            string(b"typeof") <|>
-            string(b"case") <|>
-            string(b"else") <|>
-            string(b"instanceof") <|>
-            string(b"var") <|>
-            string(b"catch") <|>
-            string(b"export") <|>
-            string(b"new") <|>
-            string(b"void") <|>
-            string(b"class") <|>
-            string(b"extends") <|>
-            string(b"return") <|>
-            string(b"while") <|>
-            string(b"const") <|>
-            string(b"finally") <|>
-            string(b"super") <|>
-            string(b"with") <|>
-            string(b"continue") <|>
-            string(b"for") <|>
-            string(b"switch") <|>
-            string(b"yield") <|>
-            string(b"debugger") <|>
-            string(b"function") <|>
-            string(b"this") <|>
-            string(b"default") <|>
-            string(b"if") <|>
-            string(b"throw") <|>
-            string(b"delete") <|>
-            string(b"import") <|>
-            string(b"try") <|>
+            string_not_utf8(b"break") <|>
+            string_not_utf8(b"do") <|>
+            string_not_utf8(b"in") <|>
+            string_not_utf8(b"typeof") <|>
+            string_not_utf8(b"case") <|>
+            string_not_utf8(b"else") <|>
+            string_not_utf8(b"instanceof") <|>
+            string_not_utf8(b"var") <|>
+            string_not_utf8(b"catch") <|>
+            string_not_utf8(b"export") <|>
+            string_not_utf8(b"new") <|>
+            string_not_utf8(b"void") <|>
+            string_not_utf8(b"class") <|>
+            string_not_utf8(b"extends") <|>
+            string_not_utf8(b"return") <|>
+            string_not_utf8(b"while") <|>
+            string_not_utf8(b"const") <|>
+            string_not_utf8(b"finally") <|>
+            string_not_utf8(b"super") <|>
+            string_not_utf8(b"with") <|>
+            string_not_utf8(b"continue") <|>
+            string_not_utf8(b"for") <|>
+            string_not_utf8(b"switch") <|>
+            string_not_utf8(b"yield") <|>
+            string_not_utf8(b"debugger") <|>
+            string_not_utf8(b"function") <|>
+            string_not_utf8(b"this") <|>
+            string_not_utf8(b"default") <|>
+            string_not_utf8(b"if") <|>
+            string_not_utf8(b"throw") <|>
+            string_not_utf8(b"delete") <|>
+            string_not_utf8(b"import") <|>
+            string_not_utf8(b"try") <|>
 
             // TODO: [edit] remove; replaced by syntax error
             // TODO: is this right?
             // http://www.ecma-international.org/ecma-262/7.0/#sec-keywords
-            // string(b"let") <|>
-            // string(b"static") <|>
+            // string_not_utf8(b"let") <|>
+            // string_not_utf8(b"static") <|>
 
             // == 11.6.2.2 Future Reserved Words ==
             // http://www.ecma-international.org/ecma-262/7.0/#sec-future-reserved-words
-            string(b"enum") <|>
-            string(b"await") <|>
+            string_not_utf8(b"enum") <|>
+            string_not_utf8(b"await") <|>
 
             // == 11.8.1 Null Literals ==
             // http://www.ecma-international.org/ecma-262/7.0/#prod-NullLiteral
-            string(b"null") <|>
+            string_not_utf8(b"null") <|>
 
             // == 11.8.2 Boolean Literals ==
             // http://www.ecma-international.org/ecma-262/7.0/#prod-BooleanLiteral
-            string(b"true") <|>
-            string(b"false");
+            string_not_utf8(b"true") <|>
+            string_not_utf8(b"false");
 
         ret keyword
     }
+}
+
+#[test]
+fn reserved_word_test() {
+
+    match parse_only(reserved_word, b"var") {
+        Ok(_) => {
+            assert!(true);
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    let fails = vec![
+        r"\u0076\u0061\u0072",
+        r"\u0076\u{0061}\u0072",
+        r"v\u0061\u0072",
+        r"\u0076a\u0072",
+        r"\u0076\u0061r",
+    ];
+
+    for fail in fails {
+        match parse_only(reserved_word, fail.as_bytes()) {
+            Ok(_) => {
+                assert!(false);
+            }
+            Err(_) => {
+                assert!(true);
+            }
+        }
+    }
+
 }
 
 // == 11.8.3 Numeric Literals ==
