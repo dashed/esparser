@@ -65,7 +65,7 @@ fn string_to_unicode_char(s: &str) -> Option<char> {
 //                                     delim reducer(accumulator)
 #[inline]
 fn parse_list<I: U8Input, D, Delim, A, R, Reduced>(input: I, delimiter: D, reducer: R) -> SimpleResult<I, A>
-    where D: Fn(I) -> SimpleResult<I, Delim>,
+    where D: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, Delim>,
           R: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, Reduced>,
           A: Default
 {
@@ -88,13 +88,13 @@ fn parse_list<I: U8Input, D, Delim, A, R, Reduced>(input: I, delimiter: D, reduc
 #[inline]
 fn parse_list_rest<I: U8Input, D, Delim, A, R, Reduced>(input: I, delimiter: D, accumulator: Rc<RefCell<A>>,
     reducer: R) -> SimpleResult<I, ()>
-    where D: Fn(I) -> SimpleResult<I, Delim>,
+    where D: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, Delim>,
           R: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, Reduced>,
           A: Default
 {
 
     let mut should_continue = true;
-    let mut parse_result = delimiter(input)
+    let mut parse_result = delimiter(input, accumulator.clone())
         .then(|i| reducer(i, accumulator.clone()))
         .map(|_| ())
         .map_err(|e| {
@@ -107,7 +107,11 @@ fn parse_list_rest<I: U8Input, D, Delim, A, R, Reduced>(input: I, delimiter: D, 
             .then(|i| {
                 either(i,
                     // left
-                    |i| delimiter(i).then(|i| reducer(i, accumulator.clone())).map(|_| ()),
+                    |i| {
+                        delimiter(i, accumulator.clone())
+                            .then(|i| reducer(i, accumulator.clone()))
+                            .map(|_| ())
+                    },
                     // right
                     |i| i.ret(())
                 )
@@ -149,7 +153,7 @@ fn parse_single_quote_string<I: U8Input>(input: I) -> SimpleResult<I, String> {
 
         let line: Vec<u8> = parse_list(
             // delimiter
-            |i| string(i, br#"\'"#),
+            |i, _| string(i, br#"\'"#),
             // reducer
             parse_single_quote_string_reducer
 
