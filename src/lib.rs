@@ -1140,8 +1140,12 @@ fn identifier<I: U8Input>(i: I) -> SimpleResult<I, Identifier> {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-primary-expression
 
+enum PrimaryExpression {
+    This
+}
+
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
-fn primary_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, Token> {
+fn primary_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, PrimaryExpression> {
 
     // validation
     match *params {
@@ -1154,11 +1158,11 @@ fn primary_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleRes
 
     either(i,
         // left
-        |i| string(i, b"this").map(|_| Token::This),
+        |i| string(i, b"this").map(|_| PrimaryExpression::This),
         // right
         |i| {
             // TODO: complete
-            i.ret(Token::This)
+            i.ret(PrimaryExpression::This)
         }
     )
     .bind(|i, result| {
