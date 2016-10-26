@@ -16,6 +16,8 @@ References
 ==========
 
 - http://www.ecma-international.org/ecma-262/7.0/
+- https://github.com/dherman/esprit/blob/master/grammar.md
+- https://gist.github.com/avdg/1f10e268e484b1284b46
 
 License
 =======
