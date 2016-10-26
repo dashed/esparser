@@ -33,6 +33,15 @@ Bookmark:
 
  */
 
+// == helpers ==
+
+#[inline]
+fn string_to_unicode_char(s: &str) -> Option<char> {
+    u32::from_str_radix(s, 16)
+        .ok()
+        .and_then(std::char::from_u32)
+}
+
 // == parser helpers ==
 
 #[inline]
@@ -45,13 +54,6 @@ fn string_till<I: U8Input, F>(input: I, mut stop_at: F) -> SimpleResult<I, Strin
             i.ret(string)
         })
 
-}
-
-#[inline]
-fn string_to_unicode_char(s: &str) -> Option<char> {
-    u32::from_str_radix(s, 16)
-        .ok()
-        .and_then(std::char::from_u32)
 }
 
 #[inline]
