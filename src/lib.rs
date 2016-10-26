@@ -1156,25 +1156,11 @@ fn primary_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleRes
         }
     }
 
-    either(i,
-        // left
+    or(i,
         |i| string(i, b"this").map(|_| PrimaryExpression::This),
-        // right
-        |i| {
-            // TODO: complete
-            i.ret(PrimaryExpression::This)
-        }
+        // TODO: complete
+        |i| string(i, b"other").map(|_| PrimaryExpression::This),
     )
-    .bind(|i, result| {
-        match result {
-            Either::Left(t) => {
-                i.ret(t)
-            },
-            Either::Right(t) => {
-                i.ret(t)
-            }
-        }
-    })
 }
 
 // == 12.2.6 Object Initializer ==
