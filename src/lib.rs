@@ -115,9 +115,9 @@ fn parse_utf8_char_test() {
 
     // case: only one sparkle heart is parsed
 
-    let two_sparkle_hearts = vec![240, 159, 146, 150, 240, 159, 146, 150];
+    let sparkle_heart_and_smile = vec![240, 159, 146, 150, 240, 159, 152, 128];
 
-    match parse_only(parse_utf8_char, &two_sparkle_hearts) {
+    match parse_only(parse_utf8_char, &sparkle_heart_and_smile) {
         Ok(result) => {
             assert_eq!(result, '\u{1f496}');
         }
