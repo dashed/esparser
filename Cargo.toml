@@ -1,5 +1,5 @@
 [package]
-name = "espice"
+name = "esparser"
 version = "0.1.0"
 authors = ["Alberto Leal <mailforalberto@gmail.com>"]
 
