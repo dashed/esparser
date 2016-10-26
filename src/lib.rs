@@ -1156,11 +1156,14 @@ fn primary_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleRes
         }
     }
 
-    or(i,
-        |i| string(i, b"this").map(|_| PrimaryExpression::This),
-        // TODO: complete
-        |i| string(i, b"other").map(|_| PrimaryExpression::This),
-    )
+    parse!{i;
+
+        let result = (i -> string(i, b"this").map(|_| PrimaryExpression::This)) <|>
+        (i -> string(i, b"this").map(|_| PrimaryExpression::This));
+
+        ret result
+    }
+
 }
 
 // == 12.2.6 Object Initializer ==
