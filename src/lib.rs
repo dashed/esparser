@@ -486,9 +486,13 @@ fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
                             }
                         }
                     }
+                })
+                .map_err(|e| {
+                    should_continue = false;
+                    e
                 });
 
-            if current_needle.len() <= 0 {
+            if current_needle.len() <= 0 || !should_continue {
                 should_continue = false;
                 break;
             }
