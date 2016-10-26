@@ -63,7 +63,6 @@ fn string_to_unicode_char(s: &str) -> Option<char> {
 // list(delim, reducer) = reducer(accumulator) rest(delim) | reducer(accumulator)
 // rest(delim, accumulator, reducer) = delim reducer(accumulator) rest(delim, accumulator, reducer) |
 //                                     delim reducer(accumulator)
-// TODO: needs test
 #[inline]
 fn parse_list<I: U8Input, D, Delim, A, R>(input: I, delimiter: D, reducer: R) -> SimpleResult<I, A>
     where D: Fn(I) -> SimpleResult<I, Delim>,
@@ -94,12 +93,173 @@ fn parse_list_rest<I: U8Input, D, Delim, A, R>(input: I, delimiter: D, accumulat
           R: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, ()>,
           A: Default
 {
+
+    let mut should_continue = true;
+    let mut parse_result = delimiter(input)
+        .then(|i| reducer(i, accumulator.clone()))
+        .map_err(|e| {
+            should_continue = false;
+            e
+        });
+
+    while should_continue {
+        parse_result = parse_result
+            .then(|i| {
+                either(i,
+                    // left
+                    |i| delimiter(i).then(|i| reducer(i, accumulator.clone())),
+                    // right
+                    |i| i.ret(())
+                )
+            })
+            .bind(|i, result| {
+                match result {
+                    Either::Left(_) => {
+                        // continue while loop
+                    },
+                    Either::Right(_) => {
+                        // break while loop
+                        should_continue = false;
+                    }
+                }
+                i.ret(())
+            })
+            .map_err(|e| {
+                should_continue = false;
+                e
+            });
+    }
+
+    parse_result
+
+    // NOTE: above is iterative version
+    // parse!{input;
+    //     delimiter();
+    //     reducer(accumulator.clone());
+    //     option(|i| parse_list_rest(i, delimiter, accumulator, reducer), ());
+    //     ret {()}
+    // }
+}
+
+#[inline]
+fn parse_single_quote_string<I: U8Input>(input: I) -> SimpleResult<I, String> {
     parse!{input;
-        delimiter();
-        reducer(accumulator.clone());
-        option(|i| parse_list_rest(i, delimiter, accumulator, reducer), ());
+
+        token(b'\'');
+
+        let line: Vec<u8> = parse_list(
+            // delimiter
+            |i| string(i, br#"\'"#),
+            // reducer
+            parse_single_quote_string_reducer
+
+        );
+
+        token(b'\'');
+
+        ret {
+            let line = String::from_utf8_lossy(line.as_slice()).into_owned();
+            line
+        }
+    }
+}
+
+#[inline]
+fn parse_single_quote_string_reducer<I: U8Input>(input: I, accumulator: Rc<RefCell<Vec<u8>>>)
+    -> SimpleResult<I, ()> {
+    parse!{input;
+
+        let line: Vec<u8> = many_till(any, parse_single_quote_string_look_ahead);
+
+        let has_quote = option(
+            |i| look_ahead(i, |i| string(i, br#"\'"#)).map(|_| true),
+            false
+        );
+
+        ret {
+
+            if line.len() > 0 {
+                let mut line = line;
+                accumulator.borrow_mut().append(&mut line);
+            }
+
+            if has_quote {
+                accumulator.borrow_mut().push(b'\'');
+            }
+
+            ()
+        }
+    }
+}
+
+#[inline]
+fn parse_single_quote_string_look_ahead<I: U8Input>(input: I) -> SimpleResult<I, ()> {
+    parse!{input;
+        look_ahead(|i| or(i,
+            |i| string(i, br#"\'"#).map(|_| ()),
+            |i| token(i, b'\'').map(|_| ())
+        ));
         ret {()}
     }
+}
+
+#[test]
+fn parse_single_quote_string_test() {
+
+    match parse_only(parse_single_quote_string, br#"foo"#) {
+        Ok(result) => {
+            assert!(false);
+        }
+        Err(_) => {
+            assert!(true);
+        }
+    }
+
+    match parse_only(parse_single_quote_string, br#"bar'foo'"#) {
+        Ok(result) => {
+            assert!(false);
+        }
+        Err(_) => {
+            assert!(true);
+        }
+    }
+
+    match parse_only(parse_single_quote_string, br#"'\'foo\''"#) {
+        Ok(result) => {
+            assert_eq!(result, r#"'foo'"#.to_owned());
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    match parse_only(parse_single_quote_string, br#"'\'foo'"#) {
+        Ok(result) => {
+            assert_eq!(result, r#"'foo"#.to_owned());
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    match parse_only(parse_single_quote_string, br#"'foo'bar"#) {
+        Ok(result) => {
+            assert_eq!(result, "foo".to_owned());
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    match parse_only(parse_single_quote_string, br#"'\'foo\'baz'bar"#) {
+        Ok(result) => {
+            assert_eq!(result, r#"'foo'baz"#.to_owned());
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
 }
 
 // == parser helpers ==
