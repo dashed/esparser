@@ -999,6 +999,61 @@ fn hex_4_digits_test() {
 // http://www.ecma-international.org/ecma-262/7.0/#sec-identifiers
 
 // TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierReference
+fn identifier_reference<I: U8Input>(i: I, maybe_params: &Option<Parameter>) -> SimpleResult<I, ()> {
+
+    #[inline]
+    fn __binding<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+        parse!{i;
+            identifier();
+            // TODO: token
+            ret {()}
+        }
+    }
+
+    match *maybe_params {
+        None => {
+            either(i,
+                // left
+                |i| parse!{i;
+
+                    string(b"yield");
+
+                    // TODO: token
+                    ret {()}
+                },
+                // right
+                __binding
+            )
+            .bind(|i, result| {
+                match result {
+                    Either::Left(_) => {
+                        // TODO: fix
+                        i.ret(())
+                    },
+                    Either::Right(_) => {
+                        // TODO: fix
+                        i.ret(())
+                    }
+                }
+            })
+        },
+        Some(ref params) => {
+            match *params {
+                Parameter::Yield => {},
+                _ => {
+                    panic!("misuse of identifier_reference");
+                }
+            }
+
+            __binding(i)
+        }
+    }
+
+
+}
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingIdentifier
 fn binding_identifier<I: U8Input>(i: I, maybe_params: &Option<Parameter>) -> SimpleResult<I, ()> {
 
