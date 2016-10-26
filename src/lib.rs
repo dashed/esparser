@@ -377,7 +377,8 @@ enum Comment {
 enum Token {
     WhiteSpace(char),
     LineTerminator(char),
-    Comment(Comment)
+    Comment(Comment),
+    This
 }
 
 // Since there is no separate lexing step apart from parsing step,
@@ -1051,6 +1052,39 @@ fn identifier<I: U8Input>(i: I) -> SimpleResult<I, ()> {
 // == 12.2 Primary Expression ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-primary-expression
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
+fn primary_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, Token> {
+
+    // validation
+    match *params {
+        None |
+        Some(Parameter::Yield) => {},
+        _ => {
+            panic!("misuse of primary_expression");
+        }
+    }
+
+    either(i,
+        // left
+        |i| string(i, b"this").map(|_| Token::This),
+        // right
+        |i| {
+            // TODO: complete
+            i.ret(Token::This)
+        }
+    )
+    .bind(|i, result| {
+        match result {
+            Either::Left(t) => {
+                i.ret(t)
+            },
+            Either::Right(t) => {
+                i.ret(t)
+            }
+        }
+    })
+}
 
 // == 12.2.6 Object Initializer ==
 
