@@ -353,6 +353,11 @@ fn parse_utf8_char<I: U8Input>(mut i: I) -> SimpleResult<I, char> {
 
             internal_buf.push(c);
 
+            // TODO: potential optimization point;
+            //       rather than reading internal_buf.len() times on every loop
+            //
+            // see: https://github.com/rust-lang/rust/issues/34815
+
             match std::str::from_utf8(&internal_buf) {
                 Err(_) => {
                     // not valid_utf8
