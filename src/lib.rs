@@ -1,10 +1,8 @@
 #![recursion_limit="1000"]
 #![feature(unicode)]
 // == crates ==
-#[macro_use]
-extern crate chomp;
-// TODO: remove
-// extern crate unicode_xid;
+#[macro_use] extern crate chomp;
+#[macro_use] extern crate quick_error;
 
 // == rust std imports ==
 
@@ -14,6 +12,7 @@ use std::cell::RefCell;
 
 // == 3rd-party imports ==
 
+use chomp::run_parser;
 use chomp::parsers::{SimpleResult, scan, token, any, take_till, string, satisfy, take_while1};
 use chomp::combinators::{option, look_ahead, many_till, many1, many, or, either};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
@@ -50,7 +49,7 @@ fn string_to_unicode_char(s: &str) -> Option<char> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
-struct CurrentPosition(
+pub struct CurrentPosition(
     // The current line, zero-indexed.
     u64,
     // The current col, zero-indexed.
@@ -1539,5 +1538,75 @@ fn semicolon<I: U8Input>(i: I) -> SimpleResult<I, ()> {
         // TODO: ASI rule
         token(b';');
         ret {()}
+    }
+}
+
+// ==== sandbox ===>
+// see: https://github.com/m4rw3r/chomp/issues/60
+
+quick_error! {
+    #[derive(Debug)]
+    pub enum ParseError {
+        Io(err: std::io::Error) {
+            from()
+            description("io error")
+            display("I/O error: {}", err)
+            cause(err)
+        }
+        Expected(loc: CurrentPosition, descr: &'static str) {
+            description(descr)
+            display("Error {}", descr)
+        }
+    }
+}
+
+type ESParseResult<I, T> = ParseResult<I, T, ParseError>;
+
+fn some_parser<I: U8Input>(i: InputPosition<I, CurrentPosition>)
+    -> ESParseResult<InputPosition<I, CurrentPosition>, ()> {
+    parse!{i;
+
+        let _var = (i -> {
+            string(i, b"var")
+                .map_err2(|_, i| {
+                    let loc = i.position();
+                    ParseError::Expected(loc, "Expected var here.")
+                })
+        });
+
+        // ...
+
+        ret {()}
+    }
+}
+
+#[test]
+fn some_parser_test() {
+
+    let i = InputPosition::new(&b"varvar\n/* lol */test a\ntest b\n\ntest c\n"[..], CurrentPosition::new());
+
+    let r:  Result<(), ParseError> = run_parser(i, |i| parse!{i;
+        some_parser();
+        some_parser();
+        (i -> {
+            common_delim(i)
+            .map_err2(|_, i| {
+                let loc = i.position();
+                ParseError::Expected(loc, "Expected var here.")
+            })
+        });
+        some_parser();
+        ret {()}
+    }).1;
+
+    match r {
+        Ok(t) => {
+            println!("{:?}", t);
+            assert!(false);
+        }
+        Err(err) => {
+            println!("{:?}", err);
+            assert!(false);
+        }
     }
 }
