@@ -1104,7 +1104,7 @@ enum IdentifierReference {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierReference
-fn identifier_reference<I: U8Input>(i: I, maybe_params: &Option<Parameter>) -> SimpleResult<I, ()> {
+fn identifier_reference<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
 
     #[inline]
     fn __binding<I: U8Input>(i: I) -> SimpleResult<I, ()> {
@@ -1115,101 +1115,92 @@ fn identifier_reference<I: U8Input>(i: I, maybe_params: &Option<Parameter>) -> S
         }
     }
 
-    match *maybe_params {
-        None => {
-            either(i,
-                // left
-                |i| parse!{i;
+    if !params.contains(&Parameter::Yield) {
 
-                    string(b"yield");
+        let result = either(i,
+            // left
+            |i| parse!{i;
 
-                    // TODO: token
-                    ret {()}
+                string(b"yield");
+
+                // TODO: token
+                ret {()}
+            },
+            // right
+            __binding
+        )
+        .bind(|i, result| {
+            match result {
+                Either::Left(_) => {
+                    // TODO: fix
+                    i.ret(())
                 },
-                // right
-                __binding
-            )
-            .bind(|i, result| {
-                match result {
-                    Either::Left(_) => {
-                        // TODO: fix
-                        i.ret(())
-                    },
-                    Either::Right(_) => {
-                        // TODO: fix
-                        i.ret(())
-                    }
-                }
-            })
-        },
-        Some(ref params) => {
-            match *params {
-                Parameter::Yield => {},
-                _ => {
-                    panic!("misuse of identifier_reference");
+                Either::Right(_) => {
+                    // TODO: fix
+                    i.ret(())
                 }
             }
+        });
 
-            __binding(i)
-        }
+        return result;
     }
 
+    if params.len() >= 2 {
+        panic!("misuse of identifier_reference");
+    }
+
+    __binding(i)
 
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingIdentifier
-fn binding_identifier<I: U8Input>(i: I, maybe_params: &Option<Parameter>) -> SimpleResult<I, ()> {
+fn binding_identifier<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
 
     #[inline]
     fn __binding<I: U8Input>(i: I) -> SimpleResult<I, ()> {
         parse!{i;
             identifier();
-
             // TODO: token
             ret {()}
         }
     }
 
-    match *maybe_params {
-        None => {
-            either(i,
-                // left
-                |i| parse!{i;
+    if !params.contains(&Parameter::Yield) {
 
-                    string(b"yield");
+        let result = either(i,
+            // left
+            |i| parse!{i;
 
-                    // TODO: token
-                    ret {()}
+                string(b"yield");
+
+                // TODO: token
+                ret {()}
+            },
+            // right
+            __binding
+        )
+        .bind(|i, result| {
+            match result {
+                Either::Left(_) => {
+                    // TODO: fix
+                    i.ret(())
                 },
-                // right
-                __binding
-            )
-            .bind(|i, result| {
-                match result {
-                    Either::Left(_) => {
-                        // TODO: fix
-                        i.ret(())
-                    },
-                    Either::Right(_) => {
-                        // TODO: fix
-                        i.ret(())
-                    }
-                }
-            })
-        },
-        Some(ref params) => {
-            match *params {
-                Parameter::Yield => {},
-                _ => {
-                    panic!("misuse of binding_identifier");
+                Either::Right(_) => {
+                    // TODO: fix
+                    i.ret(())
                 }
             }
+        });
 
-            __binding(i)
-        }
+        return result;
     }
 
+    if params.len() >= 2 {
+        panic!("misuse of binding_identifier");
+    }
+
+    __binding(i)
 
 }
 
@@ -1243,15 +1234,11 @@ enum PrimaryExpression {
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
-fn primary_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, PrimaryExpression> {
+fn primary_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, PrimaryExpression> {
 
     // validation
-    match *params {
-        None |
-        Some(Parameter::Yield) => {},
-        _ => {
-            panic!("misuse of primary_expression");
-        }
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of primary_expression");
     }
 
     parse!{i;
@@ -1268,17 +1255,15 @@ fn primary_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleRes
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Initializer
-fn initializer<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, ()> {
+fn initializer<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
 
     // validation
-    match *params {
-        None |
-        Some(Parameter::In) |
-        Some(Parameter::Yield) => {},
-        _ => {
-            panic!("misuse of initializer");
-        }
+    if !(params.is_empty() ||
+        params.contains(&Parameter::In) ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of initializer");
     }
+
 
     parse!{i;
 
@@ -1298,16 +1283,13 @@ fn initializer<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, 
 // http://www.ecma-international.org/ecma-262/7.0/#sec-conditional-operator
 
 // TODO: test
-fn conditional_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, ()> {
+fn conditional_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
 
     // validation
-    match *params {
-        None |
-        Some(Parameter::In) |
-        Some(Parameter::Yield) => {},
-        _ => {
-            panic!("misuse of conditional_expression");
-        }
+    if !(params.is_empty() ||
+        params.contains(&Parameter::In) ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of conditional_expression");
     }
 
     either(i,
@@ -1320,7 +1302,11 @@ fn conditional_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> Simpl
             token(b'?');
             let delim_2 = common_delim();
 
-            let consequent = assignment_expression(&params);
+            let consequent = (i -> {
+                let mut params = params.clone();
+                params.insert(Parameter::In);
+                assignment_expression(i, &params)
+            });
 
             let delim_3 = common_delim();
             token(b':');
@@ -1361,16 +1347,14 @@ fn conditional_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> Simpl
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalANDExpression
-fn logical_and_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, ()> {
+fn logical_and_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
 
     // validation
-    match *params {
-        None |
-        Some(Parameter::In) |
-        Some(Parameter::Yield) => {},
-        _ => {
-            panic!("misuse of logical_and_expression");
-        }
+    if !(params.is_empty() ||
+        params.contains(&Parameter::In) ||
+        params.contains(&Parameter::Yield)
+        ) {
+        panic!("misuse of logical_and_expression");
     }
 
     parse!{i;
@@ -1456,16 +1440,13 @@ impl LogicOrExpression {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalORExpression
-fn logical_or_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, LogicOrExpression> {
+fn logical_or_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, LogicOrExpression> {
 
     // validation
-    match *params {
-        None |
-        Some(Parameter::In) |
-        Some(Parameter::Yield) => {},
-        _ => {
-            panic!("misuse of logical_or_expression");
-        }
+    if !(params.is_empty() ||
+        params.contains(&Parameter::In) ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of logical_or_expression");
     }
 
     type Accumulator = Rc<RefCell<LogicOrExpression>>;
@@ -1510,7 +1491,7 @@ fn logical_or_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> Simple
 fn logical_or_expression_test() {
 
     // TODO: fix
-    match parse_only(|i| logical_or_expression(i, &None), b"a||a ||    a") {
+    match parse_only(|i| logical_or_expression(i, &EnumSet::new()), b"a||a ||    a") {
         Ok(result) => {
             println!("{:?}", result);
             assert!(true);
@@ -1527,16 +1508,14 @@ fn logical_or_expression_test() {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-AssignmentExpression
-fn assignment_expression<I: U8Input>(i: I, params: &Option<Parameter>) -> SimpleResult<I, ()> {
+fn assignment_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
 
     // validation
-    match *params {
-        None |
-        Some(Parameter::In) |
-        Some(Parameter::Yield) => {},
-        _ => {
-            panic!("misuse of assignment_expression");
-        }
+    if !(params.is_empty() ||
+        params.contains(&Parameter::In) ||
+        params.contains(&Parameter::Yield)
+        ) {
+        panic!("misuse of assignment_expression");
     }
 
     parse!{i;
