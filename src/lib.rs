@@ -990,12 +990,25 @@ enum Bool {
 fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
     on_error(
         i,
-        |i| parse!{i;
-
-            let result = string(b"true").map(|_| Bool::True) <|>
-            string(b"false").map(|_| Bool::False);
-
-            ret result
+        |i| {
+            either(i,
+                // left
+                |i| string(i, b"true"),
+                // right
+                |i| string(i, b"false")
+            )
+            .bind::<_, _, ChompError<u8>>(|i, result| {
+                match result {
+                    Either::Left(_left) => {
+                        let _left: I::Buffer = _left;
+                        i.ret(Bool::True)
+                    },
+                    Either::Right(_left) => {
+                        let _left: I::Buffer = _left;
+                        i.ret(Bool::False)
+                    }
+                }
+            })
         },
         |_err, i| {
             let loc = i.position();
