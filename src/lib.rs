@@ -78,6 +78,16 @@ impl CurrentPosition {
     pub fn new() -> Self {
         CurrentPosition(0, 0)
     }
+
+    pub fn line(&self) -> u64 {
+        // zero-indexed to one-indexed
+        self.0 + 1
+    }
+
+    pub fn col(&self) -> u64 {
+        // zero-indexed to one-indexed
+        self.1 + 1
+    }
 }
 
 impl Numbering for CurrentPosition {
