@@ -40,6 +40,17 @@ Bookmark:
 
  */
 
+// == errors ==
+quick_error! {
+    #[derive(Debug)]
+    pub enum ParseError {
+        Expected(loc: CurrentPosition, descr: String) {
+            description(descr)
+            display("Line {}, Column {}: {}", loc.line(), loc.col(), descr)
+        }
+    }
+}
+
 // == helpers ==
 
 // like ParseResult::map_err, but this higher-order helper passes &Input to
