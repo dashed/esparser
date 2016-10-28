@@ -3,6 +3,7 @@
 // == crates ==
 #[macro_use] extern crate chomp;
 #[macro_use] extern crate quick_error;
+extern crate enum_set;
 
 // == rust std imports ==
 
@@ -22,6 +23,8 @@ use chomp::primitives::Primitives;
 use chomp::prelude::{Either};
 use chomp::types::numbering::{InputPosition, LineNumber, Numbering};
 use chomp::primitives::IntoInner;
+
+use enum_set::{EnumSet, CLike};
 
 /*
 
@@ -496,10 +499,23 @@ fn common_delim<I: U8Input>(i: I) -> SimpleResult<I, Vec<Token>> {
 
 // == Parameters ==
 // Based on: http://www.ecma-international.org/ecma-262/7.0/#sec-grammar-notation
+#[repr(u32)]
+#[derive(Clone)]
 enum Parameter {
     In,
     Yield,
     Return
+}
+
+impl CLike for Parameter {
+    fn to_u32(&self) -> u32 {
+        let encoded: Self = self.clone();
+        encoded as u32
+    }
+
+    unsafe fn from_u32(v: u32) -> Self {
+        mem::transmute(v)
+    }
 }
 
 // == 11.2 White Space ==

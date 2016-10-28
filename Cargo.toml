@@ -6,10 +6,12 @@ authors = ["Alberto Leal <mailforalberto@gmail.com>"]
 [lib]
 doctest = false
 
-[dependencies.chomp]
-git = "https://github.com/dashed/chomp"
-branch = "bind_err"
+# TODO: REMOVE
+# [dependencies.chomp]
+# git = "https://github.com/dashed/chomp"
+# branch = "bind_err"
 
 [dependencies]
-# chomp = "0.3.1"
+chomp = "0.3.1"
 quick-error = "1.1.0"
+enum-set = "0.0.6"
