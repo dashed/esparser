@@ -43,7 +43,11 @@ Bookmark:
 
  */
 
+type ESInput<I> = InputPosition<I, CurrentPosition>;
+type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ParseError>;
+
 // == errors ==
+
 quick_error! {
     #[derive(Debug)]
     pub enum ParseError {
@@ -956,10 +960,19 @@ fn reserved_word_test() {
 // == 11.8.1 Null Literals ==
 // http://www.ecma-international.org/ecma-262/7.0/#sec-null-literals
 // http://www.ecma-international.org/ecma-262/7.0/#prod-NullLiteral
+
+struct Null;
+
 #[inline]
-fn null_literal<I: U8Input>(i: I) -> SimpleResult<I, Token> {
-    string(i, b"null")
-        .map(|_| Token::Null)
+fn null_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Null> {
+    on_error(
+        i,
+        |i| string(i, b"null").map(|_| Null),
+        |_err, i| {
+            let loc = i.position();
+            ParseError::Expected(loc, "Expected null keyword.".to_string())
+        }
+    )
 }
 
 // == 11.8.3 Numeric Literals ==
@@ -1249,6 +1262,16 @@ fn primary_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleRe
         ret result
     }
 
+}
+
+// == 12.2.4 Literals ==
+
+fn literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
+    parse!{i;
+        let literal_result = null_literal();
+
+        ret {()}
+    }
 }
 
 // == 12.2.6 Object Initializer ==
@@ -1582,7 +1605,7 @@ fn semicolon<I: U8Input>(i: I) -> SimpleResult<I, ()> {
 // ==== sandbox ===>
 // see: https://github.com/m4rw3r/chomp/issues/60
 
-type ESParseResult<I, T> = ParseResult<I, T, ParseError>;
+// type ESParseResult<I, T> = ParseResult<I, T, ParseError>;
 
 // fn some_parser<I: U8Input>(i: InputPosition<I, CurrentPosition>)
 //     -> ESParseResult<InputPosition<I, CurrentPosition>, ()> {
