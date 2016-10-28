@@ -958,11 +958,12 @@ fn reserved_word_test() {
 // http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-lexical-grammar-literals
 
 // == 11.8.1 Null Literals ==
+//
 // http://www.ecma-international.org/ecma-262/7.0/#sec-null-literals
-// http://www.ecma-international.org/ecma-262/7.0/#prod-NullLiteral
 
 struct Null;
 
+// http://www.ecma-international.org/ecma-262/7.0/#prod-NullLiteral
 #[inline]
 fn null_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Null> {
     on_error(
