@@ -1018,6 +1018,62 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
 }
 
 // == 11.8.3 Numeric Literals ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-literals-numeric-literals
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-HexDigits
+fn hex_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, String> {
+    on_error(
+        i,
+        |i| {
+            many1(i, hex_digit)
+                .bind::<_, _, ChompError<u8>>(|i, buf: Vec<u8>| {
+                    let foo: String = String::from_utf8_lossy(&buf).into_owned();
+                    i.ret(foo)
+                })
+        },
+        |_, i| {
+            let loc = i.position();
+            ParseError::Expected(loc, "Expected hex digit.".to_string())
+        }
+    )
+}
+
+
+#[test]
+fn hex_digits_test() {
+
+    let i = InputPosition::new(&b"e"[..], CurrentPosition::new());
+    match hex_digits(i).into_inner().1 {
+        Ok(result) => {
+            assert_eq!(&result, "e");
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    let i = InputPosition::new(&b"ad"[..], CurrentPosition::new());
+    match hex_digits(i).into_inner().1 {
+        Ok(result) => {
+            assert_eq!(&result, "ad");
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    let i = InputPosition::new(&b"gad"[..], CurrentPosition::new());
+    match hex_digits(i).into_inner().1 {
+        Ok(_) => {
+            assert!(false);
+        }
+        Err(_) => {
+            assert!(true);
+        }
+    }
+
+}
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexDigit
 #[inline]
@@ -1031,56 +1087,6 @@ fn hex_digit<I: U8Input>(i: I) -> SimpleResult<I, u8> {
     }
 
     satisfy(i, is_hex_digit)
-}
-
-// http://www.ecma-international.org/ecma-262/7.0/#prod-HexDigits
-fn hex_digits<I: U8Input>(i: I) -> SimpleResult<I, i32> {
-    or(i,
-        |i| parse!{i;
-
-            let digit_1 = hex_digit();
-            let digit_2 = hex_digit();
-
-            ret {
-                let mut result = String::with_capacity(2);
-                result.push(digit_1 as char);
-                result.push(digit_2 as char);
-                i32::from_str_radix(&result, 16).unwrap()
-            }
-        },
-        |i| parse!{i;
-
-            let digit_1 = hex_digit();
-
-            ret {
-                let mut result = String::with_capacity(1);
-                result.push(digit_1 as char);
-                i32::from_str_radix(&result, 16).unwrap()
-            }
-        }
-    )
-}
-
-#[test]
-fn hex_digits_test() {
-
-    match parse_only(hex_digits, b"ad") {
-        Ok(result) => {
-            assert_eq!(result, 173);
-        }
-        Err(_) => {
-            assert!(false);
-        }
-    }
-
-    match parse_only(hex_digits, b"e") {
-        Ok(result) => {
-            assert_eq!(result, 14);
-        }
-        Err(_) => {
-            assert!(false);
-        }
-    }
 }
 
 // == 11.8.4 String Literals ==
