@@ -21,6 +21,7 @@ use chomp::parsers::Error as ChompError;
 use chomp::primitives::Primitives;
 use chomp::prelude::{Either};
 use chomp::types::numbering::{InputPosition, LineNumber, Numbering};
+use chomp::primitives::IntoInner;
 
 /*
 
@@ -40,6 +41,22 @@ Bookmark:
  */
 
 // == helpers ==
+
+// like ParseResult::map_err, but this higher-order helper passes &Input to
+// error mapping/transform function
+#[inline]
+fn on_error<I: Input, T, E, F, V, G>(i: I, f: F, g: G) -> ParseResult<I, T, V>
+    where F: FnOnce(I) -> ParseResult<I, T, E>,
+          G: FnOnce(E, &I) -> V {
+
+    match f(i).into_inner() {
+        (i, Ok(t))  => i.ret(t),
+        (i, Err(e)) => {
+            let err_val = g(e, &i);
+            i.err(err_val)
+        }
+    }
+}
 
 #[inline]
 fn string_to_unicode_char(s: &str) -> Option<char> {
