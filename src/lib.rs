@@ -976,6 +976,34 @@ fn null_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Null> {
     )
 }
 
+// == 11.8.2 Boolean Literals ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-boolean-literals
+
+enum Bool {
+    True,
+    False
+}
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BooleanLiteral
+#[inline]
+fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
+    on_error(
+        i,
+        |i| parse!{i;
+
+            let result = string(b"true").map(|_| Bool::True) <|>
+            string(b"false").map(|_| Bool::False);
+
+            ret result
+        },
+        |_err, i| {
+            let loc = i.position();
+            ParseError::Expected(loc, "Expected boolean literal.".to_string())
+        }
+    )
+}
+
 // == 11.8.3 Numeric Literals ==
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexDigit
