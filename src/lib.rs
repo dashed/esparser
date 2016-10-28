@@ -714,7 +714,7 @@ fn unicode_id_start_test() {
         }
     }
 
-    let fails = vec!["1", " ", "\t", "\n", "\r", ";", "?", "_"];
+    let fails = vec!["1", " ", "\t", "\n", "\r", ";", "?", "$", "_"];
 
     for input in fails {
         match parse_only(unicode_id_start, input.as_bytes()) {
@@ -758,7 +758,7 @@ fn unicode_id_continue_test() {
         }
     }
 
-    let fails: Vec<&str> = vec![" ", "\t", "\n", "\r", ";", "?", "_"];
+    let fails: Vec<&str> = vec![" ", "\t", "\n", "\r", ";", "?", "$", "_"];
 
     for input in fails {
         match parse_only(unicode_id_start, input.as_bytes()) {
