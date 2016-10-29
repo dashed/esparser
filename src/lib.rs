@@ -547,26 +547,33 @@ enum Token {
 // - InputElementTemplateTail
 //
 // as defined in: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-lexical-grammar
-fn common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<Token>> {
-
-    #[inline]
-    fn __common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
-        parse!{i;
+#[inline]
+fn __common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
+    on_error(i,
+        |i| -> ESParseResult<I, Token> {parse!{i;
             let delim: Token =
                 whitespace() <|>
                 line_terminator() <|>
                 comment();
             ret delim
+        }},
+        |_err, i| {
+            let loc = i.position();
+            let reason = "Expected whitespace, line terminator, or comment.".to_string();
+            ParseError::Expected(loc, reason)
         }
-    }
-
-    many(i, __common_delim)
-        // TODO: is this right?
-        .map_err(|_| {
-            unreachable!();
-        })
+    )
 }
 
+#[inline]
+fn common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<Token>> {
+    many(i, __common_delim)
+}
+
+#[inline]
+fn common_delim_required<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<Token>> {
+    many1(i, __common_delim)
+}
 
 // == Parameters ==
 // Based on: http://www.ecma-international.org/ecma-262/7.0/#sec-grammar-notation
@@ -1834,7 +1841,7 @@ fn variable_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
             }
         );
 
-        let delim_1 = common_delim();
+        let delim_1 = common_delim_required();
 
         // TODO: var declaration list
         // sep_by(decimal, |i| token(i, b';'))
