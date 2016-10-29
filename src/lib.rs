@@ -14,7 +14,7 @@ use std::cell::RefCell;
 // == 3rd-party imports ==
 
 use chomp::run_parser;
-use chomp::parsers::{SimpleResult, scan, token, any, take_till, string, satisfy, take_while1};
+use chomp::parsers::{SimpleResult, scan, any, take_till, string, satisfy, take_while1};
 use chomp::combinators::{option, look_ahead, many_till, many1, many, or, either};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
 use chomp::parse_only;
@@ -46,6 +46,8 @@ Bookmark:
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ParseError>;
 
+type U8Error = ChompError<u8>;
+
 // == errors ==
 
 quick_error! {
@@ -55,6 +57,17 @@ quick_error! {
             description(descr)
             display("Line {}, Column {}: {}", loc.line(), loc.col(), descr)
         }
+        Error {
+            // TODO: fix
+            description("Error with no description occured")
+        }
+    }
+}
+
+impl From<chomp::parsers::Error<u8>> for ParseError {
+    fn from(_err: chomp::parsers::Error<u8>) -> Self {
+        // TODO: change this later
+        ParseError::Error
     }
 }
 
@@ -152,9 +165,9 @@ impl Numbering for CurrentPosition {
 // rest(delim, accumulator, reducer) = delim reducer(accumulator) rest(delim, accumulator, reducer) |
 //                                     delim reducer(accumulator)
 #[inline]
-fn parse_list<I: U8Input, D, Delim, A, R, Reduced>(input: I, delimiter: D, reducer: R) -> SimpleResult<I, A>
-    where D: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, Delim>,
-          R: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, Reduced>,
+fn parse_list<I: U8Input, D, Delim, A, R, Reduced, E>(input: I, delimiter: D, reducer: R) -> ParseResult<I, A, E>
+    where D: Fn(I, Rc<RefCell<A>>) -> ParseResult<I, Delim, E>,
+          R: Fn(I, Rc<RefCell<A>>) -> ParseResult<I, Reduced, E>,
           A: Default
 {
 
@@ -163,7 +176,10 @@ fn parse_list<I: U8Input, D, Delim, A, R, Reduced>(input: I, delimiter: D, reduc
 
     reducer(input, initial_accumulator.clone())
         .then(|i| {
-            option(i, |i| parse_list_rest(i, delimiter, initial_accumulator.clone(), reducer), ())
+            either(i,
+                |i| parse_list_rest(i, delimiter, initial_accumulator.clone(), reducer),
+                |i| i.ret(())
+            )
         })
         .map(|_| {
             Rc::try_unwrap(initial_accumulator)
@@ -174,10 +190,10 @@ fn parse_list<I: U8Input, D, Delim, A, R, Reduced>(input: I, delimiter: D, reduc
 }
 
 #[inline]
-fn parse_list_rest<I: U8Input, D, Delim, A, R, Reduced>(input: I, delimiter: D, accumulator: Rc<RefCell<A>>,
-    reducer: R) -> SimpleResult<I, ()>
-    where D: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, Delim>,
-          R: Fn(I, Rc<RefCell<A>>) -> SimpleResult<I, Reduced>,
+fn parse_list_rest<I: U8Input, D, Delim, A, R, Reduced, E>(input: I, delimiter: D, accumulator: Rc<RefCell<A>>,
+    reducer: R) -> ParseResult<I, (), E>
+    where D: Fn(I, Rc<RefCell<A>>) -> ParseResult<I, Delim, E>,
+          R: Fn(I, Rc<RefCell<A>>) -> ParseResult<I, Reduced, E>,
           A: Default
 {
 
@@ -237,7 +253,7 @@ fn parse_list_rest<I: U8Input, D, Delim, A, R, Reduced>(input: I, delimiter: D, 
 fn parse_single_quote_string<I: U8Input>(input: I) -> SimpleResult<I, String> {
     parse!{input;
 
-        token(b'\'');
+        i -> chomp::parsers::token(i, b'\'');
 
         let line: Vec<u8> = parse_list(
             // delimiter
@@ -247,7 +263,7 @@ fn parse_single_quote_string<I: U8Input>(input: I) -> SimpleResult<I, String> {
 
         );
 
-        token(b'\'');
+        i -> chomp::parsers::token(i, b'\'');
 
         ret {
             let line = String::from_utf8_lossy(line.as_slice()).into_owned();
@@ -289,7 +305,7 @@ fn parse_single_quote_string_look_ahead<I: U8Input>(input: I) -> SimpleResult<I,
     parse!{input;
         look_ahead(|i| or(i,
             |i| string(i, br#"\'"#).map(|_| ()),
-            |i| token(i, b'\'').map(|_| ())
+            |i| chomp::parsers::token(i, b'\'').map(|_| ())
         ));
         ret {()}
     }
@@ -357,19 +373,51 @@ fn parse_single_quote_string_test() {
 // == parser helpers ==
 
 #[inline]
-fn string_till<I: U8Input, F>(input: I, mut stop_at: F) -> SimpleResult<I, String>
-    where F: Fn(I) -> SimpleResult<I, ()>  {
+fn token<I: U8Input>(i: ESInput<I>, tok: I::Token) -> ESParseResult<I, I::Token> {
+    on_error(
+        i,
+        |i| chomp::parsers::token(i, tok),
+        |_err, i| {
+            let reason = format!("Expected {}", tok);
+            ParseError::Expected(i.position(), reason)
+        }
+    )
+}
 
-    many_till(input, any, |i| look_ahead(i, &mut stop_at))
-        .bind(|i, line: Vec<u8>| {
-            let string: String = String::from_utf8_lossy(line.as_slice()).into_owned();
-            i.ret(string)
-        })
+#[inline]
+fn string_till<I: U8Input, F>(input: ESInput<I>, mut stop_at: F) -> ESParseResult<I, String>
+    where F: Fn(ESInput<I>) -> ESParseResult<I, ()> {
+
+    #[inline]
+    fn __any<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Token> {
+        on_error(
+            i,
+            any,
+            |_err, i| {
+                ParseError::Error
+            }
+        )
+    }
+
+    on_error(
+        input,
+        |i| -> ESParseResult<I, String> {parse!{i;
+            let line: Vec<u8> = many_till(__any, |i| look_ahead(i, &mut stop_at));
+
+            ret {
+                let string: String = String::from_utf8_lossy(line.as_slice()).into_owned();
+                string
+            }
+        }},
+        |_err, i| {
+            ParseError::Error
+        }
+    )
 
 }
 
 #[inline]
-fn token_as_char<I: U8Input>(i: I, c: u8) -> SimpleResult<I, char> {
+fn token_as_char<I: U8Input>(i: ESInput<I>, c: u8) -> ESParseResult<I, char> {
     token(i, c)
         .bind(|i, c| {
             i.ret(c as char)
@@ -378,13 +426,24 @@ fn token_as_char<I: U8Input>(i: I, c: u8) -> SimpleResult<I, char> {
 
 // TODO: test
 #[inline]
-fn parse_utf8_char_of_bytes<I: U8Input>(i: I, needle: &[u8]) -> SimpleResult<I, char> {
-    look_ahead(i, |i| string(i, needle))
-        .then(parse_utf8_char)
+fn parse_utf8_char_of_bytes<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I, char> {
+    // TODO: refactor this
+    on_error(i,
+        |i| {
+            look_ahead(i, |i| string(i, needle))
+                .map_err(|_| ParseError::Error)
+                .then(parse_utf8_char)
+        },
+        |_err, i| {
+            let loc = i.position();
+            let reason = "Expected utf8 character.".to_string();
+            ParseError::Expected(loc, reason)
+        }
+    )
 }
 
 #[inline]
-fn parse_utf8_char<I: U8Input>(mut i: I) -> SimpleResult<I, char> {
+fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
 
     let mut internal_buf = vec![];
     let mut valid_utf8 = false;
@@ -421,7 +480,9 @@ fn parse_utf8_char<I: U8Input>(mut i: I) -> SimpleResult<I, char> {
         return i.ret(result.chars().next().unwrap());
     }
 
-    return i.err(ChompError::unexpected());
+    let loc = i.position();
+    let reason = "Expected utf8 character.".to_string();
+    return i.err(ParseError::Expected(loc, reason));
 
 }
 
@@ -430,7 +491,8 @@ fn parse_utf8_char_test() {
 
     let sparkle_heart = vec![240, 159, 146, 150];
 
-    match parse_only(parse_utf8_char, &sparkle_heart) {
+    let i = InputPosition::new(sparkle_heart.as_slice(), CurrentPosition::new());
+    match parse_utf8_char(i).into_inner().1 {
         Ok(result) => {
             assert_eq!(result, '\u{1f496}');
         }
@@ -448,7 +510,8 @@ fn parse_utf8_char_test() {
         240, 159, 152, 128
     ];
 
-    match parse_only(parse_utf8_char, &sparkle_heart_and_smile) {
+    let i = InputPosition::new(sparkle_heart_and_smile.as_slice(), CurrentPosition::new());
+    match parse_utf8_char(i).into_inner().1 {
         Ok(result) => {
             assert_eq!(result, '\u{1f496}');
         }
@@ -484,10 +547,10 @@ enum Token {
 // - InputElementTemplateTail
 //
 // as defined in: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-lexical-grammar
-fn common_delim<I: U8Input>(i: I) -> SimpleResult<I, Vec<Token>> {
+fn common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<Token>> {
 
     #[inline]
-    fn __common_delim<I: U8Input>(i: I) -> SimpleResult<I, Token> {
+    fn __common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
         parse!{i;
             let delim: Token =
                 whitespace() <|>
@@ -498,6 +561,10 @@ fn common_delim<I: U8Input>(i: I) -> SimpleResult<I, Vec<Token>> {
     }
 
     many(i, __common_delim)
+        // TODO: is this right?
+        .map_err(|_| {
+            unreachable!();
+        })
 }
 
 
@@ -527,33 +594,43 @@ impl CLike for Parameter {
 // http://www.ecma-international.org/ecma-262/7.0/#sec-white-space
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-WhiteSpace
-fn whitespace<I: U8Input>(i: I) -> SimpleResult<I, Token> {
+fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
 
     #[inline]
-    fn other_whitespace<I: U8Input>(i: I) -> SimpleResult<I, char> {
+    fn other_whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
         parse_utf8_char(i)
             .bind(|i, c: char| {
                 if c.is_whitespace() {
                     i.ret(c)
                 } else {
-                    i.err(ChompError::unexpected())
+                    let loc = i.position();
+                    let reason = "Expected whitespace.".to_string();
+                    i.err(ParseError::Expected(loc, reason))
                 }
             })
     }
 
-    parse!{i;
+    on_error::<ESInput<I>, Token, ParseError, _, ParseError, _>(
+        i,
+        |i| parse!{i;
 
-        let whitespace_char =
-            parse_utf8_char_of_bytes(b"\x0009") <|> // <TAB>; CHARACTER TABULATION
-            parse_utf8_char_of_bytes(b"\x000B") <|> // <VT>; LINE TABULATION
-            parse_utf8_char_of_bytes(b"\x000C") <|> // <FF>; FORM FEED (FF)
-            parse_utf8_char_of_bytes(b"\x0020") <|> // <SP>; SPACE
-            parse_utf8_char_of_bytes(b"\x00A0") <|> // <NBSP>; NO-BREAK SPACE
-            parse_utf8_char_of_bytes(b"\xFEFF") <|> // <ZWNBSP>; ZERO WIDTH NO-BREAK SPACE
-            other_whitespace(); // Any other Unicode "Separator, space" code point
+            let whitespace_char =
+                parse_utf8_char_of_bytes(b"\x0009") <|> // <TAB>; CHARACTER TABULATION
+                parse_utf8_char_of_bytes(b"\x000B") <|> // <VT>; LINE TABULATION
+                parse_utf8_char_of_bytes(b"\x000C") <|> // <FF>; FORM FEED (FF)
+                parse_utf8_char_of_bytes(b"\x0020") <|> // <SP>; SPACE
+                parse_utf8_char_of_bytes(b"\x00A0") <|> // <NBSP>; NO-BREAK SPACE
+                parse_utf8_char_of_bytes(b"\xFEFF") <|> // <ZWNBSP>; ZERO WIDTH NO-BREAK SPACE
+                other_whitespace(); // Any other Unicode "Separator, space" code point
 
-        ret Token::WhiteSpace(whitespace_char)
-    }
+            ret Token::WhiteSpace(whitespace_char)
+        },
+        |_, i| {
+            ParseError::Expected(i.position(), "Expected whitespace.".to_string())
+        }
+    )
+
+
 }
 
 // == 11.3 Line Terminators ==
@@ -561,17 +638,27 @@ fn whitespace<I: U8Input>(i: I) -> SimpleResult<I, Token> {
 // http://www.ecma-international.org/ecma-262/7.0/#sec-line-terminators
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LineTerminator
-fn line_terminator<I: U8Input>(i: I) -> SimpleResult<I, Token> {
-    parse!{i;
+fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
 
-        let line_terminator_char =
-            parse_utf8_char_of_bytes(b"\x000A") <|> // <LF>; LINE FEED (LF)
-            parse_utf8_char_of_bytes(b"\x000D") <|> // <CR>; CARRIAGE RETURN (CR)
-            parse_utf8_char_of_bytes(b"\x2028") <|> // <LS>; LINE SEPARATOR
-            parse_utf8_char_of_bytes(b"\x2029");    // <PS>; PARAGRAPH SEPARATOR
+    on_error::<ESInput<I>, Token, ParseError, _, ParseError, _>(i,
+        |i| parse!{i;
 
-        ret Token::LineTerminator(line_terminator_char)
-    }
+            let line_terminator_char =
+                parse_utf8_char_of_bytes(b"\x000A") <|> // <LF>; LINE FEED (LF)
+                parse_utf8_char_of_bytes(b"\x000D") <|> // <CR>; CARRIAGE RETURN (CR)
+                parse_utf8_char_of_bytes(b"\x2028") <|> // <LS>; LINE SEPARATOR
+                parse_utf8_char_of_bytes(b"\x2029");    // <PS>; PARAGRAPH SEPARATOR
+
+            ret Token::LineTerminator(line_terminator_char)
+        },
+        |_err, i| {
+            let loc = i.position();
+            let reason = "Expected utf8 character.".to_string();
+            ParseError::Expected(loc, reason)
+        }
+    )
+
+
 }
 
 // == 11.4 Comments ==
@@ -579,41 +666,61 @@ fn line_terminator<I: U8Input>(i: I) -> SimpleResult<I, Token> {
 // http://www.ecma-international.org/ecma-262/7.0/#sec-comments
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Comment
-fn comment<I: U8Input>(i: I) -> SimpleResult<I, Token> {
+fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
 
     // http://www.ecma-international.org/ecma-262/7.0/#prod-MultiLineComment
     #[inline]
-    fn multiline_comment<I: U8Input>(i: I) -> SimpleResult<I, Comment> {
+    fn multiline_comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Comment> {
 
         const END: &'static [u8; 2] = b"*/";
 
         #[inline]
-        fn stop_at<I: U8Input>(i: I) -> SimpleResult<I, ()> {
-            string(i, END).then(|i| i.ret(()))
+        fn stop_at<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+            on_error(
+                i,
+                |i| string(i, END).map(|_| ()),
+                |_err, i| {
+                    let loc = i.position();
+                    ParseError::Expected(loc, "Expected */.".to_string())
+                }
+            )
         }
 
         // TODO: verify production rule satisfaction
         // http://www.ecma-international.org/ecma-262/7.0/#prod-MultiLineCommentChars
 
         parse!{i;
-            string(b"/*");
+            on_error(
+                |i| string(i, b"/*"),
+                |_err, i| {
+                    let loc = i.position();
+                    ParseError::Expected(loc, "Expected /* for multi-line comment.".to_string())
+                }
+            );
             let contents = string_till(stop_at);
-            string(END);
+            stop_at();
             ret Comment::MultiLineComment(contents)
         }
     }
 
     // http://www.ecma-international.org/ecma-262/7.0/#prod-SingleLineComment
     #[inline]
-    fn singleline_comment<I: U8Input>(i: I) -> SimpleResult<I, Comment> {
+    fn singleline_comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Comment> {
 
         #[inline]
-        fn stop_at<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+        fn stop_at<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
             line_terminator(i).then(|i| i.ret(()))
         }
 
         parse!{i;
-            string(b"//");
+            on_error(
+                |i| string(i, b"//"),
+                |_err, i| {
+                    let loc = i.position();
+                    ParseError::Expected(loc, "Expected // for single-line comment.".to_string())
+                }
+            );
+            // let contents = (i -> string_till(i, stop_at).map_err(|_| ParseError::Error));
             let contents = string_till(stop_at);
             // NOTE: buffer contents matching line_terminator is not consumed
             ret Comment::SingleLineComment(contents)
@@ -635,28 +742,40 @@ struct IdentifierName(String);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierName
-fn identifier_name<I: U8Input>(i: I) -> SimpleResult<I, IdentifierName> {
-    parse!{i;
+fn identifier_name<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierName> {
 
-        let start: Vec<char> = many1(identifier_start);
-        let rest: Vec<char> = many(identifier_part);
+    on_error(
+        i,
+        |i| -> ESParseResult<I, IdentifierName> {
+            parse!{i;
 
-        ret {
-            // TODO: room for optimization
-            let mut start: String = start.into_iter().collect();
-            let rest: String = rest.into_iter().collect();
-            start.push_str(&rest);
-            IdentifierName(start)
+                let start: Vec<char> = many1(identifier_start);
+                let rest: Vec<char> = many(identifier_part);
+
+                ret {
+                    // TODO: room for optimization
+                    let mut start: String = start.into_iter().collect();
+                    let rest: String = rest.into_iter().collect();
+                    start.push_str(&rest);
+                    IdentifierName(start)
+                }
+            }
+        },
+        |_err, i| {
+            let reason = format!("Invalid identifier.");
+            ParseError::Expected(i.position(), reason)
         }
-    }
+    )
+
+
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierStart
-fn identifier_start<I: U8Input>(i: I) -> SimpleResult<I, char> {
+fn identifier_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
 
     #[inline]
-    fn identifier_start_unicode<I: U8Input>(i: I) -> SimpleResult<I, char> {
+    fn identifier_start_unicode<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
         escaped_unicode_escape_seq(i)
     }
 
@@ -673,10 +792,10 @@ fn identifier_start<I: U8Input>(i: I) -> SimpleResult<I, char> {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierPart
-fn identifier_part<I: U8Input>(i: I) -> SimpleResult<I, char> {
+fn identifier_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
 
     #[inline]
-    fn identifier_part_unicode<I: U8Input>(i: I) -> SimpleResult<I, char> {
+    fn identifier_part_unicode<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
         token(i, b'\\')
             .then(unicode_escape_seq)
     }
@@ -695,13 +814,16 @@ fn identifier_part<I: U8Input>(i: I) -> SimpleResult<I, char> {
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDStart
-fn unicode_id_start<I: U8Input>(i: I) -> SimpleResult<I, char> {
+fn unicode_id_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
     parse_utf8_char(i)
         .bind(|i, c: char| {
             if c.is_xid_start() {
                 i.ret(c)
             } else {
-                i.err(ChompError::unexpected())
+                // TODO: better error
+                let loc = i.position();
+                let reason = format!("Invalid utf8 character.");
+                i.err(ParseError::Expected(loc, reason))
             }
         })
 }
@@ -709,7 +831,8 @@ fn unicode_id_start<I: U8Input>(i: I) -> SimpleResult<I, char> {
 #[test]
 fn unicode_id_start_test() {
 
-    match parse_only(unicode_id_start, b"a") {
+    let i = InputPosition::new("a".as_bytes(), CurrentPosition::new());
+    match unicode_id_start(i).into_inner().1 {
         Ok(result) => {
             assert_eq!(result, 'a');
         }
@@ -721,7 +844,8 @@ fn unicode_id_start_test() {
     let fails = vec!["1", " ", "\t", "\n", "\r", ";", "?", "$", "_"];
 
     for input in fails {
-        match parse_only(unicode_id_start, input.as_bytes()) {
+        let i = InputPosition::new(input.as_bytes(), CurrentPosition::new());
+        match unicode_id_start(i).into_inner().1 {
             Ok(_) => {
                 assert!(false);
             }
@@ -733,14 +857,17 @@ fn unicode_id_start_test() {
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDContinue
-fn unicode_id_continue<I: U8Input>(i: I) -> SimpleResult<I, char> {
+fn unicode_id_continue<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
     parse_utf8_char(i)
         .bind(|i, c: char| {
 
             if c.is_xid_continue() {
                 i.ret(c)
             } else {
-                i.err(ChompError::unexpected())
+                // TODO: better error
+                let loc = i.position();
+                let reason = format!("Invalid utf8 character: `{}`", c);
+                i.err(ParseError::Expected(loc, reason))
             }
 
         })
@@ -749,10 +876,11 @@ fn unicode_id_continue<I: U8Input>(i: I) -> SimpleResult<I, char> {
 #[test]
 fn unicode_id_continue_test() {
 
-    let success: Vec<&str> = vec!["a", "1"];
+    let success: Vec<&str> = vec!["a", "1", "_"];
 
     for input in success {
-        match parse_only(unicode_id_continue, input.as_bytes()) {
+        let i = InputPosition::new(input.as_bytes(), CurrentPosition::new());
+        match unicode_id_continue(i).into_inner().1 {
             Ok(result) => {
                 assert_eq!(result, input.chars().next().unwrap());
             }
@@ -762,14 +890,16 @@ fn unicode_id_continue_test() {
         }
     }
 
-    let fails: Vec<&str> = vec![" ", "\t", "\n", "\r", ";", "?", "$", "_"];
+    let fails: Vec<&str> = vec![" ", "\t", "\n", "\r", ";", "?", "$"];
 
     for input in fails {
-        match parse_only(unicode_id_start, input.as_bytes()) {
+        let i = InputPosition::new(input.as_bytes(), CurrentPosition::new());
+        match unicode_id_continue(i).into_inner().1 {
             Ok(_) => {
+                println!("{:?}", input);
                 assert!(false);
             }
-            Err(_) => {
+            Err(err) => {
                 assert!(true);
             }
         }
@@ -781,10 +911,10 @@ fn unicode_id_continue_test() {
 // TODO: enum Keyword type
 
 // http://www.ecma-international.org/ecma-262/7.0/#sec-reserved-words
-fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
+fn reserved_word<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
 
     #[inline]
-    fn string_not_utf8<I: U8Input>(i: I, needle: &[u8]) -> SimpleResult<I, I::Buffer> {
+    fn string_not_utf8<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I, I::Buffer> {
 
         let mark = i.mark();
         let mut current_needle = needle;
@@ -807,7 +937,7 @@ fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
                     match result {
                         Either::Left(c) => {
                             // TODO: Reserved keyword must not contain escaped characters.
-                            i.err(ChompError::unexpected())
+                            i.err(ParseError::Error)
                         },
                         Either::Right(c) => {
 
@@ -819,7 +949,7 @@ fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
                                 current_needle = current_needle.split_at(bytes.len()).1;
                                 i.ret(Either::Right(c))
                             } else {
-                                i.err(ChompError::unexpected())
+                                i.err(ParseError::Error)
                             }
                         }
                     }
@@ -850,10 +980,21 @@ fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
         }
 
         parse_result
-        .then(|mut i| {
-            let res = (&mut i).consume_from(mark);
-            i.ret(res)
+        .then(|i| {
+            on_error(
+                i,
+                |mut i| -> ESParseResult<I, I::Buffer> {
+                    let res = (&mut i).consume_from(mark);
+                    i.ret(res)
+                },
+                |_, i| {
+                    let reason = format!("Expected keyword {}.", std::str::from_utf8(needle).unwrap());
+                    ParseError::Expected(i.position(), reason)
+                }
+            )
         })
+
+
     }
 
     parse!{i;
@@ -921,7 +1062,8 @@ fn reserved_word<I: U8Input>(i: I) -> SimpleResult<I, I::Buffer> {
 #[test]
 fn reserved_word_test() {
 
-    match parse_only(reserved_word, b"var") {
+    let i = InputPosition::new("var".as_bytes(), CurrentPosition::new());
+    match reserved_word(i).into_inner().1 {
         Ok(_) => {
             assert!(true);
         }
@@ -941,7 +1083,8 @@ fn reserved_word_test() {
     ];
 
     for fail in fails {
-        match parse_only(reserved_word, fail.as_bytes()) {
+        let i = InputPosition::new(fail.as_bytes(), CurrentPosition::new());
+        match reserved_word(i).into_inner().1 {
             Ok(_) => {
                 assert!(false);
             }
@@ -997,7 +1140,7 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
                 // right
                 |i| string(i, b"false")
             )
-            .bind::<_, _, ChompError<u8>>(|i, result| {
+            .bind::<_, _, U8Error>(|i, result| {
                 match result {
                     Either::Left(_left) => {
                         let _left: I::Buffer = _left;
@@ -1021,15 +1164,47 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-literals-numeric-literals
 
+
+// enum NumericLiteral {
+//     Decimal,
+//     BinaryInteger,
+//     OctalInteger,
+//     HexInteger
+// }
+
+// // http://www.ecma-international.org/ecma-262/7.0/#prod-NumericLiteral
+// fn numeric_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Numeric> {
+
+// }
+
+// // http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalLiteral
+// fn decimal_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Numeric> {
+
+// }
+
+// // http://www.ecma-international.org/ecma-262/7.0/#prod-HexIntegerLiteral
+// fn hex_integer_literal<I: U8Input>(i: I) -> SimpleResult<I, i32> {
+
+// }
+
+struct HexDigits(String);
+
+impl MathematicalValue for HexDigits {
+    fn mathematical_value(&self) -> i64 {
+        i64::from_str_radix(&self.0, 16)
+            .unwrap()
+    }
+}
+
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexDigits
-fn hex_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, String> {
+fn hex_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexDigits> {
     on_error(
         i,
-        |i| {
+        |i| -> ESParseResult<I, HexDigits> {
             many1(i, hex_digit)
-                .bind::<_, _, ChompError<u8>>(|i, buf: Vec<u8>| {
-                    let foo: String = String::from_utf8_lossy(&buf).into_owned();
-                    i.ret(foo)
+                .bind(|i, buf: Vec<u8>| {
+                    let contents = String::from_utf8_lossy(&buf).into_owned();
+                    i.ret(HexDigits(contents))
                 })
         },
         |_, i| {
@@ -1046,6 +1221,7 @@ fn hex_digits_test() {
     let i = InputPosition::new(&b"e"[..], CurrentPosition::new());
     match hex_digits(i).into_inner().1 {
         Ok(result) => {
+            let HexDigits(result) = result;
             assert_eq!(&result, "e");
         }
         Err(_) => {
@@ -1056,6 +1232,7 @@ fn hex_digits_test() {
     let i = InputPosition::new(&b"ad"[..], CurrentPosition::new());
     match hex_digits(i).into_inner().1 {
         Ok(result) => {
+            let HexDigits(result) = result;
             assert_eq!(&result, "ad");
         }
         Err(_) => {
@@ -1077,7 +1254,7 @@ fn hex_digits_test() {
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexDigit
 #[inline]
-fn hex_digit<I: U8Input>(i: I) -> SimpleResult<I, u8> {
+fn hex_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
 
     #[inline]
     fn is_hex_digit(c: u8) -> bool {
@@ -1086,44 +1263,80 @@ fn hex_digit<I: U8Input>(i: I) -> SimpleResult<I, u8> {
         (b'A' <= c && c <= b'F')
     }
 
-    satisfy(i, is_hex_digit)
+    on_error(
+        i,
+        |i| satisfy(i, is_hex_digit),
+        |_err, i| {
+            let loc = i.position();
+            ParseError::Expected(loc, "Expected hex digit (0 to F).".to_string())
+        }
+    )
+
+}
+
+// == 11.8.3.1 Static Semantics: MV ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-static-semantics-mv
+
+trait MathematicalValue {
+    fn mathematical_value(&self) -> i64;
 }
 
 // == 11.8.4 String Literals ==
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeEscapeSequence
 // TODO: needs test
-fn unicode_escape_seq<I: U8Input>(i: I) -> SimpleResult<I, char> {
-    or(i,
-        |i| parse!{i;
+fn unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+    either(i,
+        |i| -> ESParseResult<I, HexDigits> {parse!{i;
             // e.g. u{9A9A}
             token(b'u');
             token(b'{');
-            let sequence = hex_4_digits();
+            let sequence = hex_digits();
             token(b'}');
-            ret {
-                string_to_unicode_char(&sequence).unwrap()
-            }
-        },
-        |i| parse!{i;
+            ret sequence
+        }},
+        |i| -> ESParseResult<I, char> {parse!{i;
             // e.g. u9A9A
             token(b'u');
             let sequence = hex_4_digits();
             ret {
                 string_to_unicode_char(&sequence).unwrap()
             }
-        }
+        }}
     )
+    .bind(|i, result| {
+        match result {
+            Either::Left(sequence) => {
+                // == 11.8.4.1 Static Semantics: Early Errors ==
+                //
+                // http://www.ecma-international.org/ecma-262/7.0/#sec-string-literals-static-semantics-early-errors
+                if sequence.mathematical_value() > 1114111 /* 10ffff */ {
+
+                    let err_val = ParseError::Expected(i.position(),
+                        "Invalid unicode escape sequence. Expect to be less or equal to 10ffff.".to_string());
+
+                    i.err(err_val)
+                } else {
+                    let HexDigits(sequence) = sequence;
+                    let c = string_to_unicode_char(&sequence).unwrap();
+                    i.ret(c)
+                }
+            },
+            Either::Right(c) => {
+                i.ret(c)
+            }
+        }
+    })
 }
 
-
-fn escaped_unicode_escape_seq<I: U8Input>(i: I) -> SimpleResult<I, char> {
+fn escaped_unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
     token(i, b'\\')
         .then(unicode_escape_seq)
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Hex4Digits
-fn hex_4_digits<I: U8Input>(i: I) -> SimpleResult<I, String> {
+fn hex_4_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, String> {
     parse!{i;
 
         let digit_1 = hex_digit();
@@ -1144,7 +1357,8 @@ fn hex_4_digits<I: U8Input>(i: I) -> SimpleResult<I, String> {
 
 #[test]
 fn hex_4_digits_test() {
-    match parse_only(hex_4_digits, b"adad") {
+    let i = InputPosition::new(&b"adad"[..], CurrentPosition::new());
+    match hex_4_digits(i).into_inner().1 {
         Ok(result) => {
             assert_eq!(result, "adad".to_string());
         }
@@ -1163,18 +1377,21 @@ enum IdentifierReference {
     Yield
 }
 
+#[inline]
+fn yield_keyword<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
+    on_error(
+        i,
+        |i| string(i, b"yield"),
+        |_err, i| {
+            let reason = format!("Expected yield keyword.");
+            ParseError::Expected(i.position(), reason)
+        }
+    )
+}
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierReference
-fn identifier_reference<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
-
-    #[inline]
-    fn __binding<I: U8Input>(i: I) -> SimpleResult<I, ()> {
-        parse!{i;
-            identifier();
-            // TODO: token
-            ret {()}
-        }
-    }
+fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
 
     if !params.contains(&Parameter::Yield) {
 
@@ -1182,13 +1399,13 @@ fn identifier_reference<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> Simple
             // left
             |i| parse!{i;
 
-                string(b"yield");
+                yield_keyword();
 
                 // TODO: token
                 ret {()}
             },
             // right
-            __binding
+            identifier
         )
         .bind(|i, result| {
             match result {
@@ -1210,22 +1427,13 @@ fn identifier_reference<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> Simple
         panic!("misuse of identifier_reference");
     }
 
-    __binding(i)
+    identifier(i).map(|_| ())
 
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingIdentifier
-fn binding_identifier<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
-
-    #[inline]
-    fn __binding<I: U8Input>(i: I) -> SimpleResult<I, ()> {
-        parse!{i;
-            identifier();
-            // TODO: token
-            ret {()}
-        }
-    }
+fn binding_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
 
     if !params.contains(&Parameter::Yield) {
 
@@ -1233,13 +1441,13 @@ fn binding_identifier<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleRe
             // left
             |i| parse!{i;
 
-                string(b"yield");
+                yield_keyword();
 
                 // TODO: token
                 ret {()}
             },
             // right
-            __binding
+            identifier
         )
         .bind(|i, result| {
             match result {
@@ -1261,7 +1469,7 @@ fn binding_identifier<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleRe
         panic!("misuse of binding_identifier");
     }
 
-    __binding(i)
+    identifier(i).map(|_| ())
 
 }
 
@@ -1269,7 +1477,7 @@ struct Identifier(IdentifierName);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Identifier
-fn identifier<I: U8Input>(i: I) -> SimpleResult<I, Identifier> {
+fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
     either(i,
         |i| reserved_word(i),  // left
         |i| identifier_name(i) // right
@@ -1277,7 +1485,9 @@ fn identifier<I: U8Input>(i: I) -> SimpleResult<I, Identifier> {
     .bind(|i, result| {
         match result {
             Either::Left(_) => {
-                i.err(ChompError::unexpected())
+                let loc = i.position();
+                let reason = format!("Reserved keyword may not be used as an identifier.");
+                i.err(ParseError::Expected(loc, reason))
             },
             Either::Right(name) => {
                 i.ret(Identifier(name))
@@ -1317,6 +1527,7 @@ fn primary_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleRe
 fn literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
     parse!{i;
         let literal_result = null_literal();
+        let _l = boolean_literal();
 
         ret {()}
     }
@@ -1326,7 +1537,7 @@ fn literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseRes
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Initializer
-fn initializer<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
+fn initializer<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
 
     // validation
     if !(params.is_empty() ||
@@ -1334,7 +1545,6 @@ fn initializer<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I,
         params.contains(&Parameter::Yield)) {
         panic!("misuse of initializer");
     }
-
 
     parse!{i;
 
@@ -1354,7 +1564,7 @@ fn initializer<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I,
 // http://www.ecma-international.org/ecma-262/7.0/#sec-conditional-operator
 
 // TODO: test
-fn conditional_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
+fn conditional_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
 
     // validation
     if !(params.is_empty() ||
@@ -1365,7 +1575,7 @@ fn conditional_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> Simp
 
     either(i,
         // left
-        |i| parse!{i;
+        |i| -> ESParseResult<I, ()> {parse!{i;
 
             logical_or_expression(&params);
 
@@ -1388,15 +1598,15 @@ fn conditional_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> Simp
             // TODO: token
             ret {()}
 
-        },
+        }},
         // right
-        |i| parse!{i;
+        |i| -> ESParseResult<I, ()> {parse!{i;
 
             logical_or_expression(&params);
 
             // TODO: token
             ret {()}
-        }
+        }}
     )
         .bind(|i, result| {
             match result {
@@ -1418,7 +1628,7 @@ fn conditional_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> Simp
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalANDExpression
-fn logical_and_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
+fn logical_and_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
 
     // validation
     if !(params.is_empty() ||
@@ -1511,7 +1721,8 @@ impl LogicOrExpression {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalORExpression
-fn logical_or_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, LogicOrExpression> {
+fn logical_or_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
+    -> ESParseResult<I, LogicOrExpression> {
 
     // validation
     if !(params.is_empty() ||
@@ -1523,10 +1734,16 @@ fn logical_or_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> Simpl
     type Accumulator = Rc<RefCell<LogicOrExpression>>;
 
     #[inline]
-    fn delimiter<I: U8Input>(i: I, accumulator: Accumulator) -> SimpleResult<I, ()> {
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
         parse!{i;
             let delim_1 = common_delim();
-            let _or = string(b"||");
+            let _or = on_error(
+                |i| string(i, b"||"),
+                |_err, i| {
+                    let loc = i.position();
+                    ParseError::Expected(loc, "Expected || operator.".to_string())
+                }
+            );
             let delim_2 = common_delim();
             ret {
                 accumulator.borrow_mut().add_delim(delim_1, delim_2);
@@ -1536,7 +1753,7 @@ fn logical_or_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> Simpl
     }
 
     #[inline]
-    let reducer = |i: I, accumulator: Accumulator| -> SimpleResult<I, ()> {
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
         parse!{i;
             let rhs = logical_and_expression(params);
             ret {
@@ -1561,8 +1778,9 @@ fn logical_or_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> Simpl
 #[test]
 fn logical_or_expression_test() {
 
-    // TODO: fix
-    match parse_only(|i| logical_or_expression(i, &EnumSet::new()), b"a||a ||    a") {
+    // TODO: fix with actual test case
+    let i = InputPosition::new(&b"a||a ||    a"[..], CurrentPosition::new());
+    match logical_or_expression(i, &EnumSet::new()).into_inner().1 {
         Ok(result) => {
             println!("{:?}", result);
             assert!(true);
@@ -1579,7 +1797,7 @@ fn logical_or_expression_test() {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-AssignmentExpression
-fn assignment_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, ()> {
+fn assignment_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
 
     // validation
     if !(params.is_empty() ||
@@ -1605,10 +1823,16 @@ fn assignment_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> Simpl
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableStatement
-fn variable_statement<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+fn variable_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
     parse!{i;
 
-        let _var = string(b"var");
+        let _var = on_error(
+            |i| string(i, b"var"),
+            |_err, i| {
+                let loc = i.position();
+                ParseError::Expected(loc, "Expected var keyword.".to_string())
+            }
+        );
 
         let delim_1 = common_delim();
 
@@ -1642,7 +1866,7 @@ fn variable_declaration<I: U8Input>(i: I, maybe_params: &Option<Parameter>) -> S
 
 // TODO: test for ASI behaviour
 #[inline]
-fn semicolon<I: U8Input>(i: I) -> SimpleResult<I, ()> {
+fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
     parse!{i;
         // TODO: ASI rule
         token(b';');
