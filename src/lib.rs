@@ -1505,7 +1505,7 @@ enum PrimaryExpression {
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
-fn primary_expression<I: U8Input>(i: I, params: &EnumSet<Parameter>) -> SimpleResult<I, PrimaryExpression> {
+fn primary_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, PrimaryExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -1847,7 +1847,7 @@ fn variable_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableDeclaration
-fn variable_declaration<I: U8Input>(i: I, maybe_params: &Option<Parameter>) -> SimpleResult<I, ()> {
+fn variable_declaration<I: U8Input>(i: ESInput<I>, maybe_params: &Option<Parameter>) -> ESParseResult<I, ()> {
     match *maybe_params {
         None => {
             parse!{i;
