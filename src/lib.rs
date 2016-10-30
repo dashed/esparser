@@ -64,12 +64,13 @@ quick_error! {
     }
 }
 
-impl From<chomp::parsers::Error<u8>> for ParseError {
-    fn from(_err: chomp::parsers::Error<u8>) -> Self {
-        // TODO: change this later
-        ParseError::Error
-    }
-}
+// TODO: remove
+// impl From<chomp::parsers::Error<u8>> for ParseError {
+//     fn from(_err: chomp::parsers::Error<u8>) -> Self {
+//         // TODO: change this later
+//         ParseError::Error
+//     }
+// }
 
 // == helpers ==
 
