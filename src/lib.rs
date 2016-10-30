@@ -1655,7 +1655,9 @@ fn unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
                 // == 11.8.4.1 Static Semantics: Early Errors ==
                 //
                 // http://www.ecma-international.org/ecma-262/7.0/#sec-string-literals-static-semantics-early-errors
-                if sequence.0.len() > 6 ||
+                if (
+                        sequence.0.chars().next().unwrap() != '0' &&
+                        sequence.0.len() > 6) ||
                     sequence.mathematical_value() > 1114111 /* 10ffff */ {
 
                     let err_val = ParseError::Expected(i.position(),
