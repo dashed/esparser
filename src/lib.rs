@@ -1172,21 +1172,36 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-literals-numeric-literals
 
+enum NumericLiteral {
+    Decimal(DecimalLiteral),
+    BinaryInteger(BinaryDigits),
+    OctalInteger(OctalDigits),
+    HexInteger(HexDigits)
+}
 
-// enum NumericLiteral {
-//     Decimal,
-//     BinaryInteger,
-//     OctalInteger,
-//     HexInteger
-// }
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-NumericLiteral
+fn numeric_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NumericLiteral> {
+    parse!{i;
 
-// // http://www.ecma-international.org/ecma-262/7.0/#prod-NumericLiteral
-// fn numeric_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Numeric> {
+        let result =
+            (i -> decimal_literal(i).map(|x| NumericLiteral::Decimal(x))) <|>
+            (i -> binary_integer_literal(i).map(|x| {
+                let BinaryIntegerLiteral(x) = x;
+                NumericLiteral::BinaryInteger(x)
+            })) <|>
+            (i -> octal_integer_literal(i).map(|x| {
+                let OctalIntegerLiteral(x) = x;
+                NumericLiteral::OctalInteger(x)
+            })) <|>
+            (i -> hex_integer_literal(i).map(|x| {
+                let HexIntegerLiteral(x) = x;
+                NumericLiteral::HexInteger(x)
+            }));
 
-// }
-
-
-// ===>
+        ret result
+    }
+}
 
 enum DecimalLiteral {
     WholeFractionDecimal(DecimalIntegerLiteral, /* . */ Option<DecimalDigits>, Option<ExponentPart>),
