@@ -1230,7 +1230,7 @@ fn octal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalDigits> {
         },
         |_, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected octal digit.".to_string())
+            ParseError::Expected(loc, "Expected octal digit (0 to 7).".to_string())
         }
     )
 }
