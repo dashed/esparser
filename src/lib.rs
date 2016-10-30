@@ -1193,6 +1193,69 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
 
 // ===>
 
+struct BinaryIntegerLiteral(BinaryDigits);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BinaryIntegerLiteral
+fn binary_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryIntegerLiteral> {
+    parse!{i;
+        token(b'0');
+        token(b'b') <|> token(b'B');
+        let result = binary_digits();
+        ret OctalIntegerLiteral(result)
+    }
+}
+
+struct BinaryDigits(String);
+
+impl MathematicalValue for BinaryDigits {
+    // TODO: test
+    fn mathematical_value(&self) -> i64 {
+        i64::from_str_radix(&self.0, 2)
+            .unwrap()
+    }
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BinaryDigits
+fn binary_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryDigits> {
+    on_error(
+        i,
+        |i| -> ESParseResult<I, BinaryDigits> {
+            many1(i, binary_digit)
+                .bind(|i, buf: Vec<u8>| {
+                    let contents = String::from_utf8_lossy(&buf).into_owned();
+                    i.ret(BinaryDigits(contents))
+                })
+        },
+        |_, i| {
+            let loc = i.position();
+            ParseError::Expected(loc, "Expected binary digit (0 or 1).".to_string())
+        }
+    )
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BinaryDigit
+#[inline]
+fn binary_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
+
+    #[inline]
+    fn is_binary_digit(c: u8) -> bool {
+        (b'0' <= c && c <= b'1')
+    }
+
+    on_error(
+        i,
+        |i| satisfy(i, is_binary_digit),
+        |_err, i| {
+            let loc = i.position();
+            ParseError::Expected(loc, "Expected binary digit (0 or 1).".to_string())
+        }
+    )
+
+}
+
 struct OctalIntegerLiteral(OctalDigits);
 
 // TODO: test
