@@ -1185,13 +1185,46 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
 
 // }
 
-// http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalLiteral
-// fn decimal_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
-
-// }
-
 
 // ===>
+
+enum DecimalLiteral {
+    WholeFractionDecimal(DecimalIntegerLiteral, /* . */ Option<DecimalDigits>, Option<ExponentPart>),
+    FractionDecimal(/* . */ DecimalDigits, Option<ExponentPart>),
+    WholeDecimal(DecimalIntegerLiteral, Option<ExponentPart>)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalLiteral
+fn decimal_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalLiteral> {
+    or(i,
+        |i| parse!{i;
+
+            let whole = decimal_integer_literal();
+            token(b'.');
+            let fraction = option(|i| decimal_digits(i).map(|c| Some(c)), None);
+            let exp_part = option(|i| exponent_part(i).map(|c| Some(c)), None);
+
+            ret DecimalLiteral::WholeFractionDecimal(whole, fraction, exp_part)
+        },
+        |i| or(i,
+            |i| parse!{i;
+
+                token(b'.');
+                let fraction = decimal_digits();
+                let exp_part = option(|i| exponent_part(i).map(|c| Some(c)), None);
+
+                ret DecimalLiteral::FractionDecimal(fraction, exp_part)
+            },
+            |i| parse!{i;
+
+                let whole = decimal_integer_literal();
+                let exp_part = option(|i| exponent_part(i).map(|c| Some(c)), None);
+
+                ret DecimalLiteral::WholeDecimal(whole, exp_part)
+            }
+        ))
+}
 
 struct DecimalIntegerLiteral(DecimalDigits);
 
