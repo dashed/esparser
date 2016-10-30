@@ -645,9 +645,9 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-line-terminators
 
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LineTerminator
 fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
-
     on_error::<ESInput<I>, Token, ParseError, _, ParseError, _>(i,
         |i| parse!{i;
 
@@ -665,8 +665,37 @@ fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
             ParseError::Expected(loc, reason)
         }
     )
+}
 
+struct LineTerminatorSequence;
 
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LineTerminatorSequence
+fn line_terminator_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTerminatorSequence> {
+    on_error(i,
+        |i| -> ESParseResult<I, LineTerminatorSequence> {parse!{i;
+
+            let _line_terminator_char =
+                parse_utf8_char_of_bytes(b"\x000A") <|> // <LF>; LINE FEED (LF)
+                (i -> {
+                    parse!{i;
+                        parse_utf8_char_of_bytes(b"\x000D");
+                        let lf = parse_utf8_char_of_bytes(b"\x000A");
+                        ret lf
+                    }
+                }) <|>                                  // <CR><LF>
+                parse_utf8_char_of_bytes(b"\x000D") <|> // <CR>; CARRIAGE RETURN (CR)
+                parse_utf8_char_of_bytes(b"\x2028") <|> // <LS>; LINE SEPARATOR
+                parse_utf8_char_of_bytes(b"\x2029");    // <PS>; PARAGRAPH SEPARATOR
+
+            ret LineTerminatorSequence
+        }},
+        |_err, i| {
+            let loc = i.position();
+            let reason = "Expected linte terminator sequence.".to_string();
+            ParseError::Expected(loc, reason)
+        }
+    )
 }
 
 // == 11.4 Comments ==
