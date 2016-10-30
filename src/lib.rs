@@ -1671,6 +1671,68 @@ trait MathematicalValue {
 // == 11.8.4 String Literals ==
 
 // TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-StringLiteral
+fn string_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, String> {
+    parse!{i;
+        let quoted_string = __string_literal(b'\'') <|> __string_literal(b'\"');
+        ret quoted_string
+    }
+}
+
+// TODO: test
+#[inline]
+fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<I, String> {
+
+    #[inline]
+    fn string_char<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<I, String> {
+        either(i,
+            |i| parse!{i;
+                token(b'\\');
+                token(quote_type);
+                ret {
+                    (quote_type as char).to_string()
+                }
+            },
+            |i| on_error(i,
+                any,
+                |_err, i| {
+                    ParseError::Error
+                }
+            )
+        )
+        .bind(|i, result| {
+            match result {
+                Either::Left(escaped) => {
+                    i.ret(escaped)
+                },
+                Either::Right(c) => {
+                    if c == quote_type {
+                        i.err(ParseError::Error)
+                    } else {
+                        i.ret(c.to_string())
+                    }
+                }
+            }
+        })
+    }
+
+    parse!{i;
+        token(quote_type);
+        let s: Vec<String> = many(|i| string_char(i, quote_type));
+        token(quote_type);
+
+        ret {
+            s
+            .iter()
+            .fold(String::new(), |mut acc, s| {
+                acc.push_str(&s);
+                acc
+            })
+        }
+    }
+}
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexEscapeSequence
 fn hex_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
     parse!{i;
