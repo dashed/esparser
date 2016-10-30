@@ -1847,13 +1847,7 @@ fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
 
         let result = either(i,
             // left
-            |i| parse!{i;
-
-                yield_keyword();
-
-                // TODO: token
-                ret {()}
-            },
+            yield_keyword,
             // right
             identifier
         )
@@ -1955,7 +1949,7 @@ fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
 enum PrimaryExpression {
     This,
     IdentifierReference(IdentifierReference),
-    Literal
+    Literal(Literal)
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
@@ -1979,7 +1973,7 @@ fn primary_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
             (i -> identifier_reference(i, params)
                 .map(|ident_ref| PrimaryExpression::IdentifierReference(ident_ref)))
             <|>
-            (i -> identifier_reference(i, params).map(|_| PrimaryExpression::This));
+            (i -> literal(i).map(|literal| PrimaryExpression::Literal(literal)));
 
         ret result
     }
@@ -1997,7 +1991,7 @@ enum Literal {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Literal
-fn literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, Literal> {
+fn literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Literal> {
     parse!{i;
         let literal_result =
         (i -> null_literal(i).map(|_| Literal::Null)) <|>
