@@ -1381,7 +1381,7 @@ fn hex_4_digits_test() {
 // http://www.ecma-international.org/ecma-262/7.0/#sec-identifiers
 
 enum IdentifierReference {
-    Identifier,
+    Identifier(Identifier),
     Yield
 }
 
@@ -1399,7 +1399,8 @@ fn yield_keyword<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierReference
-fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
+fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
+    -> ESParseResult<I, IdentifierReference> {
 
     if !params.contains(&Parameter::Yield) {
 
@@ -1419,11 +1420,10 @@ fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) 
             match result {
                 Either::Left(_) => {
                     // TODO: fix
-                    i.ret(())
+                    i.ret(IdentifierReference::Yield)
                 },
-                Either::Right(_) => {
-                    // TODO: fix
-                    i.ret(())
+                Either::Right(ident) => {
+                    i.ret(IdentifierReference::Identifier(ident))
                 }
             }
         });
@@ -1435,7 +1435,9 @@ fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) 
         panic!("misuse of identifier_reference");
     }
 
-    identifier(i).map(|_| ())
+    identifier(i).map(|ident| {
+        IdentifierReference::Identifier(ident)
+    })
 
 }
 
@@ -1481,7 +1483,7 @@ fn binding_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
 
 }
 
-struct Identifier(IdentifierName);
+struct Identifier(String);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Identifier
@@ -1498,6 +1500,7 @@ fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
                 i.err(ParseError::Expected(loc, reason))
             },
             Either::Right(name) => {
+                let IdentifierName(name) = name;
                 i.ret(Identifier(name))
             }
         }
