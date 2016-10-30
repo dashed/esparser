@@ -2034,6 +2034,65 @@ fn array_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
     }
 }
 
+enum ElementListItem {
+    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
+    Item
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ElementList
+fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, Vec<ElementListItem>> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of element_list");
+    }
+
+    type Accumulator = Rc<RefCell<Vec<ElementListItem>>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+            let delim_1 = common_delim();
+            let _or = on_error(
+                |i| string(i, b","),
+                |_err, i| {
+                    let loc = i.position();
+                    ParseError::Expected(loc, "Expected , delimeter for array.".to_string())
+                }
+            );
+            let delim_2 = common_delim();
+            ret {
+                accumulator.borrow_mut().push(ElementListItem::Delim(delim_1, delim_2));
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = logical_and_expression(params);
+            ret {
+                accumulator.borrow_mut().push(ElementListItem::Item);
+                ()
+            }
+        }
+    };
+
+    parse!{i;
+
+        let list = parse_list(
+            delimiter,
+            reducer
+        );
+
+        ret list
+    }
+
+}
+
 struct Elision(Vec<ElisionItem>);
 
 enum ElisionItem {
