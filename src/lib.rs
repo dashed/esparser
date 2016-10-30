@@ -14,7 +14,7 @@ use std::cell::RefCell;
 // == 3rd-party imports ==
 
 use chomp::run_parser;
-use chomp::parsers::{SimpleResult, scan, any, take_till, string, satisfy, take_while1};
+use chomp::parsers::{SimpleResult, scan, take_till, string, satisfy, take_while1};
 use chomp::combinators::{option, look_ahead, many_till, many1, many, or, either};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
 use chomp::parse_only;
@@ -278,7 +278,7 @@ fn parse_single_quote_string_reducer<I: U8Input>(input: I, accumulator: Rc<RefCe
     -> SimpleResult<I, ()> {
     parse!{input;
 
-        let line: Vec<u8> = many_till(any, parse_single_quote_string_look_ahead);
+        let line: Vec<u8> = many_till(chomp::parsers::any, parse_single_quote_string_look_ahead);
 
         let has_quote = option(
             |i| look_ahead(i, |i| string(i, br#"\'"#)).map(|_| true),
@@ -388,33 +388,13 @@ fn token<I: U8Input>(i: ESInput<I>, tok: I::Token) -> ESParseResult<I, I::Token>
 #[inline]
 fn string_till<I: U8Input, F>(input: ESInput<I>, mut stop_at: F) -> ESParseResult<I, String>
     where F: Fn(ESInput<I>) -> ESParseResult<I, ()> {
+    parse!{input;
+        let line: Vec<char> = many_till(parse_utf8_char, |i| look_ahead(i, &mut stop_at));
 
-    #[inline]
-    fn __any<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Token> {
-        on_error(
-            i,
-            any,
-            |_err, i| {
-                ParseError::Error
-            }
-        )
-    }
-
-    on_error(
-        input,
-        |i| -> ESParseResult<I, String> {parse!{i;
-            let line: Vec<u8> = many_till(__any, |i| look_ahead(i, &mut stop_at));
-
-            ret {
-                let string: String = String::from_utf8_lossy(line.as_slice()).into_owned();
-                string
-            }
-        }},
-        |_err, i| {
-            ParseError::Error
+        ret {
+            line.into_iter().collect()
         }
-    )
-
+    }
 }
 
 #[inline]
@@ -770,7 +750,6 @@ fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
                     ParseError::Expected(loc, "Expected // for single-line comment.".to_string())
                 }
             );
-            // let contents = (i -> string_till(i, stop_at).map_err(|_| ParseError::Error));
             let contents = string_till(stop_at);
             // NOTE: buffer contents matching line_terminator is not consumed
             ret Comment::SingleLineComment(contents)
@@ -986,7 +965,7 @@ fn reserved_word<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
                 .bind(|i, result| {
                     match result {
                         Either::Left(c) => {
-                            // TODO: Reserved keyword must not contain escaped characters.
+                            // NOTE: Reserved keyword must not contain escaped characters.
                             i.err(ParseError::Error)
                         },
                         Either::Right(c) => {
@@ -1693,12 +1672,7 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
                     (quote_type as char).to_string()
                 }
             },
-            |i| on_error(i,
-                any,
-                |_err, i| {
-                    ParseError::Error
-                }
-            )
+            parse_utf8_char
         )
         .bind(|i, result| {
             match result {
@@ -1706,7 +1680,7 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
                     i.ret(escaped)
                 },
                 Either::Right(c) => {
-                    if c == quote_type {
+                    if c == (quote_type as char) {
                         i.err(ParseError::Error)
                     } else {
                         i.ret(c.to_string())
