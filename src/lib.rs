@@ -2001,7 +2001,8 @@ fn literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseRes
     parse!{i;
         let literal_result =
         (i -> null_literal(i).map(|_| Literal::Null)) <|>
-        (i -> boolean_literal(i).map(|bool_result| Literal::Boolean(bool_result))) <|>
+        (i -> boolean_literal(i).map(|b| Literal::Boolean(b))) <|>
+        (i -> numeric_literal(i).map(|n| Literal::Numeric(n))) <|>
         (i -> string_literal(i).map(|s| Literal::String(s)));
         ret literal_result
     }
