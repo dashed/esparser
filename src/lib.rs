@@ -510,12 +510,10 @@ enum Comment {
 }
 
 #[derive(Debug)]
-enum Token {
+enum CommonDelim {
     WhiteSpace(char),
     LineTerminator(char),
-    Comment(Comment),
-    This,
-    Null
+    Comment(Comment)
 }
 
 // Since there is no separate lexing step apart from parsing step,
@@ -529,13 +527,19 @@ enum Token {
 //
 // as defined in: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-lexical-grammar
 #[inline]
-fn __common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
+fn __common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, CommonDelim> {
     on_error(i,
-        |i| -> ESParseResult<I, Token> {parse!{i;
-            let delim: Token =
-                whitespace() <|>
-                line_terminator() <|>
-                comment();
+        |i| -> ESParseResult<I, CommonDelim> {parse!{i;
+            let delim =
+                (i -> whitespace(i).map(|w| {
+                    let WhiteSpace(w) = w;
+                    CommonDelim::WhiteSpace(w)
+                })) <|>
+                (i -> line_terminator(i).map(|w| {
+                    let LineTerminator(w) = w;
+                    CommonDelim::LineTerminator(w)
+                })) <|>
+                (i -> comment(i).map(|c| CommonDelim::Comment(c)));
             ret delim
         }},
         |_err, i| {
@@ -547,12 +551,12 @@ fn __common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
 }
 
 #[inline]
-fn common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<Token>> {
+fn common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<CommonDelim>> {
     many(i, __common_delim)
 }
 
 #[inline]
-fn common_delim_required<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<Token>> {
+fn common_delim_required<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<CommonDelim>> {
     many1(i, __common_delim)
 }
 
@@ -581,8 +585,10 @@ impl CLike for Parameter {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-white-space
 
+struct WhiteSpace(char);
+
 // http://www.ecma-international.org/ecma-262/7.0/#prod-WhiteSpace
-fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
+fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
 
     #[inline]
     fn other_whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
@@ -598,9 +604,9 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
             })
     }
 
-    on_error::<ESInput<I>, Token, ParseError, _, ParseError, _>(
+    on_error(
         i,
-        |i| parse!{i;
+        |i| -> ESParseResult<I, WhiteSpace> {parse!{i;
 
             let whitespace_char =
                 parse_utf8_char_of_bytes(b"\x0009") <|> // <TAB>; CHARACTER TABULATION
@@ -611,8 +617,8 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
                 parse_utf8_char_of_bytes(b"\xFEFF") <|> // <ZWNBSP>; ZERO WIDTH NO-BREAK SPACE
                 other_whitespace(); // Any other Unicode "Separator, space" code point
 
-            ret Token::WhiteSpace(whitespace_char)
-        },
+            ret WhiteSpace(whitespace_char)
+        }},
         |_, i| {
             ParseError::Expected(i.position(), "Expected whitespace.".to_string())
         }
@@ -625,11 +631,13 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-line-terminators
 
+struct LineTerminator(char);
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LineTerminator
-fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
-    on_error::<ESInput<I>, Token, ParseError, _, ParseError, _>(i,
-        |i| parse!{i;
+fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTerminator> {
+    on_error(i,
+        |i| -> ESParseResult<I, LineTerminator> {parse!{i;
 
             let line_terminator_char =
                 parse_utf8_char_of_bytes(b"\x000A") <|> // <LF>; LINE FEED (LF)
@@ -637,8 +645,8 @@ fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
                 parse_utf8_char_of_bytes(b"\x2028") <|> // <LS>; LINE SEPARATOR
                 parse_utf8_char_of_bytes(b"\x2029");    // <PS>; PARAGRAPH SEPARATOR
 
-            ret Token::LineTerminator(line_terminator_char)
-        },
+            ret LineTerminator(line_terminator_char)
+        }},
         |_err, i| {
             let loc = i.position();
             let reason = "Expected utf8 character.".to_string();
@@ -696,7 +704,7 @@ fn line_terminator_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTermin
 // http://www.ecma-international.org/ecma-262/7.0/#sec-comments
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Comment
-fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
+fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Comment> {
 
     // http://www.ecma-international.org/ecma-262/7.0/#prod-MultiLineComment
     #[inline]
@@ -759,7 +767,7 @@ fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
     parse!{i;
         let contents = multiline_comment() <|>
             singleline_comment();
-        ret Token::Comment(contents)
+        ret contents
     }
 }
 
@@ -1981,6 +1989,8 @@ fn primary_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
 }
 
 // == 12.2.4 Literals ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-primary-expression-literals
 
 enum Literal {
     Null,
@@ -2001,6 +2011,53 @@ fn literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Literal> {
         ret literal_result
     }
 }
+
+// == 12.2.5 Array Initializer ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-array-initializer
+
+enum ArrayLiteral {
+    Empty(Option<Elision>)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ArrayLiteral
+fn array_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+    parse!{i;
+        token(b'[');
+        common_delim();
+
+        common_delim();
+        token(b']');
+
+        ret {()}
+    }
+}
+
+struct Elision(Vec<ElisionItem>);
+
+enum ElisionItem {
+    CommonDelim(CommonDelim),
+    Comma
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Elision
+fn elision<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+    parse!{i;
+
+        token(b',');
+        let _l: Vec<()> = many(|i| parse!{i;
+            (i -> common_delim(i).map(|_| b',')) <|>
+            token(b',');
+            ret {()}
+        });
+
+        // TODO: struct
+        ret {()}
+    }
+}
+
 
 // == 12.2.6 Object Initializer ==
 
@@ -2118,9 +2175,9 @@ fn logical_and_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>
 enum LogicOrExpression {
     Or(
         Box<LogicOrExpression>,
-        Vec<Token>, // common_delim
+        Vec<CommonDelim>, // common_delim
         /* || */
-        Vec<Token>, // common_delim
+        Vec<CommonDelim>, // common_delim
         Box<LogicOrExpression>
     ),
     Leaf(bool),
@@ -2134,7 +2191,7 @@ impl Default for LogicOrExpression {
 }
 
 impl LogicOrExpression {
-    fn add_delim(&mut self, delim_1: Vec<Token>, delim_2: Vec<Token>) {
+    fn add_delim(&mut self, delim_1: Vec<CommonDelim>, delim_2: Vec<CommonDelim>) {
 
         match *self {
             LogicOrExpression::None => {
