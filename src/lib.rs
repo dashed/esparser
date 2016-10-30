@@ -1193,6 +1193,42 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
 
 // ===>
 
+struct DecimalIntegerLiteral(DecimalDigits);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalIntegerLiteral
+fn decimal_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalIntegerLiteral> {
+    either(i,
+        // left
+        |i| token(i, b'0'),
+        // right
+        |i| parse!{i;
+            // TODO: optimize this
+            let prefix = non_zero_digit();
+            let suffix = decimal_digits();
+            ret {
+                let DecimalDigits(suffix) = suffix;
+                let mut s = String::with_capacity(suffix.len() + 1);
+                s.push(prefix as char);
+                s.push_str(&suffix);
+                DecimalDigits(s)
+            }
+        }
+    )
+    .bind(|i, result| {
+        match result {
+            Either::Left(c) => {
+                let mut s = String::with_capacity(1);
+                s.push(c as char);
+                i.ret(DecimalIntegerLiteral(DecimalDigits(s)))
+            },
+            Either::Right(dd) => {
+                i.ret(DecimalIntegerLiteral(dd))
+            }
+        }
+    })
+}
+
 struct DecimalDigits(String);
 
 impl MathematicalValue for DecimalDigits {
