@@ -2037,24 +2037,24 @@ fn array_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 struct Elision(Vec<ElisionItem>);
 
 enum ElisionItem {
-    CommonDelim(CommonDelim),
+    CommonDelim(Vec<CommonDelim>),
     Comma
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Elision
-fn elision<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+fn elision<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Elision> {
     parse!{i;
 
         token(b',');
-        let _l: Vec<()> = many(|i| parse!{i;
-            (i -> common_delim(i).map(|_| b',')) <|>
-            token(b',');
-            ret {()}
+        let list: Vec<ElisionItem> = many(|i| parse!{i;
+            let l = (i -> common_delim(i).map(|c| ElisionItem::CommonDelim(c))) <|>
+            (i -> token(i, b',').map(|_| ElisionItem::Comma));
+            ret l
         });
 
         // TODO: struct
-        ret {()}
+        ret Elision(list)
     }
 }
 
