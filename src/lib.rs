@@ -1193,6 +1193,122 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
 
 // ===>
 
+struct DecimalDigits(String);
+
+impl MathematicalValue for DecimalDigits {
+    // TODO: test
+    fn mathematical_value(&self) -> i64 {
+        i64::from_str_radix(&self.0, 10)
+            .unwrap()
+    }
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalDigits
+fn decimal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalDigits> {
+    on_error(
+        i,
+        |i| -> ESParseResult<I, DecimalDigits> {
+            many1(i, decimal_digit)
+                .bind(|i, buf: Vec<u8>| {
+                    let contents = String::from_utf8_lossy(&buf).into_owned();
+                    i.ret(DecimalDigits(contents))
+                })
+        },
+        |_, i| {
+            let loc = i.position();
+            ParseError::Expected(loc, "Expected decimal digit (0 or 9).".to_string())
+        }
+    )
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalDigit
+fn decimal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
+
+    #[inline]
+    fn is_decimal_digit(c: u8) -> bool {
+        (b'0' <= c && c <= b'9')
+    }
+
+    on_error(
+        i,
+        |i| satisfy(i, is_decimal_digit),
+        |_err, i| {
+            let loc = i.position();
+            ParseError::Expected(loc, "Expected decimal digit (0 to 9).".to_string())
+        }
+    )
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-NonZeroDigit
+fn non_zero_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
+
+    #[inline]
+    fn is_non_zero_digit(c: u8) -> bool {
+        (b'1' <= c && c <= b'9')
+    }
+
+    on_error(
+        i,
+        |i| satisfy(i, is_non_zero_digit),
+        |_err, i| {
+            let loc = i.position();
+            ParseError::Expected(loc, "Expected non-zero digit (1 to 9).".to_string())
+        }
+    )
+}
+
+struct ExponentPart(SignedInteger);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ExponentPart
+fn exponent_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ExponentPart> {
+    parse!{i;
+        // http://www.ecma-international.org/ecma-262/7.0/#prod-ExponentIndicator
+        token(b'e') <|> token(b'E');
+        let result = signed_integer();
+        ret ExponentPart(result)
+    }
+}
+
+enum SignedInteger {
+    Unsigned(DecimalDigits),
+    Positive(DecimalDigits),
+    Negative(DecimalDigits)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-SignedInteger
+fn signed_integer<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SignedInteger> {
+
+    enum Signed {
+        Unsigned,
+        Positive,
+        Negative
+    }
+
+    parse!{i;
+
+        let prefix = option(|i| parse!{i;
+            let signed = (i -> token(i, b'+').map(|_| Signed::Positive)) <|>
+            (i -> token(i, b'-').map(|_| Signed::Negative));
+            ret signed
+        }, Signed::Unsigned);
+
+        let result = decimal_digits();
+
+        ret {
+            match prefix {
+                Signed::Unsigned => SignedInteger::Unsigned(result),
+                Signed::Positive => SignedInteger::Positive(result),
+                Signed::Negative => SignedInteger::Negative(result)
+            }
+        }
+    }
+}
+
 struct BinaryIntegerLiteral(BinaryDigits);
 
 // TODO: test
@@ -1202,7 +1318,7 @@ fn binary_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryI
         token(b'0');
         token(b'b') <|> token(b'B');
         let result = binary_digits();
-        ret OctalIntegerLiteral(result)
+        ret BinaryIntegerLiteral(result)
     }
 }
 
@@ -1416,7 +1532,6 @@ fn hex_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
             ParseError::Expected(loc, "Expected hex digit (0 to F).".to_string())
         }
     )
-
 }
 
 // == 11.8.3.1 Static Semantics: MV ==
