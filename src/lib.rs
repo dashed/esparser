@@ -2047,17 +2047,41 @@ fn elision<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Elision> {
     parse!{i;
 
         token(b',');
+
         let list: Vec<ElisionItem> = many(|i| parse!{i;
             let l = (i -> common_delim(i).map(|c| ElisionItem::CommonDelim(c))) <|>
             (i -> token(i, b',').map(|_| ElisionItem::Comma));
             ret l
         });
 
-        // TODO: struct
         ret Elision(list)
     }
 }
 
+struct SpreadElement(());
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-SpreadElement
+fn spread_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, SpreadElement> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of spread_element");
+    }
+
+    parse!{i;
+        (i -> string(i, b"...").map_err(|_| ParseError::Error));
+        common_delim();
+        let expr = (i -> {
+            let mut params = params.clone();
+            params.insert(Parameter::In);
+            assignment_expression(i, &params)
+        });
+
+        ret SpreadElement(expr)
+    }
+}
 
 // == 12.2.6 Object Initializer ==
 
