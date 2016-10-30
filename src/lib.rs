@@ -1193,6 +1193,19 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
 
 // ===>
 
+struct OctalIntegerLiteral(OctalDigits);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-OctalIntegerLiteral
+fn octal_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalIntegerLiteral> {
+    parse!{i;
+        token(b'0');
+        token(b'o') <|> token(b'O');
+        let result = octal_digits();
+        ret OctalIntegerLiteral(result)
+    }
+}
+
 struct OctalDigits(String);
 
 impl MathematicalValue for OctalDigits {
