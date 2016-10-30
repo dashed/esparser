@@ -1649,11 +1649,18 @@ trait MathematicalValue {
 
 // == 11.8.4 String Literals ==
 
+enum StringLiteral {
+    SingleQuoted(String),
+    DoubleQuoted(String)
+}
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-StringLiteral
-fn string_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, String> {
+fn string_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, StringLiteral> {
     parse!{i;
-        let quoted_string = __string_literal(b'\'') <|> __string_literal(b'\"');
+        let quoted_string =
+        (i -> __string_literal(i, b'\'').map(|s| StringLiteral::SingleQuoted(s))) <|>
+        (i -> __string_literal(i, b'\"').map(|s| StringLiteral::DoubleQuoted(s)));
         ret quoted_string
     }
 }
@@ -1984,7 +1991,8 @@ fn primary_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
 enum Literal {
     Null,
     Boolean(Bool),
-    Numeric(NumericLiteral)
+    Numeric(NumericLiteral),
+    String(StringLiteral)
 }
 
 // TODO: test
@@ -1993,7 +2001,8 @@ fn literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseRes
     parse!{i;
         let literal_result =
         (i -> null_literal(i).map(|_| Literal::Null)) <|>
-        (i -> boolean_literal(i).map(|bool_result| Literal::Boolean(bool_result)));
+        (i -> boolean_literal(i).map(|bool_result| Literal::Boolean(bool_result))) <|>
+        (i -> string_literal(i).map(|s| Literal::String(s)));
         ret literal_result
     }
 }
