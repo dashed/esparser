@@ -667,28 +667,41 @@ fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Token> {
     )
 }
 
-struct LineTerminatorSequence;
+struct LineTerminatorSequence(String);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LineTerminatorSequence
 fn line_terminator_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTerminatorSequence> {
+
+    #[inline]
+    fn char_to_string(c: char) -> String {
+        let mut s = String::with_capacity(1);
+        s.push(c);
+        s
+    }
+
     on_error(i,
         |i| -> ESParseResult<I, LineTerminatorSequence> {parse!{i;
 
-            let _line_terminator_char =
-                parse_utf8_char_of_bytes(b"\x000A") <|> // <LF>; LINE FEED (LF)
+            let seq =
+                (i -> parse_utf8_char_of_bytes(i, b"\x000A").map(char_to_string)) <|> // <LF>; LINE FEED (LF)
                 (i -> {
                     parse!{i;
-                        parse_utf8_char_of_bytes(b"\x000D");
+                        let cr = parse_utf8_char_of_bytes(b"\x000D");
                         let lf = parse_utf8_char_of_bytes(b"\x000A");
-                        ret lf
+                        ret {
+                            let mut s = String::with_capacity(2);
+                            s.push(cr);
+                            s.push(lf);
+                            s
+                        }
                     }
-                }) <|>                                  // <CR><LF>
-                parse_utf8_char_of_bytes(b"\x000D") <|> // <CR>; CARRIAGE RETURN (CR)
-                parse_utf8_char_of_bytes(b"\x2028") <|> // <LS>; LINE SEPARATOR
-                parse_utf8_char_of_bytes(b"\x2029");    // <PS>; PARAGRAPH SEPARATOR
+                }) <|>                                                                // <CR><LF>
+                (i -> parse_utf8_char_of_bytes(i, b"\x000D").map(char_to_string)) <|> // <CR>; CARRIAGE RETURN (CR)
+                (i -> parse_utf8_char_of_bytes(i, b"\x2028").map(char_to_string)) <|> // <LS>; LINE SEPARATOR
+                (i -> parse_utf8_char_of_bytes(i, b"\x2029").map(char_to_string));    // <PS>; PARAGRAPH SEPARATOR
 
-            ret LineTerminatorSequence
+            ret LineTerminatorSequence(seq)
         }},
         |_err, i| {
             let loc = i.position();
