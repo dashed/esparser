@@ -1185,19 +1185,81 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
 
 // }
 
-// // http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalLiteral
-// fn decimal_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Numeric> {
+// http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalLiteral
+// fn decimal_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 
 // }
 
-// // http://www.ecma-international.org/ecma-262/7.0/#prod-HexIntegerLiteral
-// fn hex_integer_literal<I: U8Input>(i: I) -> SimpleResult<I, i32> {
 
-// }
+// ===>
+
+struct OctalDigits(String);
+
+impl MathematicalValue for OctalDigits {
+    // TODO: test
+    fn mathematical_value(&self) -> i64 {
+        i64::from_str_radix(&self.0, 8)
+            .unwrap()
+    }
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-OctalDigits
+fn octal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalDigits> {
+    on_error(
+        i,
+        |i| -> ESParseResult<I, OctalDigits> {
+            many1(i, octal_digit)
+                .bind(|i, buf: Vec<u8>| {
+                    let contents = String::from_utf8_lossy(&buf).into_owned();
+                    i.ret(OctalDigits(contents))
+                })
+        },
+        |_, i| {
+            let loc = i.position();
+            ParseError::Expected(loc, "Expected octal digit.".to_string())
+        }
+    )
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-OctalDigit
+#[inline]
+fn octal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
+
+    #[inline]
+    fn is_octal_digit(c: u8) -> bool {
+        (b'0' <= c && c <= b'7')
+    }
+
+    on_error(
+        i,
+        |i| satisfy(i, is_octal_digit),
+        |_err, i| {
+            let loc = i.position();
+            ParseError::Expected(loc, "Expected octal digit (0 to 7).".to_string())
+        }
+    )
+
+}
+
+struct HexIntegerLiteral(HexDigits);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-HexIntegerLiteral
+fn hex_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexIntegerLiteral> {
+    parse!{i;
+        token(b'0');
+        token(b'x') <|> token(b'X');
+        let result = hex_digits();
+        ret HexIntegerLiteral(result)
+    }
+}
 
 struct HexDigits(String);
 
 impl MathematicalValue for HexDigits {
+    // TODO: test
     fn mathematical_value(&self) -> i64 {
         i64::from_str_radix(&self.0, 16)
             .unwrap()
@@ -1221,7 +1283,6 @@ fn hex_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexDigits> {
         }
     )
 }
-
 
 #[test]
 fn hex_digits_test() {
@@ -1512,7 +1573,9 @@ fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
 // http://www.ecma-international.org/ecma-262/7.0/#sec-primary-expression
 
 enum PrimaryExpression {
-    This
+    This,
+    IdentifierReference(IdentifierReference),
+    Literal
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
@@ -1525,8 +1588,18 @@ fn primary_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
 
     parse!{i;
 
-        let result = (i -> string(i, b"this").map(|_| PrimaryExpression::This)) <|>
-        (i -> string(i, b"this").map(|_| PrimaryExpression::This));
+        let result =
+            on_error(
+                |i| string(i, b"this").map(|_| PrimaryExpression::This),
+            |_err, i| {
+                let reason = format!("Expected this keyword.");
+                ParseError::Expected(i.position(), reason)
+            })
+            <|>
+            (i -> identifier_reference(i, params)
+                .map(|ident_ref| PrimaryExpression::IdentifierReference(ident_ref)))
+            <|>
+            (i -> identifier_reference(i, params).map(|_| PrimaryExpression::This));
 
         ret result
     }
@@ -1535,12 +1608,17 @@ fn primary_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
 
 // == 12.2.4 Literals ==
 
-fn literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
-    parse!{i;
-        let literal_result = null_literal();
-        let _l = boolean_literal();
+enum Literal {
+    Null,
+    Boolean(Bool)
+}
 
-        ret {()}
+fn literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, Literal> {
+    parse!{i;
+        let literal_result =
+        (i -> null_literal(i).map(|_| Literal::Null)) <|>
+        (i -> boolean_literal(i).map(|bool_result| Literal::Boolean(bool_result)));
+        ret literal_result
     }
 }
 
