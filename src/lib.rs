@@ -1655,7 +1655,8 @@ fn unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
                 // == 11.8.4.1 Static Semantics: Early Errors ==
                 //
                 // http://www.ecma-international.org/ecma-262/7.0/#sec-string-literals-static-semantics-early-errors
-                if sequence.mathematical_value() > 1114111 /* 10ffff */ {
+                if sequence.0.len() > 6 ||
+                    sequence.mathematical_value() > 1114111 /* 10ffff */ {
 
                     let err_val = ParseError::Expected(i.position(),
                         "Invalid unicode escape sequence. Expect to be less or equal to 10ffff.".to_string());
@@ -1885,9 +1886,12 @@ fn primary_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
 
 enum Literal {
     Null,
-    Boolean(Bool)
+    Boolean(Bool),
+    Numeric(NumericLiteral)
 }
 
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Literal
 fn literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, Literal> {
     parse!{i;
         let literal_result =
