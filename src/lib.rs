@@ -1628,6 +1628,23 @@ trait MathematicalValue {
 
 // == 11.8.4 String Literals ==
 
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-HexEscapeSequence
+fn hex_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+    parse!{i;
+        token(b'x');
+        let digit_1 = hex_digit();
+        let digit_2 = hex_digit();
+
+        ret {
+            let mut result = String::with_capacity(2);
+            result.push(digit_1 as char);
+            result.push(digit_2 as char);
+            string_to_unicode_char(&result).unwrap()
+        }
+    }
+}
+
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeEscapeSequence
 // TODO: needs test
 fn unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
