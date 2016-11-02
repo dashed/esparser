@@ -2056,7 +2056,7 @@ fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPar
         parse!{i;
             let delim_1 = common_delim();
             let _or = on_error(
-                |i| string(i, b","),
+                |i| token(i, b','),
                 |_err, i| {
                     let loc = i.position();
                     ParseError::Expected(loc, "Expected , delimeter for array.".to_string())
@@ -2073,7 +2073,11 @@ fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPar
     #[inline]
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
         parse!{i;
-            let rhs = logical_and_expression(params);
+
+            let l = option(elision(), None);
+
+            fix me
+
             ret {
                 accumulator.borrow_mut().push(ElementListItem::Item);
                 ()
