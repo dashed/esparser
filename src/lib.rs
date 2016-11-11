@@ -1926,6 +1926,47 @@ fn binding_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
 
 }
 
+enum LabelIdentifier {
+    Identifier(Identifier),
+    Yield
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LabelIdentifier
+fn label_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, LabelIdentifier> {
+
+    if !params.contains(&Parameter::Yield) {
+
+        let result = either(i,
+            // left
+            yield_keyword,
+            // right
+            identifier
+        )
+        .bind(|i, result| {
+            match result {
+                Either::Left(_) => {
+                    i.ret(LabelIdentifier::Yield)
+                },
+                Either::Right(ident) => {
+                    i.ret(LabelIdentifier::Identifier(ident))
+                }
+            }
+        });
+
+        return result;
+    }
+
+    if params.len() >= 2 {
+        panic!("misuse of binding_identifier");
+    }
+
+    identifier(i).map(|ident| {
+        LabelIdentifier::Identifier(ident)
+    })
+
+}
+
 struct Identifier(String);
 
 // TODO: test
