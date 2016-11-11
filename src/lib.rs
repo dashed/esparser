@@ -2275,7 +2275,35 @@ fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LiteralPropertyName
 
 // TODO: complete
+
+struct ComputedPropertyName(Vec<CommonDelim>, (), Vec<CommonDelim>);
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ComputedPropertyName
+fn computed_property_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ComputedPropertyName> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of computed_property_name");
+    }
+
+    let mut params = params.clone();
+    params.insert(Parameter::In);
+
+    parse!{i;
+
+        token(b'[');
+        let delim_left = common_delim();
+
+        let expr = assignment_expression(&params);
+
+        let delim_right = common_delim();
+        token(b']');
+
+        ret ComputedPropertyName(delim_left, expr, delim_right)
+    }
+}
 
 struct CoverInitializedName(IdentifierReference, Vec<CommonDelim>, Initializer);
 
