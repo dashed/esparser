@@ -2924,7 +2924,49 @@ fn object_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>
 
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingProperty
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElement
+enum BindingElement {
+    SingleNameBinding(SingleNameBinding),
+    BindingPattern(BindingPattern, Vec<CommonDelim>, Option<Initializer>)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElement
+fn binding_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingElement> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of binding_element");
+    }
+
+    #[inline]
+    fn binding_element_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingElement> {
+
+        let mut init_params = params.clone();
+        init_params.insert(Parameter::In);
+
+        parse!{i;
+            let bind_pat = binding_pattern(&params);
+
+            let delim = common_delim();
+
+            let init = option(|i| initializer(i, &init_params).map(|x| Some(x)),
+                None);
+
+            ret BindingElement::BindingPattern(bind_pat, delim, init)
+        }
+    }
+
+    parse!{i;
+
+        let binding =
+            (i -> single_name_binding(i, &params).map(|x| BindingElement::SingleNameBinding(x)))
+            <|>
+            binding_element_binding_pattern(&params);
+
+        ret binding
+    }
+}
 
 struct SingleNameBinding(BindingIdentifier, Vec<CommonDelim>, Option<Initializer>);
 
