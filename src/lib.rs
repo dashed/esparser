@@ -2922,7 +2922,50 @@ fn object_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>
 
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElisionElement
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingProperty
+enum BindingProperty {
+    SingleNameBinding(SingleNameBinding),
+    PropertyName(PropertyName, Vec<CommonDelim>, Vec<CommonDelim>, BindingElement)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BindingProperty
+fn binding_property<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingProperty> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of binding_property");
+    }
+
+    #[inline]
+    fn binding_property_property_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingProperty> {
+
+        let mut init_params = params.clone();
+        init_params.insert(Parameter::In);
+
+        parse!{i;
+            let prop_name = property_name(&params);
+
+            let delim_1 = common_delim();
+            token(b':');
+            let delim_2 = common_delim();
+
+            let bind_elem = binding_element(&params);
+
+            ret BindingProperty::PropertyName(prop_name, delim_1, delim_2, bind_elem)
+        }
+    }
+
+    parse!{i;
+
+        let binding =
+            (i -> single_name_binding(i, &params).map(|x| BindingProperty::SingleNameBinding(x)))
+            <|>
+            binding_property_property_name(&params);
+
+        ret binding
+    }
+}
 
 enum BindingElement {
     SingleNameBinding(SingleNameBinding),
