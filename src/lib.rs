@@ -2233,6 +2233,38 @@ fn spread_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
 }
 
 // == 12.2.6 Object Initializer ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-object-initializer
+
+// TODO: complete
+struct ObjectLiteral(/* { (left curly bracket) */ Vec<CommonDelim>, ObjectLiteralContents,
+    Vec<CommonDelim> /* } (right curly bracket) */);
+
+enum ObjectLiteralContents {
+    FooBar
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ObjectLiteral
+fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ObjectLiteral> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of array_literal");
+    }
+
+    parse!{i;
+
+        token(b'{');
+        let delim_left = common_delim();
+
+        let delim_right = common_delim();
+        token(b'}');
+
+        ret ObjectLiteral(delim_left, ObjectLiteralContents::FooBar, delim_right)
+    }
+}
 
 struct Initializer(Vec<CommonDelim>, ());
 
