@@ -2270,8 +2270,30 @@ fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
 // TODO: complete
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyDefinitionList
 
-// TODO: complete
+enum PropertyName {
+    LiteralPropertyName(LiteralPropertyName),
+    ComputedPropertyName(ComputedPropertyName)
+}
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyName
+fn property_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, PropertyName> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of property_name");
+    }
+
+    parse!{i;
+
+        let prop_name = (i -> literal_property_name(i).map(|x| PropertyName::LiteralPropertyName(x)))
+        <|>
+        (i -> computed_property_name(i, &params).map(|x| PropertyName::ComputedPropertyName(x)));
+
+        ret prop_name
+    }
+}
 
 enum LiteralPropertyName {
     IdentifierName(IdentifierName),
@@ -2281,7 +2303,7 @@ enum LiteralPropertyName {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LiteralPropertyName
-fn literal_property_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, LiteralPropertyName> {
+fn literal_property_name<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LiteralPropertyName> {
     parse!{i;
 
         let literal_prop_name =
@@ -2309,6 +2331,7 @@ fn computed_property_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>
 
     let mut params = params.clone();
     params.insert(Parameter::In);
+    let params = params;
 
     parse!{i;
 
