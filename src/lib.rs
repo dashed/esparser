@@ -2270,6 +2270,59 @@ fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
 // TODO: complete
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyDefinitionList
 
+enum PropertyDefinition {
+    IdentifierReference(IdentifierReference),
+    CoverInitializedName(CoverInitializedName),
+    PropertyName(PropertyName, Vec<CommonDelim>, /* : */ Vec<CommonDelim>, ()),
+    MethodDefinition(MethodDefinition)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyDefinition
+fn property_definition<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, PropertyDefinition> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of property_definition");
+    }
+
+    #[inline]
+    fn prop_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, PropertyDefinition> {
+
+        let mut expr_params = params.clone();
+        expr_params.insert(Parameter::In);
+        let expr_params = expr_params;
+
+        parse!{i;
+
+            let name = property_name(&params);
+
+            let delim_1 = common_delim();
+            token(b':');
+            let delim_2 = common_delim();
+
+            let expr = assignment_expression(&expr_params);
+
+            ret PropertyDefinition::PropertyName(name, delim_1, delim_2, expr)
+        }
+    }
+
+    parse!{i;
+
+        let prop_def =
+            (i -> identifier_reference(i, &params).map(|x| PropertyDefinition::IdentifierReference(x)))
+            <|>
+            (i -> cover_initialized_name(i, &params).map(|x| PropertyDefinition::CoverInitializedName(x)))
+            <|>
+            prop_name(&params)
+            <|>
+            (i -> method_definition(i, &params).map(|x| PropertyDefinition::MethodDefinition(x)));
+
+        ret prop_def
+    }
+}
+
 enum PropertyName {
     LiteralPropertyName(LiteralPropertyName),
     ComputedPropertyName(ComputedPropertyName)
