@@ -2916,11 +2916,162 @@ fn object_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>
 
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-ArrayBindingPattern
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingPropertyList
+struct BindingPropertyList(Vec<BindingPropertyListItem>);
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElementList
+enum BindingPropertyListItem {
+    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
+    BindingProperty(BindingProperty)
+}
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElisionElement
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BindingPropertyList
+fn binding_property_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingPropertyList> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of binding_property_list");
+    }
+
+    type Accumulator = Rc<RefCell<Vec<BindingPropertyListItem>>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            on_error(
+                |i| token(i, b','),
+                |_err, i| {
+                    let loc = i.position();
+                    // TODO: proper err message?
+                    ParseError::Expected(loc, "Expected , here.".to_string())
+                }
+            );
+
+            let delim_2 = common_delim();
+
+            ret {
+                accumulator.borrow_mut().push(BindingPropertyListItem::Delim(delim_1, delim_2));
+                ()
+            }
+        }
+    }
+
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let item = property_name(&params);
+
+            ret {
+                accumulator.borrow_mut().push(BindingPropertyListItem::BindingProperty(item));
+                ()
+            }
+        }
+    };
+
+    parse!{i;
+
+        let list = parse_list(
+            delimiter,
+            reducer
+        );
+
+        ret BindingPropertyList(list)
+    }
+}
+
+struct BindingElementList(Vec<BindingElementListItem>);
+
+enum BindingElementListItem {
+    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
+    BindingElisionElement(BindingElisionElement)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElementList
+fn binding_elision_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingElementList> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of binding_elision_list");
+    }
+
+    type Accumulator = Rc<RefCell<Vec<BindingElementListItem>>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            on_error(
+                |i| token(i, b','),
+                |_err, i| {
+                    let loc = i.position();
+                    // TODO: proper err message?
+                    ParseError::Expected(loc, "Expected , here.".to_string())
+                }
+            );
+
+            let delim_2 = common_delim();
+
+            ret {
+                accumulator.borrow_mut().push(BindingElementListItem::Delim(delim_1, delim_2));
+                ()
+            }
+        }
+    }
+
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let item = binding_elision_element(&params);
+
+            ret {
+                accumulator.borrow_mut().push(BindingElementListItem::BindingElisionElement(item));
+                ()
+            }
+        }
+    };
+
+    parse!{i;
+
+        let list = parse_list(
+            delimiter,
+            reducer
+        );
+
+        ret BindingElementList(list)
+    }
+}
+
+struct BindingElisionElement(Option<Elision>, Vec<CommonDelim>, BindingElement);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElisionElement
+fn binding_elision_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingElisionElement> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of binding_elision_element");
+    }
+
+    parse!{i;
+
+        let e = option(|i| elision(i).map(|x| Some(x)),
+            None);
+
+        let delim = common_delim();
+
+        let bind_elem = binding_element(&params);
+
+        ret BindingElisionElement(e, delim, bind_elem)
+    }
+}
 
 enum BindingProperty {
     SingleNameBinding(SingleNameBinding),
