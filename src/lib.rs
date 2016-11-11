@@ -2825,7 +2825,35 @@ fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-destructuring-binding-patterns
 
+struct SingleNameBinding(BindingIdentifier, Vec<CommonDelim>, Option<Initializer>);
 
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-SingleNameBinding
+fn single_name_binding<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, SingleNameBinding> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of single_name_binding");
+    }
+
+    let mut init_params = params.clone();
+    init_params.insert(Parameter::In);
+
+    parse!{i;
+
+        let ident = binding_identifier(&params);
+
+        let delim = common_delim();
+
+        let init = option(|i| initializer(i, &init_params).map(|x| Some(x)),
+            None);
+
+        ret SingleNameBinding(ident, delim, init)
+    }
+}
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingRestElement
 
 // == 14 ECMAScript Language: Functions and Classes ==
 //
