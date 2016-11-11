@@ -2712,6 +2712,18 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
     }
 }
 
+// == 13.2 Block ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-block
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BlockStatement
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-Block
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-StatementList
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-StatementListItem
+
 // == 13.3.2 Variable Statement ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-variable-statement
@@ -2759,6 +2771,7 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>, maybe_params: &Option<Paramet
     }
 }
 
+// TODO: fix this
 // TODO: test for ASI behaviour
 #[inline]
 fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
@@ -2768,6 +2781,103 @@ fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
         ret {()}
     }
 }
+
+// == 13.3.3 Destructuring Binding Patterns ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-destructuring-binding-patterns
+
+// == 14 ECMAScript Language: Functions and Classes ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-functions-and-classes
+
+// == 14.1 Function Definitions ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-function-definitions
+
+// TODO: complete
+// http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionBody
+
+struct FunctionStatementList;
+
+// TODO: complete
+// http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionStatementList
+fn function_statement_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FunctionStatementList> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of function_statement_list");
+    }
+
+    parse!{i;
+
+        ret FunctionStatementList
+    }
+}
+
+// == 14.3 Method Definitions ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-method-definitions
+
+enum MethodDefinition {
+    Method,
+    GeneratorMethod,
+    Get(Vec<CommonDelim>, PropertyName, Vec<CommonDelim>, Vec<CommonDelim>, Vec<CommonDelim>, Vec<CommonDelim>),
+    Set(Vec<CommonDelim>, PropertyName)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-MethodDefinition
+fn method_definition<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, MethodDefinition> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of method_definition");
+    }
+
+    #[inline]
+    fn method_definition_get<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, MethodDefinition> {
+        parse!{i;
+
+            on_error(
+                |i| string(i, b"get"),
+                |_err, i| {
+                    let loc = i.position();
+                    ParseError::Expected(loc, "Expected 'get' keyword.".to_string())
+                }
+            );
+
+            let delim_1 = common_delim_required();
+            let prop_name = property_name(&params);
+            let delim_2 = common_delim();
+
+            token(b'(');
+            let delim_3 = common_delim();
+            token(b')');
+
+            let delim_4 = common_delim();
+            token(b'{');
+
+            // TODO: function body
+
+            let delim_5 = common_delim();
+            token(b'}');
+
+            ret MethodDefinition::Get(delim_1, prop_name, delim_2, delim_3, delim_4, delim_5)
+        }
+    }
+
+    parse!{i;
+
+        let defs = method_definition_get(&params);
+
+        // TODO: complete
+
+        ret defs
+    }
+}
+
 
 // ==== sandbox ===>
 // see: https://github.com/m4rw3r/chomp/issues/60
