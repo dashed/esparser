@@ -2273,10 +2273,27 @@ fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
 // TODO: complete
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyName
 
-// TODO: complete
-// http://www.ecma-international.org/ecma-262/7.0/#prod-LiteralPropertyName
+enum LiteralPropertyName {
+    IdentifierName(IdentifierName),
+    StringLiteral(StringLiteral),
+    NumericLiteral(NumericLiteral)
+}
 
-// TODO: complete
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LiteralPropertyName
+fn literal_property_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, LiteralPropertyName> {
+    parse!{i;
+
+        let literal_prop_name =
+            (i -> identifier_name(i).map(|x| LiteralPropertyName::IdentifierName(x)))
+            <|>
+            (i -> string_literal(i).map(|x| LiteralPropertyName::StringLiteral(x)))
+            <|>
+            (i -> numeric_literal(i).map(|x| LiteralPropertyName::NumericLiteral(x)));
+
+        ret literal_prop_name
+    }
+}
 
 struct ComputedPropertyName(Vec<CommonDelim>, (), Vec<CommonDelim>);
 
