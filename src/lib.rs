@@ -503,11 +503,6 @@ fn parse_utf8_char_test() {
 }
 
 // == Tokens ==
-#[derive(Debug)]
-enum Comment {
-    MultiLineComment(String),
-    SingleLineComment(String)
-}
 
 #[derive(Debug)]
 enum CommonDelim {
@@ -703,6 +698,13 @@ fn line_terminator_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTermin
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-comments
 
+#[derive(Debug)]
+enum Comment {
+    MultiLineComment(String),
+    SingleLineComment(String)
+}
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Comment
 fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Comment> {
 
