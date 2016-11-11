@@ -1960,7 +1960,8 @@ fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
 enum PrimaryExpression {
     This,
     IdentifierReference(IdentifierReference),
-    Literal(Literal)
+    Literal(Literal),
+    ArrayLiteral(ArrayLiteral)
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
@@ -1974,17 +1975,26 @@ fn primary_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
     parse!{i;
 
         let result =
+
             on_error(
                 |i| string(i, b"this").map(|_| PrimaryExpression::This),
             |_err, i| {
                 let reason = format!("Expected this keyword.");
                 ParseError::Expected(i.position(), reason)
             })
+
             <|>
-            (i -> identifier_reference(i, params)
+
+            (i -> identifier_reference(i, &params)
                 .map(|ident_ref| PrimaryExpression::IdentifierReference(ident_ref)))
+
             <|>
-            (i -> literal(i).map(|literal| PrimaryExpression::Literal(literal)));
+
+            (i -> literal(i).map(|literal| PrimaryExpression::Literal(literal)))
+
+            <|>
+
+            (i -> array_literal(i, &params).map(|arr_literal| PrimaryExpression::ArrayLiteral(arr_literal)));
 
         ret result
     }
