@@ -2019,23 +2019,77 @@ fn literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Literal> {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-array-initializer
 
-enum ArrayLiteral {
-    Empty(Option<Elision>)
+struct ArrayLiteral(/* [ (left bracket) */ Vec<CommonDelim>, ArrayLiteralContents, Vec<CommonDelim> /* ] (right bracket) */);
+
+enum ArrayLiteralContents {
+    Empty(Option<Elision>),
+    List(ElementList),
+    ListWithElision(ElementList, Vec<CommonDelim>, Elision)
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ArrayLiteral
-fn array_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
-    parse!{i;
-        token(b'[');
-        common_delim();
+fn array_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ArrayLiteral> {
 
-        common_delim();
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of array_literal");
+    }
+
+    #[inline]
+    fn array_literal_contents<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ArrayLiteralContents> {
+        parse!{i;
+
+            // [ElementList_[?Yield]]
+            // [ElementList_[?Yield] , Elision_opt]
+
+            let list = element_list(&params);
+
+            let maybe_end = option(|i| parse!{i;
+
+                on_error(
+                    |i| token(i, b','),
+                    |_err, i| {
+                        let loc = i.position();
+                        // TODO: proper err message?
+                        ParseError::Expected(loc, "Expected , delimeter here.".to_string())
+                    }
+                );
+
+                let delim = common_delim();
+                let elision = elision();
+
+                ret Some((delim, elision))
+
+            }, None);
+
+            ret {
+                match maybe_end {
+                    None => ArrayLiteralContents::List(list),
+                    Some((delim, elision)) => ArrayLiteralContents::ListWithElision(list, delim, elision),
+                }
+            }
+        }
+    }
+
+    parse!{i;
+
+        token(b'[');
+        let delim_left = common_delim();
+
+        let contents = option(|i| elision(i).map(|x| ArrayLiteralContents::Empty(Some(x))),
+            ArrayLiteralContents::Empty(None)) <|>
+            array_literal_contents(&params);
+
+        let delim_right = common_delim();
         token(b']');
 
-        ret {()}
+        ret ArrayLiteral(delim_left, contents, delim_right)
     }
 }
+
+struct ElementList(Vec<ElementListItem>);
 
 enum ElementListItem {
     Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
@@ -2045,7 +2099,7 @@ enum ElementListItem {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ElementList
-fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, Vec<ElementListItem>> {
+fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ElementList> {
 
     // validation
     if !(params.is_empty() ||
@@ -2061,10 +2115,11 @@ fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPar
 
             let delim_1 = common_delim();
 
-            let _or = on_error(
+            on_error(
                 |i| token(i, b','),
                 |_err, i| {
                     let loc = i.position();
+                    // TODO: proper err message?
                     ParseError::Expected(loc, "Expected , delimeter for array.".to_string())
                 }
             );
@@ -2109,7 +2164,7 @@ fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPar
             reducer
         );
 
-        ret list
+        ret ElementList(list)
     }
 
 }
