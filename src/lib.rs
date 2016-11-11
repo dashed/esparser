@@ -2258,6 +2258,8 @@ fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
         token(b'{');
         let delim_left = common_delim();
 
+        // TODO: contents
+
         let delim_right = common_delim();
         token(b'}');
 
