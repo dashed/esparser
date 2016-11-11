@@ -2234,9 +2234,11 @@ fn spread_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
 
 // == 12.2.6 Object Initializer ==
 
+struct Initializer(Vec<CommonDelim>, ());
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Initializer
-fn initializer<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
+fn initializer<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, Initializer> {
 
     // validation
     if !(params.is_empty() ||
@@ -2249,12 +2251,11 @@ fn initializer<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPars
 
         token(b'=');
 
-        let delim_1 = common_delim();
+        let delim = common_delim();
 
-        assignment_expression(params);
+        let expr = assignment_expression(params);
 
-        // TODO: token
-        ret {()}
+        ret Initializer(delim, expr)
     }
 }
 
