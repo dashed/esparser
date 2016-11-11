@@ -2751,6 +2751,10 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
     }
 }
 
+// == 13 ECMAScript Language: Statements and Declarations ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-statements-and-declarations
+
 // == 13.2 Block ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-block
@@ -2824,6 +2828,103 @@ fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 // == 13.3.3 Destructuring Binding Patterns ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-destructuring-binding-patterns
+
+enum BindingPattern {
+    ObjectBindingPattern(ObjectBindingPattern),
+    ArrayBindingPattern(ArrayBindingPattern)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BindingPattern
+fn binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingPattern> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of binding_pattern");
+    }
+
+    parse!{i;
+
+        let binding =
+            (i -> object_binding_pattern(i, &params).map(|x| BindingPattern::ObjectBindingPattern(x)))
+            <|>
+            (i -> array_binding_pattern(i, &params).map(|x| BindingPattern::ArrayBindingPattern(x)));
+
+        ret binding
+    }
+}
+
+enum ObjectBindingPattern {
+    Empty(Vec<CommonDelim>, Vec<CommonDelim>),
+    BindingPropertyList(BindingPropertyList),
+    BindingPropertyListTrailingComma(BindingPropertyList, Vec<CommonDelim>)
+}
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-ObjectBindingPattern
+fn object_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ObjectBindingPattern> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of object_binding_pattern");
+    }
+
+    #[inline]
+    fn contents<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ObjectBindingPattern> {
+        parse!{i;
+
+            let list = binding_property_list(params);
+
+            let trailing_comma = option(|i| {
+                parse!{i;
+                    let delim = common_delim();
+                    token(b',');
+                    ret Some(delim)
+                }
+            }, None);
+
+            ret {
+                match trailing_comma {
+                    None => ObjectBindingPattern::BindingPropertyList(list),
+                    Some(delims) => ObjectBindingPattern::BindingPropertyListTrailingComma(list, delims)
+                }
+            }
+        }
+    }
+
+    parse!{i;
+
+        token(b'{');
+        let left_delim = common_delim();
+
+        let contents = option(|i| contents(i, &params).map(|x| Some(x)),
+            None);
+
+        let right_delim = common_delim();
+        token(b'}');
+
+        ret {
+            match contents {
+                None => ObjectBindingPattern::Empty(left_delim, right_delim),
+                Some(x) => x
+            }
+        }
+    }
+}
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-ArrayBindingPattern
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingPropertyList
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElementList
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElisionElement
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingProperty
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElement
 
 struct SingleNameBinding(BindingIdentifier, Vec<CommonDelim>, Option<Initializer>);
 
