@@ -2266,6 +2266,21 @@ fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
     }
 }
 
+// TODO: complete
+// http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyDefinitionList
+
+// TODO: complete
+// http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyName
+
+// TODO: complete
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LiteralPropertyName
+
+// TODO: complete
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ComputedPropertyName
+
+// TODO: complete
+// http://www.ecma-international.org/ecma-262/7.0/#prod-CoverInitializedName
+
 struct Initializer(Vec<CommonDelim>, ());
 
 // TODO: test
