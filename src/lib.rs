@@ -1851,8 +1851,7 @@ fn yield_keyword<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierReference
-fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
-    -> ESParseResult<I, IdentifierReference> {
+fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, IdentifierReference> {
 
     if !params.contains(&Parameter::Yield) {
 
@@ -2251,7 +2250,7 @@ fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
     // validation
     if !(params.is_empty() ||
         params.contains(&Parameter::Yield)) {
-        panic!("misuse of array_literal");
+        panic!("misuse of object_literal");
     }
 
     parse!{i;
