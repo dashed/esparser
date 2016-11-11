@@ -385,6 +385,7 @@ fn token<I: U8Input>(i: ESInput<I>, tok: I::Token) -> ESParseResult<I, I::Token>
     )
 }
 
+// TODO: test
 #[inline]
 fn string_till<I: U8Input, F>(input: ESInput<I>, mut stop_at: F) -> ESParseResult<I, String>
     where F: Fn(ESInput<I>) -> ESParseResult<I, ()> {
@@ -2038,7 +2039,8 @@ fn array_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 
 enum ElementListItem {
     Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
-    Item
+    ItemExpression(()),
+    ItemSpread(()),
 }
 
 // TODO: test
@@ -2056,7 +2058,9 @@ fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPar
     #[inline]
     fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
         parse!{i;
+
             let delim_1 = common_delim();
+
             let _or = on_error(
                 |i| token(i, b','),
                 |_err, i| {
@@ -2064,7 +2068,9 @@ fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPar
                     ParseError::Expected(loc, "Expected , delimeter for array.".to_string())
                 }
             );
+
             let delim_2 = common_delim();
+
             ret {
                 accumulator.borrow_mut().push(ElementListItem::Delim(delim_1, delim_2));
                 ()
@@ -2072,16 +2078,25 @@ fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPar
         }
     }
 
-    #[inline]
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
         parse!{i;
 
-            let l = option(elision(), None);
+            let l = option(|i| elision(i).map(|x| Some(x)), None);
 
-            fix me
+            let item = (i -> {
+
+                let mut params = params.clone();
+                params.insert(Parameter::In);
+
+                assignment_expression(i, &params).map(|x| ElementListItem::ItemExpression(x))
+            }) <|>
+            (i -> spread_element(i, &params).map(|x| {
+                let SpreadElement(x) = x;
+                ElementListItem::ItemSpread(x)
+            }));
 
             ret {
-                accumulator.borrow_mut().push(ElementListItem::Item);
+                accumulator.borrow_mut().push(item);
                 ()
             }
         }
@@ -2136,8 +2151,12 @@ fn spread_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
     }
 
     parse!{i;
+
+        // spread operator
         (i -> string(i, b"...").map_err(|_| ParseError::Error));
+
         common_delim();
+
         let expr = (i -> {
             let mut params = params.clone();
             params.insert(Parameter::In);
@@ -2367,7 +2386,6 @@ fn logical_or_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
         }
     }
 
-    #[inline]
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
         parse!{i;
             let rhs = logical_and_expression(params);
