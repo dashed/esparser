@@ -1898,13 +1898,7 @@ fn binding_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
 
         let result = either(i,
             // left
-            |i| parse!{i;
-
-                yield_keyword();
-
-                // TODO: token
-                ret {()}
-            },
+            yield_keyword,
             // right
             identifier
         )
