@@ -1864,7 +1864,6 @@ fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) 
         .bind(|i, result| {
             match result {
                 Either::Left(_) => {
-                    // TODO: fix
                     i.ret(IdentifierReference::Yield)
                 },
                 Either::Right(ident) => {
@@ -1886,9 +1885,14 @@ fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) 
 
 }
 
+enum BindingIdentifier {
+    Identifier(Identifier),
+    Yield
+}
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingIdentifier
-fn binding_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
+fn binding_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingIdentifier> {
 
     if !params.contains(&Parameter::Yield) {
 
@@ -1907,12 +1911,10 @@ fn binding_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
         .bind(|i, result| {
             match result {
                 Either::Left(_) => {
-                    // TODO: fix
-                    i.ret(())
+                    i.ret(BindingIdentifier::Yield)
                 },
-                Either::Right(_) => {
-                    // TODO: fix
-                    i.ret(())
+                Either::Right(ident) => {
+                    i.ret(BindingIdentifier::Identifier(ident))
                 }
             }
         });
@@ -1924,7 +1926,9 @@ fn binding_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
         panic!("misuse of binding_identifier");
     }
 
-    identifier(i).map(|_| ())
+    identifier(i).map(|ident| {
+        BindingIdentifier::Identifier(ident)
+    })
 
 }
 
@@ -2785,6 +2789,8 @@ fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 // == 13.3.3 Destructuring Binding Patterns ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-destructuring-binding-patterns
+
+
 
 // == 14 ECMAScript Language: Functions and Classes ==
 //
