@@ -2319,8 +2319,71 @@ fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
     }
 }
 
-// TODO: complete
+struct PropertyDefinitionList(Vec<PropertyDefinitionListItem>);
+
+enum PropertyDefinitionListItem {
+    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
+    PropertyDefinition(PropertyDefinition)
+}
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyDefinitionList
+fn property_definition_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, PropertyDefinitionList> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of property_definition_list");
+    }
+
+    type Accumulator = Rc<RefCell<Vec<PropertyDefinitionListItem>>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            on_error(
+                |i| token(i, b','),
+                |_err, i| {
+                    let loc = i.position();
+                    // TODO: proper err message?
+                    ParseError::Expected(loc, "Expected , here.".to_string())
+                }
+            );
+
+            let delim_2 = common_delim();
+
+            ret {
+                accumulator.borrow_mut().push(PropertyDefinitionListItem::Delim(delim_1, delim_2));
+                ()
+            }
+        }
+    }
+
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let item = property_definition(&params);
+
+            ret {
+                accumulator.borrow_mut().push(PropertyDefinitionListItem::PropertyDefinition(item));
+                ()
+            }
+        }
+    };
+
+    parse!{i;
+
+        let list = parse_list(
+            delimiter,
+            reducer
+        );
+
+        ret PropertyDefinitionList(list)
+    }
+}
+
 
 enum PropertyDefinition {
     IdentifierReference(IdentifierReference),
