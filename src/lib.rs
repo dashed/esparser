@@ -373,6 +373,17 @@ fn parse_single_quote_string_test() {
 
 // == parser helpers ==
 
+// TODO: fix this
+// TODO: test for ASI behaviour
+#[inline]
+fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+    parse!{i;
+        // TODO: ASI rule
+        token(b';');
+        ret {()}
+    }
+}
+
 #[inline]
 fn token<I: U8Input>(i: ESInput<I>, tok: I::Token) -> ESParseResult<I, I::Token> {
     on_error(
@@ -2805,13 +2816,10 @@ fn lexical_declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) 
     )
     .bind(|i, result| {
         parse!{i;
-            let delim_1 = common_delim();
+            let delim_1 = common_delim_required();
             let list = binding_list(&params);
             let delim_2 = common_delim();
-
-            // TODO: ASI rule here
-            token(b';');
-
+            semicolon();
             ret {
                 match result {
                     Either::Left(_) => {
@@ -2941,59 +2949,149 @@ fn lexical_binding<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> E
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-variable-statement
 
+struct VariableStatement(Vec<CommonDelim>, BindingList, Vec<CommonDelim>);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableStatement
-fn variable_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+fn variable_statement<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, VariableStatement> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of variable_statement");
+    }
+
+    let mut params = params.clone();
+    params.insert(Parameter::In);
+    let params = params;
+
     parse!{i;
 
-        let _var = on_error(
+        on_error(
             |i| string(i, b"var"),
             |_err, i| {
                 let loc = i.position();
-                ParseError::Expected(loc, "Expected var keyword.".to_string())
+                ParseError::Expected(loc, "Expected 'var' keyword.".to_string())
             }
         );
 
         let delim_1 = common_delim_required();
-
-        // TODO: var declaration list
-        // sep_by(decimal, |i| token(i, b';'))
+        let list = binding_list(&params);
+        let delim_2 = common_delim();
 
         semicolon();
 
-        ret {()}
+        ret VariableStatement(delim_1, list, delim_2)
     }
 }
 
+struct VariableDeclarationList(Vec<VariableDeclarationListItem>);
 
-// http://www.ecma-international.org/ecma-262/7.0/#prod-VariableDeclaration
-fn variable_declaration<I: U8Input>(i: ESInput<I>, maybe_params: &Option<Parameter>) -> ESParseResult<I, ()> {
-    match *maybe_params {
-        None => {
-            parse!{i;
-                // TODO: complete
-                ret {()}
-            }
-        },
-        Some(ref params) => {
-            parse!{i;
-                // TODO: complete
-                ret {()}
+enum VariableDeclarationListItem {
+    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
+    VariableDeclaration(VariableDeclaration)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-VariableDeclarationList
+fn variable_declaration_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, VariableDeclarationList> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield) || params.contains(&Parameter::In)) {
+        panic!("misuse of variable_declaration_list");
+    }
+
+    type Accumulator = Rc<RefCell<Vec<VariableDeclarationListItem>>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            on_error(
+                |i| token(i, b','),
+                |_err, i| {
+                    let loc = i.position();
+                    // TODO: proper err message?
+                    ParseError::Expected(loc, "Expected , here.".to_string())
+                }
+            );
+
+            let delim_2 = common_delim();
+
+            ret {
+                accumulator.borrow_mut().push(VariableDeclarationListItem::Delim(delim_1, delim_2));
+                ()
             }
         }
     }
+
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let item = variable_declaration(&params);
+
+            ret {
+                accumulator.borrow_mut().push(VariableDeclarationListItem::VariableDeclaration(item));
+                ()
+            }
+        }
+    };
+
+    parse!{i;
+
+        let list = parse_list(
+            delimiter,
+            reducer
+        );
+
+        ret VariableDeclarationList(list)
+    }
 }
 
-// TODO: fix this
-// TODO: test for ASI behaviour
-#[inline]
-fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
-    parse!{i;
-        // TODO: ASI rule
-        token(b';');
-        ret {()}
+enum VariableDeclaration {
+    BindingIdentifier(BindingIdentifier, Vec<CommonDelim>, Option<Initializer>),
+    BindingPattern(BindingPattern, Vec<CommonDelim>, Initializer)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-VariableDeclaration
+fn variable_declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, VariableDeclaration> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield) || params.contains(&Parameter::In)) {
+        panic!("misuse of variable_declaration");
     }
+
+    let mut binding_params = params.clone();
+    binding_params.remove(&Parameter::In);
+    let binding_params = binding_params;
+
+    either(i,
+        |i| binding_identifier(i, &binding_params), // left
+        |i| binding_pattern(i, &binding_params) // right
+    )
+    .bind(|i, result| {
+        match result {
+            Either::Left(binding_identifier) => {
+                parse!{i;
+
+                    // TODO: tie this to be optional with initializer (below)?
+                    let delim = common_delim();
+
+                    let init = option(|i| initializer(i, &params).map(|x| Some(x)), None);
+                    ret VariableDeclaration::BindingIdentifier(binding_identifier, delim, init)
+                }
+            },
+            Either::Right(binding_pattern) => {
+                parse!{i;
+                    let delim = common_delim();
+                    let init = initializer(&params);
+                    ret VariableDeclaration::BindingPattern(binding_pattern, delim, init)
+                }
+            }
+        }
+    })
 }
 
 // == 13.3.3 Destructuring Binding Patterns ==
