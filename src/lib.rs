@@ -534,7 +534,32 @@ enum CommonDelim {
 //
 // as defined in: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-lexical-grammar
 #[inline]
-fn __common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, CommonDelim> {
+fn __common_delim<I: U8Input>(i: ESInput<I>, parse_line_terminator: bool) -> ESParseResult<I, CommonDelim> {
+
+    if !parse_line_terminator {
+        return on_error(i,
+            |i| -> ESParseResult<I, CommonDelim> {parse!{i;
+                let delim =
+                    (i -> whitespace(i).map(|w| {
+                        let WhiteSpace(w) = w;
+                        CommonDelim::WhiteSpace(w)
+                    })) <|>
+                    // TODO: remove
+                    // (i -> line_terminator(i).map(|w| {
+                    //     let LineTerminator(w) = w;
+                    //     CommonDelim::LineTerminator(w)
+                    // })) <|>
+                    (i -> comment(i).map(|c| CommonDelim::Comment(c)));
+                ret delim
+            }},
+            |_err, i| {
+                let loc = i.position();
+                let reason = "Expected whitespace, or comment.".to_string();
+                ParseError::Expected(loc, reason)
+            }
+        );
+    }
+
     on_error(i,
         |i| -> ESParseResult<I, CommonDelim> {parse!{i;
             let delim =
@@ -559,12 +584,17 @@ fn __common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, CommonDelim> {
 
 #[inline]
 fn common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<CommonDelim>> {
-    many(i, __common_delim)
+    many(i, |i| __common_delim(i, true))
 }
 
 #[inline]
 fn common_delim_required<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<CommonDelim>> {
-    many1(i, __common_delim)
+    many1(i, |i| __common_delim(i, true))
+}
+
+#[inline]
+fn common_delim_no_line_term<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<CommonDelim>> {
+    many(i, |i| __common_delim(i, false))
 }
 
 // == Parameters ==
@@ -2810,10 +2840,7 @@ fn logical_or_expression_test() {
 fn assignment_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::In) ||
-        params.contains(&Parameter::Yield)
-        ) {
+    if !(params.is_empty() || params.contains(&Parameter::In) || params.contains(&Parameter::Yield)) {
         panic!("misuse of assignment_expression");
     }
 
@@ -3194,7 +3221,7 @@ enum ObjectBindingPattern {
 }
 
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-ObjectBindingPattern
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ObjectBindingPattern
 fn object_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ObjectBindingPattern> {
 
     // validation
