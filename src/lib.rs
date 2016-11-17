@@ -2769,9 +2769,56 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
 
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-StatementListItem
 
+
+enum LexicalBinding {
+    BindingIdentifier(BindingIdentifier, Vec<CommonDelim>, Option<Initializer>),
+    BindingPattern(BindingPattern, Vec<CommonDelim>, Initializer)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LexicalBinding
+fn lexical_binding<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, LexicalBinding> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield) || params.contains(&Parameter::In)) {
+        panic!("misuse of lexical_binding");
+    }
+
+    let mut binding_params = params.clone();
+    binding_params.remove(&Parameter::In);
+    let binding_params = binding_params;
+
+    either(i,
+        |i| binding_identifier(i, &binding_params), // left
+        |i| binding_pattern(i, &binding_params) // right
+    )
+    .bind(|i, result| {
+        match result {
+            Either::Left(binding_identifier) => {
+                parse!{i;
+
+                    // TODO: tie this to be optional with initializer (below)?
+                    let delim = common_delim();
+
+                    let init = option(|i| initializer(i, &params).map(|x| Some(x)), None);
+                    ret LexicalBinding::BindingIdentifier(binding_identifier, delim, init)
+                }
+            },
+            Either::Right(binding_pattern) => {
+                parse!{i;
+                    let delim = common_delim();
+                    let init = initializer(&params);
+                    ret LexicalBinding::BindingPattern(binding_pattern, delim, init)
+                }
+            }
+        }
+    })
+}
+
 // == 13.3.2 Variable Statement ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-variable-statement
+
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableStatement
