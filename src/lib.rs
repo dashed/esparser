@@ -2040,7 +2040,8 @@ enum PrimaryExpression {
     This,
     IdentifierReference(IdentifierReference),
     Literal(Literal),
-    ArrayLiteral(ArrayLiteral)
+    ArrayLiteral(ArrayLiteral),
+    ObjectLiteral(ObjectLiteral),
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
@@ -2068,12 +2069,11 @@ fn primary_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
                 .map(|ident_ref| PrimaryExpression::IdentifierReference(ident_ref)))
 
             <|>
-
             (i -> literal(i).map(|literal| PrimaryExpression::Literal(literal)))
-
             <|>
-
-            (i -> array_literal(i, &params).map(|arr_literal| PrimaryExpression::ArrayLiteral(arr_literal)));
+            (i -> array_literal(i, &params).map(|arr_literal| PrimaryExpression::ArrayLiteral(arr_literal)))
+            <|>
+            (i -> object_literal(i, &params).map(|obj_literal| PrimaryExpression::ObjectLiteral(obj_literal)));
 
         ret result
     }
