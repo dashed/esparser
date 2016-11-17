@@ -2777,8 +2777,55 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-let-and-const-declarations
 
+enum LexicalDeclaration {
+    Let(Vec<CommonDelim>, BindingList, Vec<CommonDelim>),
+    Const(Vec<CommonDelim>, BindingList, Vec<CommonDelim>)
+}
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LexicalDeclaration
+fn lexical_declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, LexicalDeclaration> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield) || params.contains(&Parameter::In)) {
+        panic!("misuse of lexical_declaration");
+    }
+
+    // http://www.ecma-international.org/ecma-262/7.0/#prod-LetOrConst
+    on_error(
+        i,
+        |i| either(i,
+            |i| string(i, b"let"), // left
+            |i| string(i, b"const") // right
+        ),
+        |_, i| {
+            let reason = "Expected either 'let' or 'const'.".to_string();
+            ParseError::Expected(i.position(), reason)
+        }
+    )
+    .bind(|i, result| {
+        parse!{i;
+            let delim_1 = common_delim();
+            let list = binding_list(&params);
+            let delim_2 = common_delim();
+
+            // TODO: ASI rule here
+            token(b';');
+
+            ret {
+                match result {
+                    Either::Left(_) => {
+                        LexicalDeclaration::Let(delim_1, list, delim_2)
+                    },
+                    Either::Right(_) => {
+                        LexicalDeclaration::Const(delim_1, list, delim_2)
+                    }
+                }
+            }
+        }
+    })
+
+}
 
 struct BindingList(Vec<BindingListItem>);
 
