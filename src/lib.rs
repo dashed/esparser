@@ -2769,6 +2769,81 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
 
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-StatementListItem
 
+// == Declarations and the Variable Statement ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-declarations-and-the-variable-statement
+
+// == 13.3.1 Let and Const Declarations ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-let-and-const-declarations
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LexicalDeclaration
+
+struct BindingList(Vec<BindingListItem>);
+
+enum BindingListItem {
+    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
+    LexicalBinding(LexicalBinding)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BindingList
+fn binding_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, BindingList> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield) || params.contains(&Parameter::In)) {
+        panic!("misuse of binding_list");
+    }
+
+    type Accumulator = Rc<RefCell<Vec<BindingListItem>>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            on_error(
+                |i| token(i, b','),
+                |_err, i| {
+                    let loc = i.position();
+                    // TODO: proper err message?
+                    ParseError::Expected(loc, "Expected , here.".to_string())
+                }
+            );
+
+            let delim_2 = common_delim();
+
+            ret {
+                accumulator.borrow_mut().push(BindingListItem::Delim(delim_1, delim_2));
+                ()
+            }
+        }
+    }
+
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let item = lexical_binding(&params);
+
+            ret {
+                accumulator.borrow_mut().push(BindingListItem::LexicalBinding(item));
+                ()
+            }
+        }
+    };
+
+    parse!{i;
+
+        let list = parse_list(
+            delimiter,
+            reducer
+        );
+
+        ret BindingList(list)
+    }
+}
 
 enum LexicalBinding {
     BindingIdentifier(BindingIdentifier, Vec<CommonDelim>, Option<Initializer>),
