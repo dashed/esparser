@@ -2322,7 +2322,9 @@ struct ObjectLiteral(/* { (left curly bracket) */ Vec<CommonDelim>, ObjectLitera
     Vec<CommonDelim> /* } (right curly bracket) */);
 
 enum ObjectLiteralContents {
-    FooBar
+    Empty,
+    PropertyDefinitionList(PropertyDefinitionList),
+    PropertyDefinitionListTrailingComma(PropertyDefinitionList, Vec<CommonDelim>)
 }
 
 // TODO: test
@@ -2335,17 +2337,39 @@ fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
         panic!("misuse of object_literal");
     }
 
+    #[inline]
+    fn object_literal_contents<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ObjectLiteralContents> {
+        parse!{i;
+
+            let list = property_definition_list(&params);
+
+            let trailing_comma = option(|i| parse!{i;
+                let delim = common_delim();
+                token(b',');
+
+                ret Some(delim)
+            }, None);
+
+            ret {
+                match trailing_comma {
+                    None => ObjectLiteralContents::PropertyDefinitionList(list),
+                    Some(delim) => ObjectLiteralContents::PropertyDefinitionListTrailingComma(list, delim)
+                }
+            }
+        }
+    }
+
     parse!{i;
 
         token(b'{');
         let delim_left = common_delim();
 
-        // TODO: contents
+        let contents = option(|i| object_literal_contents(i, &params), ObjectLiteralContents::Empty);
 
         let delim_right = common_delim();
         token(b'}');
 
-        ret ObjectLiteral(delim_left, ObjectLiteralContents::FooBar, delim_right)
+        ret ObjectLiteral(delim_left, contents, delim_right)
     }
 }
 
