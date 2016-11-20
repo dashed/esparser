@@ -2952,6 +2952,36 @@ fn expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParse
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-statements-and-declarations
 
+enum Statement {
+    // BlockStatement(BlockStatement),
+    VariableStatement(VariableStatement),
+    EmptyStatement(EmptyStatement)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Statement
+fn statement<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, Statement> {
+
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield) ||
+        params.contains(&Parameter::Return)) {
+        panic!("misuse of statement");
+    }
+
+    let mut yield_params = params.clone();
+    yield_params.remove(&Parameter::Return);
+    let yield_params = yield_params;
+
+    parse!{i;
+
+        let x = (i -> variable_statement(i, &yield_params).map(|x| Statement::VariableStatement(x)))
+        <|>
+        (i -> empty_statement(i).map(|x| Statement::EmptyStatement(x)));
+
+        ret x
+    }
+}
+
 // == 13.2 Block ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-block
