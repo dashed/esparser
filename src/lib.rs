@@ -2878,6 +2878,76 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
     }
 }
 
+// == 12.16 Comma Operator ( , ) ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-comma-operator
+
+struct ExpressionList(Vec<ExpressionListItem>);
+
+enum ExpressionListItem {
+    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
+    AssignmentExpression(()),
+}
+
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Expression
+fn expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ExpressionList> {
+
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield) ||
+        params.contains(&Parameter::In)) {
+        panic!("misuse of expression");
+    }
+
+    type Accumulator = Rc<RefCell<Vec<ExpressionListItem>>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            on_error(
+                |i| token(i, b','),
+                |_err, i| {
+                    let loc = i.position();
+                    // TODO: proper err message?
+                    ParseError::Expected(loc, "Expected , here.".to_string())
+                }
+            );
+
+            let delim_2 = common_delim();
+
+            ret {
+                accumulator.borrow_mut().push(ExpressionListItem::Delim(delim_1, delim_2));
+                ()
+            }
+        }
+    }
+
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let item = assignment_expression(&params);
+
+            ret {
+                accumulator.borrow_mut().push(ExpressionListItem::AssignmentExpression(item));
+                ()
+            }
+        }
+    };
+
+    parse!{i;
+
+        let list = parse_list(
+            delimiter,
+            reducer
+        );
+
+        ret ExpressionList(list)
+    }
+
+}
+
 // == 13 ECMAScript Language: Statements and Declarations ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-statements-and-declarations
