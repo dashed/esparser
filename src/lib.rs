@@ -3790,6 +3790,18 @@ fn binding_rest_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) 
     }
 }
 
+// == 13.4 Empty Statement ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-empty-statement
+
+struct EmptyStatement;
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-EmptyStatement
+fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement> {
+    token(i, b';').map(|x| EmptyStatement)
+}
+
 // == 14 ECMAScript Language: Functions and Classes ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-functions-and-classes
