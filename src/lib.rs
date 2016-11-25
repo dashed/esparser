@@ -2969,7 +2969,7 @@ fn statement<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParse
     }
 
     let mut yield_params = params.clone();
-    yield_params.remove(&Parameter::Return);
+    yield_params.remove(&Parameter::Yield);
     let yield_params = yield_params;
 
     parse!{i;
@@ -2978,21 +2978,155 @@ fn statement<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParse
         <|>
         (i -> empty_statement(i).map(|x| Statement::EmptyStatement(x)));
 
+        // TODO: more statements
+
         ret x
     }
 }
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-Declaration
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-HoistableDeclaration
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BreakableStatement
 
 // == 13.2 Block ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-block
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BlockStatement
+struct BlockStatement(Block);
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-Block
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BlockStatement
+fn block_statement<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, BlockStatement> {
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-StatementList
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield) ||
+        params.contains(&Parameter::Return)) {
+        panic!("misuse of block_statement");
+    }
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-StatementListItem
+    block(i, params).map(|x| BlockStatement(x))
+}
+
+struct Block(Vec<CommonDelim>, Option<StatementList>, Vec<CommonDelim>);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#sec-block
+fn block<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, Block> {
+
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield) ||
+        params.contains(&Parameter::Return)) {
+        panic!("misuse of block");
+    }
+
+    parse!{i;
+
+        token(b'{');
+        let delim_left = common_delim();
+
+        let contents = option(|i| statement_list(i, params).map(|x| Some(x)), None);
+
+        let delim_right = common_delim();
+        token(b'}');
+
+        ret Block(delim_left, contents, delim_right)
+    }
+}
+
+struct StatementList(Vec<StatementListItemWrap>);
+
+enum StatementListItemWrap {
+    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
+    StatementListItem(StatementListItem)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-StatementList
+fn statement_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, StatementList> {
+
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield) ||
+        params.contains(&Parameter::Return)) {
+        panic!("misuse of statement_list");
+    }
+
+    type Accumulator = Rc<RefCell<Vec<StatementListItemWrap>>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            on_error(
+                |i| token(i, b','),
+                |_err, i| {
+                    let loc = i.position();
+                    // TODO: proper err message?
+                    ParseError::Expected(loc, "Expected , here.".to_string())
+                }
+            );
+
+            let delim_2 = common_delim();
+
+            ret {
+                accumulator.borrow_mut().push(StatementListItemWrap::Delim(delim_1, delim_2));
+                ()
+            }
+        }
+    }
+
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let item = statement_list_item(&params);
+
+            ret {
+                accumulator.borrow_mut().push(StatementListItemWrap::StatementListItem(item));
+                ()
+            }
+        }
+    };
+
+    parse!{i;
+
+        let list = parse_list(
+            delimiter,
+            reducer
+        );
+
+        ret StatementList(list)
+    }
+}
+
+enum StatementListItem {
+    Statement(Statement),
+    Declaration(Declaration)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-StatementListItem
+fn statement_list_item<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, StatementListItem> {
+
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield) ||
+        params.contains(&Parameter::Return)) {
+        panic!("misuse of statement_list_item");
+    }
+
+    let mut yield_params = params.clone();
+    yield_params.remove(&Parameter::Yield);
+    let yield_params = yield_params;
+
+    parse!{i;
+
+        let item = (i -> statement(i, &params).map(|x| StatementListItem::Statement(x))) <|>
+        (i -> declaration(i, &yield_params).map(|x| StatementListItem::Declaration(x)));
+
+        ret item
+    }
+}
+
 
 // == Declarations and the Variable Statement ==
 //
