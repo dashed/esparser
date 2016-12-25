@@ -2,7 +2,7 @@
 #![feature(unicode)]
 // == crates ==
 #[macro_use] extern crate chomp;
-#[macro_use] extern crate quick_error;
+#[macro_use] extern crate error_chain;
 extern crate enum_set;
 
 // == rust std imports ==
@@ -26,6 +26,11 @@ use chomp::primitives::IntoInner;
 
 use enum_set::{EnumSet, CLike};
 
+// == local imports ==
+
+mod errors;
+use errors::*;
+
 /*
 
 Reference:
@@ -44,33 +49,9 @@ Bookmark:
  */
 
 type ESInput<I> = InputPosition<I, CurrentPosition>;
-type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ParseError>;
+type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorKind>;
 
 type U8Error = ChompError<u8>;
-
-// == errors ==
-
-quick_error! {
-    #[derive(Debug)]
-    pub enum ParseError {
-        Expected(loc: CurrentPosition, descr: String) {
-            description(descr)
-            display("Line {}, Column {}: {}", loc.line(), loc.col(), descr)
-        }
-        Error {
-            // TODO: fix
-            description("Error with no description occured")
-        }
-    }
-}
-
-// TODO: remove
-// impl From<chomp::parsers::Error<u8>> for ParseError {
-//     fn from(_err: chomp::parsers::Error<u8>) -> Self {
-//         // TODO: change this later
-//         ParseError::Error
-//     }
-// }
 
 // == helpers ==
 
@@ -391,7 +372,7 @@ fn token<I: U8Input>(i: ESInput<I>, tok: I::Token) -> ESParseResult<I, I::Token>
         |i| chomp::parsers::token(i, tok),
         |_err, i| {
             let reason = format!("Expected {}", tok);
-            ParseError::Expected(i.position(), reason)
+            ErrorKind::ParseError(i.position(), reason)
         }
     )
 }
@@ -424,13 +405,14 @@ fn parse_utf8_char_of_bytes<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParse
     on_error(i,
         |i| {
             look_ahead(i, |i| string(i, needle))
-                .map_err(|_| ParseError::Error)
+                // TODO: proper message
+                .map_err(|_| ErrorKind::Msg("".into()))
                 .then(parse_utf8_char)
         },
         |_err, i| {
             let loc = i.position();
             let reason = "Expected utf8 character.".to_string();
-            ParseError::Expected(loc, reason)
+            ErrorKind::ParseError(loc, reason)
         }
     )
 }
@@ -475,7 +457,7 @@ fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
 
     let loc = i.position();
     let reason = "Expected utf8 character.".to_string();
-    return i.err(ParseError::Expected(loc, reason));
+    return i.err(ErrorKind::ParseError(loc, reason));
 
 }
 
@@ -555,7 +537,7 @@ fn __common_delim<I: U8Input>(i: ESInput<I>, parse_line_terminator: bool) -> ESP
             |_err, i| {
                 let loc = i.position();
                 let reason = "Expected whitespace, or comment.".to_string();
-                ParseError::Expected(loc, reason)
+                ErrorKind::ParseError(loc, reason)
             }
         );
     }
@@ -577,7 +559,7 @@ fn __common_delim<I: U8Input>(i: ESInput<I>, parse_line_terminator: bool) -> ESP
         |_err, i| {
             let loc = i.position();
             let reason = "Expected whitespace, line terminator, or comment.".to_string();
-            ParseError::Expected(loc, reason)
+            ErrorKind::ParseError(loc, reason)
         }
     )
 }
@@ -636,7 +618,7 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
                 } else {
                     let loc = i.position();
                     let reason = "Expected whitespace.".to_string();
-                    i.err(ParseError::Expected(loc, reason))
+                    i.err(ErrorKind::ParseError(loc, reason))
                 }
             })
     }
@@ -657,7 +639,7 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
             ret WhiteSpace(whitespace_char)
         }},
         |_, i| {
-            ParseError::Expected(i.position(), "Expected whitespace.".to_string())
+            ErrorKind::ParseError(i.position(), "Expected whitespace.".to_string())
         }
     )
 
@@ -687,7 +669,7 @@ fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTerminator
         |_err, i| {
             let loc = i.position();
             let reason = "Expected utf8 character.".to_string();
-            ParseError::Expected(loc, reason)
+            ErrorKind::ParseError(loc, reason)
         }
     )
 }
@@ -731,7 +713,7 @@ fn line_terminator_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTermin
         |_err, i| {
             let loc = i.position();
             let reason = "Expected linte terminator sequence.".to_string();
-            ParseError::Expected(loc, reason)
+            ErrorKind::ParseError(loc, reason)
         }
     )
 }
@@ -763,7 +745,7 @@ fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Comment> {
                 |i| string(i, END).map(|_| ()),
                 |_err, i| {
                     let loc = i.position();
-                    ParseError::Expected(loc, "Expected */.".to_string())
+                    ErrorKind::ParseError(loc, "Expected */.".to_string())
                 }
             )
         }
@@ -776,7 +758,7 @@ fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Comment> {
                 |i| string(i, b"/*"),
                 |_err, i| {
                     let loc = i.position();
-                    ParseError::Expected(loc, "Expected /* for multi-line comment.".to_string())
+                    ErrorKind::ParseError(loc, "Expected /* for multi-line comment.".to_string())
                 }
             );
             let contents = string_till(stop_at);
@@ -799,7 +781,7 @@ fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Comment> {
                 |i| string(i, b"//"),
                 |_err, i| {
                     let loc = i.position();
-                    ParseError::Expected(loc, "Expected // for single-line comment.".to_string())
+                    ErrorKind::ParseError(loc, "Expected // for single-line comment.".to_string())
                 }
             );
             let contents = string_till(stop_at);
@@ -844,7 +826,7 @@ fn identifier_name<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierName
         },
         |_err, i| {
             let reason = format!("Invalid identifier.");
-            ParseError::Expected(i.position(), reason)
+            ErrorKind::ParseError(i.position(), reason)
         }
     )
 
@@ -904,7 +886,7 @@ fn unicode_id_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
                 // TODO: better error
                 let loc = i.position();
                 let reason = format!("Invalid utf8 character.");
-                i.err(ParseError::Expected(loc, reason))
+                i.err(ErrorKind::ParseError(loc, reason))
             }
         })
 }
@@ -948,7 +930,7 @@ fn unicode_id_continue<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
                 // TODO: better error
                 let loc = i.position();
                 let reason = format!("Invalid utf8 character: `{}`", c);
-                i.err(ParseError::Expected(loc, reason))
+                i.err(ErrorKind::ParseError(loc, reason))
             }
 
         })
@@ -1018,7 +1000,7 @@ fn reserved_word<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
                     match result {
                         Either::Left(c) => {
                             // NOTE: Reserved keyword must not contain escaped characters.
-                            i.err(ParseError::Error)
+                            i.err(ErrorKind::Msg("Reserved keyword must not contain escaped characters.".into()))
                         },
                         Either::Right(c) => {
 
@@ -1030,7 +1012,7 @@ fn reserved_word<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
                                 current_needle = current_needle.split_at(bytes.len()).1;
                                 i.ret(Either::Right(c))
                             } else {
-                                i.err(ParseError::Error)
+                                i.err(ErrorKind::Msg("".into()))
                             }
                         }
                     }
@@ -1070,7 +1052,7 @@ fn reserved_word<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
                 },
                 |_, i| {
                     let reason = format!("Expected keyword {}.", std::str::from_utf8(needle).unwrap());
-                    ParseError::Expected(i.position(), reason)
+                    ErrorKind::ParseError(i.position(), reason)
                 }
             )
         })
@@ -1195,7 +1177,7 @@ fn null_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Null> {
         |i| string(i, b"null").map(|_| Null),
         |_err, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected null keyword.".to_string())
+            ErrorKind::ParseError(loc, "Expected null keyword.".to_string())
         }
     )
 }
@@ -1236,7 +1218,7 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
         },
         |_err, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected boolean literal.".to_string())
+            ErrorKind::ParseError(loc, "Expected boolean literal.".to_string())
         }
     )
 }
@@ -1374,7 +1356,7 @@ fn decimal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalDigits> 
         },
         |_, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected decimal digit (0 or 9).".to_string())
+            ErrorKind::ParseError(loc, "Expected decimal digit (0 or 9).".to_string())
         }
     )
 }
@@ -1393,7 +1375,7 @@ fn decimal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
         |i| satisfy(i, is_decimal_digit),
         |_err, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected decimal digit (0 to 9).".to_string())
+            ErrorKind::ParseError(loc, "Expected decimal digit (0 to 9).".to_string())
         }
     )
 }
@@ -1412,7 +1394,7 @@ fn non_zero_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
         |i| satisfy(i, is_non_zero_digit),
         |_err, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected non-zero digit (1 to 9).".to_string())
+            ErrorKind::ParseError(loc, "Expected non-zero digit (1 to 9).".to_string())
         }
     )
 }
@@ -1448,10 +1430,12 @@ fn signed_integer<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SignedInteger> 
 
     parse!{i;
 
-        let prefix = option(|i| parse!{i;
-            let signed = (i -> token(i, b'+').map(|_| Signed::Positive)) <|>
-            (i -> token(i, b'-').map(|_| Signed::Negative));
-            ret signed
+        let prefix = option(|i| -> ESParseResult<I, Signed> {
+            parse!{i;
+                let signed = (i -> token(i, b'+').map(|_| Signed::Positive)) <|>
+                (i -> token(i, b'-').map(|_| Signed::Negative));
+                ret signed
+            }
         }, Signed::Unsigned);
 
         let result = decimal_digits();
@@ -1503,7 +1487,7 @@ fn binary_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryDigits> {
         },
         |_, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected binary digit (0 or 1).".to_string())
+            ErrorKind::ParseError(loc, "Expected binary digit (0 or 1).".to_string())
         }
     )
 }
@@ -1523,7 +1507,7 @@ fn binary_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
         |i| satisfy(i, is_binary_digit),
         |_err, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected binary digit (0 or 1).".to_string())
+            ErrorKind::ParseError(loc, "Expected binary digit (0 or 1).".to_string())
         }
     )
 
@@ -1566,7 +1550,7 @@ fn octal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalDigits> {
         },
         |_, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected octal digit (0 to 7).".to_string())
+            ErrorKind::ParseError(loc, "Expected octal digit (0 to 7).".to_string())
         }
     )
 }
@@ -1586,7 +1570,7 @@ fn octal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
         |i| satisfy(i, is_octal_digit),
         |_err, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected octal digit (0 to 7).".to_string())
+            ErrorKind::ParseError(loc, "Expected octal digit (0 to 7).".to_string())
         }
     )
 
@@ -1628,7 +1612,7 @@ fn hex_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexDigits> {
         },
         |_, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected hex digit.".to_string())
+            ErrorKind::ParseError(loc, "Expected hex digit.".to_string())
         }
     )
 }
@@ -1686,7 +1670,7 @@ fn hex_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
         |i| satisfy(i, is_hex_digit),
         |_err, i| {
             let loc = i.position();
-            ParseError::Expected(loc, "Expected hex digit (0 to F).".to_string())
+            ErrorKind::ParseError(loc, "Expected hex digit (0 to F).".to_string())
         }
     )
 }
@@ -1740,7 +1724,7 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
                 },
                 Either::Right(c) => {
                     if c == (quote_type as char) {
-                        i.err(ParseError::Error)
+                        i.err(ErrorKind::Msg("End of string reached.".into()))
                     } else {
                         i.ret(c.to_string())
                     }
@@ -1814,7 +1798,7 @@ fn unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
                         sequence.0.len() > 6) ||
                     sequence.mathematical_value() > 1114111 /* 10ffff */ {
 
-                    let err_val = ParseError::Expected(i.position(),
+                    let err_val = ErrorKind::ParseError(i.position(),
                         "Invalid unicode escape sequence. Expect to be less or equal to 10ffff.".to_string());
 
                     i.err(err_val)
@@ -1885,7 +1869,7 @@ fn yield_keyword<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
         |i| string(i, b"yield"),
         |_err, i| {
             let reason = format!("Expected yield keyword.");
-            ParseError::Expected(i.position(), reason)
+            ErrorKind::ParseError(i.position(), reason)
         }
     )
 }
@@ -2022,7 +2006,7 @@ fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
             Either::Left(_) => {
                 let loc = i.position();
                 let reason = format!("Reserved keyword may not be used as an identifier.");
-                i.err(ParseError::Expected(loc, reason))
+                i.err(ErrorKind::ParseError(loc, reason))
             },
             Either::Right(name) => {
                 let IdentifierName(name) = name;
@@ -2060,7 +2044,7 @@ fn primary_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
                 |i| string(i, b"this").map(|_| PrimaryExpression::This),
             |_err, i| {
                 let reason = format!("Expected this keyword.");
-                ParseError::Expected(i.position(), reason)
+                ErrorKind::ParseError(i.position(), reason)
             })
 
             <|>
@@ -2135,24 +2119,25 @@ fn array_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPa
 
             let list = element_list(&params);
 
-            let maybe_end = option(|i| parse!{i;
+            let maybe_end = option(|i| -> ESParseResult<I, Option<(_, _, _)>> {
+                parse!{i;
 
-                let delim_1 = common_delim();
+                    let delim_1 = common_delim();
 
-                on_error(
-                    |i| token(i, b','),
-                    |_err, i| {
-                        let loc = i.position();
-                        // TODO: proper err message?
-                        ParseError::Expected(loc, "Expected , delimeter here.".to_string())
-                    }
-                );
+                    on_error(
+                        |i| token(i, b','),
+                        |_err, i| {
+                            let loc = i.position();
+                            // TODO: proper err message?
+                            ErrorKind::ParseError(loc, "Expected , delimeter here.".to_string())
+                        }
+                    );
 
-                let delim_2 = common_delim();
-                let elision = elision();
+                    let delim_2 = common_delim();
+                    let elision = elision();
 
-                ret Some((delim_1, delim_2, elision))
-
+                    ret Some((delim_1, delim_2, elision))
+                }
             }, None);
 
             ret {
@@ -2211,7 +2196,7 @@ fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPar
                 |_err, i| {
                     let loc = i.position();
                     // TODO: proper err message?
-                    ParseError::Expected(loc, "Expected , delimeter for array.".to_string())
+                    ErrorKind::ParseError(loc, "Expected , delimeter for array.".to_string())
                 }
             );
 
@@ -2274,10 +2259,12 @@ fn elision<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Elision> {
 
         token(b',');
 
-        let list: Vec<ElisionItem> = many(|i| parse!{i;
-            let l = (i -> common_delim(i).map(|c| ElisionItem::CommonDelim(c))) <|>
-            (i -> token(i, b',').map(|_| ElisionItem::Comma));
-            ret l
+        let list: Vec<ElisionItem> = many(|i| -> ESParseResult<I, ElisionItem> {
+            parse!{i;
+                let l = (i -> common_delim(i).map(|c| ElisionItem::CommonDelim(c))) <|>
+                (i -> token(i, b',').map(|_| ElisionItem::Comma));
+                ret l
+            }
         });
 
         ret Elision(list)
@@ -2299,7 +2286,7 @@ fn spread_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
     parse!{i;
 
         // spread operator
-        (i -> string(i, b"...").map_err(|_| ParseError::Error));
+        (i -> string(i, b"...").map_err(|_| ErrorKind::Msg("Expected spread operator.".into())));
 
         common_delim();
 
@@ -2343,11 +2330,13 @@ fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
 
             let list = property_definition_list(&params);
 
-            let trailing_comma = option(|i| parse!{i;
-                let delim = common_delim();
-                token(b',');
+            let trailing_comma = option(|i| -> ESParseResult<I, _> {
+                parse!{i;
+                    let delim = common_delim();
+                    token(b',');
 
-                ret Some(delim)
+                    ret Some(delim)
+                }
             }, None);
 
             ret {
@@ -2402,7 +2391,7 @@ fn property_definition_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Paramet
                 |_err, i| {
                     let loc = i.position();
                     // TODO: proper err message?
-                    ParseError::Expected(loc, "Expected , here.".to_string())
+                    ErrorKind::ParseError(loc, "Expected , here.".to_string())
                 }
             );
 
@@ -2806,7 +2795,7 @@ fn logical_or_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
                 |i| string(i, b"||"),
                 |_err, i| {
                     let loc = i.position();
-                    ParseError::Expected(loc, "Expected || operator.".to_string())
+                    ErrorKind::ParseError(loc, "Expected || operator.".to_string())
                 }
             );
             let delim_2 = common_delim();
@@ -2911,7 +2900,7 @@ fn expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParse
                 |_err, i| {
                     let loc = i.position();
                     // TODO: proper err message?
-                    ParseError::Expected(loc, "Expected , here.".to_string())
+                    ErrorKind::ParseError(loc, "Expected , here.".to_string())
                 }
             );
 
@@ -2984,7 +2973,32 @@ fn statement<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParse
     }
 }
 
+enum Declaration {
+    // TODO: complete
+    Foo
+}
+
+// TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-Declaration
+fn declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, Declaration> {
+
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of declaration");
+    }
+
+    parse!{i;
+
+
+
+        // TODO: complete
+
+        ret {
+            Declaration::Foo
+        }
+    }
+}
+
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-HoistableDeclaration
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BreakableStatement
 
@@ -3063,7 +3077,7 @@ fn statement_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ES
                 |_err, i| {
                     let loc = i.position();
                     // TODO: proper err message?
-                    ParseError::Expected(loc, "Expected , here.".to_string())
+                    ErrorKind::ParseError(loc, "Expected , here.".to_string())
                 }
             );
 
@@ -3159,7 +3173,7 @@ fn lexical_declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) 
         ),
         |_, i| {
             let reason = "Expected either 'let' or 'const'.".to_string();
-            ParseError::Expected(i.position(), reason)
+            ErrorKind::ParseError(i.position(), reason)
         }
     )
     .bind(|i, result| {
@@ -3212,7 +3226,7 @@ fn binding_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESPa
                 |_err, i| {
                     let loc = i.position();
                     // TODO: proper err message?
-                    ParseError::Expected(loc, "Expected , here.".to_string())
+                    ErrorKind::ParseError(loc, "Expected , here.".to_string())
                 }
             );
 
@@ -3318,7 +3332,7 @@ fn variable_statement<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
             |i| string(i, b"var"),
             |_err, i| {
                 let loc = i.position();
-                ParseError::Expected(loc, "Expected 'var' keyword.".to_string())
+                ErrorKind::ParseError(loc, "Expected 'var' keyword.".to_string())
             }
         );
 
@@ -3361,7 +3375,7 @@ fn variable_declaration_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parame
                 |_err, i| {
                     let loc = i.position();
                     // TODO: proper err message?
-                    ParseError::Expected(loc, "Expected , here.".to_string())
+                    ErrorKind::ParseError(loc, "Expected , here.".to_string())
                 }
             );
 
@@ -3494,7 +3508,7 @@ fn object_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>
 
             let list = binding_property_list(params);
 
-            let trailing_comma = option(|i| {
+            let trailing_comma = option(|i| -> ESParseResult<I, _> {
                 parse!{i;
                     let delim = common_delim();
                     token(b',');
@@ -3585,25 +3599,26 @@ fn array_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
 
             let list = binding_element_list(&params);
 
-            let maybe_end = option(|i| parse!{i;
+            let maybe_end = option(|i| -> ESParseResult<I, _> {
+                parse!{i;
 
-                let delim_1 = common_delim();
+                    let delim_1 = common_delim();
 
-                on_error(
-                    |i| token(i, b','),
-                    |_err, i| {
-                        let loc = i.position();
-                        // TODO: proper err message?
-                        ParseError::Expected(loc, "Expected , delimeter here.".to_string())
-                    }
-                );
+                    on_error(
+                        |i| token(i, b','),
+                        |_err, i| {
+                            let loc = i.position();
+                            // TODO: proper err message?
+                            ErrorKind::ParseError(loc, "Expected , delimeter here.".to_string())
+                        }
+                    );
 
-                let delim_2 = common_delim();
+                    let delim_2 = common_delim();
 
-                let (elision, delim_3, rest) = array_binding_pattern_rest(&params);
+                    let (elision, delim_3, rest) = array_binding_pattern_rest(&params);
 
-                ret Some((delim_1, delim_2, elision, delim_3, rest))
-
+                    ret Some((delim_1, delim_2, elision, delim_3, rest))
+                }
             }, None);
 
             ret {
@@ -3664,7 +3679,7 @@ fn binding_property_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
                 |_err, i| {
                     let loc = i.position();
                     // TODO: proper err message?
-                    ParseError::Expected(loc, "Expected , here.".to_string())
+                    ErrorKind::ParseError(loc, "Expected , here.".to_string())
                 }
             );
 
@@ -3730,7 +3745,7 @@ fn binding_element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) 
                 |_err, i| {
                     let loc = i.position();
                     // TODO: proper err message?
-                    ParseError::Expected(loc, "Expected , here.".to_string())
+                    ErrorKind::ParseError(loc, "Expected , here.".to_string())
                 }
             );
 
@@ -3935,7 +3950,7 @@ fn binding_rest_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) 
             |_err, i| {
                 let loc = i.position();
                 // TODO: proper err message?
-                ParseError::Expected(loc, "Expected ... here.".to_string())
+                ErrorKind::ParseError(loc, "Expected ... here.".to_string())
             }
         );
 
@@ -4024,7 +4039,7 @@ fn method_definition<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> 
                 |i| string(i, b"get"),
                 |_err, i| {
                     let loc = i.position();
-                    ParseError::Expected(loc, "Expected 'get' keyword.".to_string())
+                    ErrorKind::ParseError(loc, "Expected 'get' keyword.".to_string())
                 }
             );
 
@@ -4072,7 +4087,7 @@ fn method_definition<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> 
 //             |i| string(i, b"var"),
 //             |_err, i| {
 //                 let loc = i.position();
-//                 ParseError::Expected(loc, "Expected var keyword.".to_string())
+//                 ErrorKind::ParseError(loc, "Expected var keyword.".to_string())
 //             }
 //         );
 
@@ -4080,7 +4095,7 @@ fn method_definition<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> 
 //         //     string(i, b"var")
 //         //         .map_err2(|_, i| {
 //         //             let loc = i.position();
-//         //             ParseError::Expected(loc, "Expected var here.")
+//         //             ErrorKind::ParseError(loc, "Expected var here.")
 //         //         })
 //         // });
 
@@ -4103,7 +4118,7 @@ fn method_definition<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> 
 //             common_delim(i)
 //             .map_err2(|_, i| {
 //                 let loc = i.position();
-//                 ParseError::Expected(loc, "Expected var here.".to_string())
+//                 ErrorKind::ParseError(loc, "Expected var here.".to_string())
 //             })
 //         });
 //         some_parser();
