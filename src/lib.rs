@@ -4154,6 +4154,74 @@ fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-function-definitions
 
+struct FormalsList(Vec<FormalsListItem>);
+
+enum FormalsListItem {
+    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
+    FormalParameter(BindingElement)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-FormalsList
+fn formals_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FormalsList> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of formals_list");
+    }
+
+    type Accumulator = Rc<RefCell<Vec<FormalsListItem>>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            on_error(
+                |i| token(i, b','),
+                |i| {
+                    let loc = i.position();
+                    // TODO: proper err message?
+                    ErrorLocation::new(loc, "Expected , delimeter.".to_string())
+                }
+            );
+
+            let delim_2 = common_delim();
+
+            ret {
+                accumulator.borrow_mut().push(FormalsListItem::Delim(delim_1, delim_2));
+                ()
+            }
+        }
+    }
+
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let l = option(|i| elision(i).map(|x| Some(x)), None);
+
+            let item = formal_parameter(&params);
+
+            ret {
+                accumulator.borrow_mut().push(FormalsListItem::FormalParameter(item));
+                ()
+            }
+        }
+    };
+
+    parse!{i;
+
+        let list = parse_list(
+            delimiter,
+            reducer
+        );
+
+        ret FormalsList(list)
+    }
+}
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionRestParameter
 fn function_rest_parameter<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingRestElement> {
