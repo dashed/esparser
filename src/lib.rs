@@ -4157,9 +4157,9 @@ fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement
 // TODO: complete
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionBody
 
-struct FunctionStatementList;
+struct FunctionStatementList(Option<StatementList>);
 
-// TODO: complete
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionStatementList
 fn function_statement_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FunctionStatementList> {
 
@@ -4169,9 +4169,14 @@ fn function_statement_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter
         panic!("misuse of function_statement_list");
     }
 
+    let mut params = params.clone();
+    params.insert(Parameter::Return);
+
     parse!{i;
 
-        ret FunctionStatementList
+        let maybe_list = option(|i| statement_list(i, &params).map(|x| Some(x)), None);
+
+        ret FunctionStatementList(maybe_list)
     }
 }
 
