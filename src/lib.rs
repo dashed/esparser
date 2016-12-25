@@ -79,11 +79,24 @@ impl ErrorChain {
         }
     }
 
+    fn iter(&self) -> ErrorChainIter {
+        ErrorChainIter(Some(self))
+    }
+
 }
 
 impl ::std::error::Error for ErrorChain {
     fn description(&self) -> &str {
         self.current.description()
+    }
+
+    fn cause(&self) -> Option<&::std::error::Error> {
+        match self.next {
+            Some(ref c) => Some(&**c),
+            None => {
+                self.current.cause()
+            }
+        }
     }
 }
 
@@ -138,6 +151,22 @@ impl ::std::convert::From<String> for ErrorChain {
         ErrorChain {
             current: Box::new(ErrorMsg(err)),
             next: None
+        }
+    }
+}
+
+struct ErrorChainIter<'a>(pub Option<&'a ::std::error::Error>);
+
+impl<'a> Iterator for ErrorChainIter<'a> {
+    type Item = &'a ::std::error::Error;
+
+    fn next<'b>(&'b mut self) -> Option<&'a ::std::error::Error> {
+        match self.0.take() {
+            Some(e) => {
+                self.0 = e.cause();
+                Some(e)
+            }
+            None => None,
         }
     }
 }
