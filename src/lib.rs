@@ -4155,6 +4155,19 @@ fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement
 // http://www.ecma-international.org/ecma-262/7.0/#sec-function-definitions
 
 // TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionRestParameter
+fn function_rest_parameter<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingRestElement> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of function_rest_parameter");
+    }
+
+    binding_rest_element(i, params)
+}
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FormalParameter
 fn formal_parameter<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingElement> {
 
