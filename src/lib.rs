@@ -4154,8 +4154,18 @@ fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-function-definitions
 
-// TODO: complete
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionBody
+fn function_body<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FunctionStatementList> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of function_body");
+    }
+
+    function_statement_list(i, params)
+}
 
 struct FunctionStatementList(Option<StatementList>);
 
