@@ -459,7 +459,9 @@ fn parse_single_quote_string_reducer<I: U8Input>(input: I,
 fn parse_single_quote_string_look_ahead<I: U8Input>(input: I) -> SimpleResult<I, ()> {
     parse!{input;
         look_ahead(|i| or(i,
+            // stop still single quote escape
             |i| string(i, br#"\'"#).map(|_| ()),
+            // or single quote
             |i| chomp::parsers::token(i, b'\'').map(|_| ())
         ));
         ret {()}
@@ -484,6 +486,24 @@ fn parse_single_quote_string_test() {
         }
         Err(_) => {
             assert!(true);
+        }
+    }
+
+    match parse_only(parse_single_quote_string, br#"''"#) {
+        Ok(result) => {
+            assert_eq!(result, r#""#.to_owned());
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    match parse_only(parse_single_quote_string, br#"'foo'"#) {
+        Ok(result) => {
+            assert_eq!(result, r#"foo"#.to_owned());
+        }
+        Err(_) => {
+            assert!(false);
         }
     }
 
