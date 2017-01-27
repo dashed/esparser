@@ -4240,9 +4240,65 @@ fn function_declaration<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) 
 
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionExpression
 
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-StrictFormalParameters
+
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-FormalParameters
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-FormalParameterList
+enum FormalParameterList {
+    FunctionRestParameter(FunctionRestParameter),
+    FormalsList(FormalsList),
+    FormalsListWithRest(FormalsList, FunctionRestParameter)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-FormalParameterList
+fn formal_parameter_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FormalParameterList> {
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield)) {
+        panic!("misuse of formal_parameter_list");
+    }
+
+    or(i,
+        |i| parse!{i;
+            let rest = function_rest_parameter(&params);
+
+            ret {
+                FormalParameterList::FunctionRestParameter(rest)
+            }
+        },
+        |i| parse!{i;
+
+            let list = formals_list(&params);
+
+            let rest = option(|i| -> ESParseResult<I, FunctionRestParameter> {parse!{i;
+
+                let delim_1 = common_delim();
+
+                token(b',');
+
+                let delim_2 = common_delim();
+
+                let rest = function_rest_parameter(&params);
+
+                ret {
+                    Some(rest)
+                }
+
+            }}, None);
+
+            ret {
+
+                match rest {
+                    None => FormalParameterList::FormalsList(list),
+                    Some(rest) => {
+                        FormalParameterList::FormalsListWithRest(list, rest)
+                    }
+                }
+            }
+        }
+    )
+}
 
 struct FormalsList(Vec<FormalsListItem>);
 
@@ -4312,9 +4368,11 @@ fn formals_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPar
     }
 }
 
+type FunctionRestParameter = BindingRestElement;
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionRestParameter
-fn function_rest_parameter<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingRestElement> {
+fn function_rest_parameter<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FunctionRestParameter> {
 
     // validation
     if !(params.is_empty() ||
