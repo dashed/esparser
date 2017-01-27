@@ -238,13 +238,6 @@ fn on_error<I: Input, T, E: ::std::error::Error + 'static, F, V: ::std::error::E
 //     }
 // }
 
-#[inline]
-fn string_to_unicode_char(s: &str) -> Option<char> {
-    u32::from_str_radix(s, 16)
-        .ok()
-        .and_then(std::char::from_u32)
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct CurrentPosition(
     // The current line, zero-indexed.
@@ -521,6 +514,14 @@ fn parse_single_quote_string_test() {
 
 // == parser helpers ==
 
+// TODO: better function? refactor this
+#[inline]
+fn string_to_unicode_char(s: &str) -> Option<char> {
+    u32::from_str_radix(s, 16)
+        .ok()
+        .and_then(std::char::from_u32)
+}
+
 // TODO: fix this
 // TODO: test for ASI behaviour
 #[inline]
@@ -661,6 +662,90 @@ fn parse_utf8_char_test() {
     }
 }
 
+#[inline]
+fn string_not_utf8<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I, I::Buffer> {
+
+    let mark = i.mark();
+    let mut current_needle = needle;
+    let mut should_continue = true;
+
+    let mut parse_result = either(i,
+        // left
+        escaped_unicode_escape_seq,
+        // right
+        parse_utf8_char
+    ).map_err(|e| {
+        should_continue = false;
+        e
+    });
+
+    while should_continue {
+
+        parse_result = parse_result
+            .bind(|i, result| {
+                match result {
+                    Either::Left(c) => {
+                        // NOTE: Reserved keyword must not contain escaped characters.
+                        i.err("Reserved keyword must not contain escaped characters.".into())
+                    },
+                    Either::Right(c) => {
+
+                        let mut buf = String::with_capacity(1);
+                        buf.push(c);
+                        let bytes = buf.as_bytes();
+
+                        if current_needle.starts_with(bytes) {
+                            current_needle = current_needle.split_at(bytes.len()).1;
+                            i.ret(Either::Right(c))
+                        } else {
+                            i.err(format!("Does not start with: {:?}", bytes).into())
+                        }
+                    }
+                }
+            })
+            .map_err(|e| {
+                should_continue = false;
+                e
+            });
+
+        if current_needle.len() <= 0 || !should_continue {
+            should_continue = false;
+            break;
+        }
+
+        parse_result = parse_result
+            .then(|i| {
+                either(i,
+                    // left
+                    escaped_unicode_escape_seq,
+                    // right
+                    parse_utf8_char
+                )
+            })
+            .map_err(|e| {
+                should_continue = false;
+                e
+            });
+    }
+
+    parse_result
+    .then(|i| {
+        on_error(
+            i,
+            |mut i| -> ESParseResult<I, I::Buffer> {
+                let res = (&mut i).consume_from(mark);
+                i.ret(res)
+            },
+            |i| {
+                let reason = format!("Expected keyword: {}.", std::str::from_utf8(needle).unwrap());
+                ErrorLocation::new(i.position(), reason)
+            }
+        )
+    })
+
+
+}
+
 // == Tokens ==
 
 #[derive(Debug)]
@@ -751,7 +836,8 @@ fn common_delim_no_line_term<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<
 enum Parameter {
     In,
     Yield,
-    Return
+    Return,
+    Default
 }
 
 impl CLike for Parameter {
@@ -1140,90 +1226,6 @@ fn unicode_id_continue_test() {
 
 // http://www.ecma-international.org/ecma-262/7.0/#sec-reserved-words
 fn reserved_word<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
-
-    #[inline]
-    fn string_not_utf8<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I, I::Buffer> {
-
-        let mark = i.mark();
-        let mut current_needle = needle;
-        let mut should_continue = true;
-
-        let mut parse_result = either(i,
-            // left
-            escaped_unicode_escape_seq,
-            // right
-            parse_utf8_char
-        ).map_err(|e| {
-            should_continue = false;
-            e
-        });
-
-        while should_continue {
-
-            parse_result = parse_result
-                .bind(|i, result| {
-                    match result {
-                        Either::Left(c) => {
-                            // NOTE: Reserved keyword must not contain escaped characters.
-                            i.err("Reserved keyword must not contain escaped characters.".into())
-                        },
-                        Either::Right(c) => {
-
-                            let mut buf = String::with_capacity(1);
-                            buf.push(c);
-                            let bytes = buf.as_bytes();
-
-                            if current_needle.starts_with(bytes) {
-                                current_needle = current_needle.split_at(bytes.len()).1;
-                                i.ret(Either::Right(c))
-                            } else {
-                                i.err(format!("Does not start with: {:?}", bytes).into())
-                            }
-                        }
-                    }
-                })
-                .map_err(|e| {
-                    should_continue = false;
-                    e
-                });
-
-            if current_needle.len() <= 0 || !should_continue {
-                should_continue = false;
-                break;
-            }
-
-            parse_result = parse_result
-                .then(|i| {
-                    either(i,
-                        // left
-                        escaped_unicode_escape_seq,
-                        // right
-                        parse_utf8_char
-                    )
-                })
-                .map_err(|e| {
-                    should_continue = false;
-                    e
-                });
-        }
-
-        parse_result
-        .then(|i| {
-            on_error(
-                i,
-                |mut i| -> ESParseResult<I, I::Buffer> {
-                    let res = (&mut i).consume_from(mark);
-                    i.ret(res)
-                },
-                |i| {
-                    let reason = format!("Expected keyword {}.", std::str::from_utf8(needle).unwrap());
-                    ErrorLocation::new(i.position(), reason)
-                }
-            )
-        })
-
-
-    }
 
     parse!{i;
         let keyword =
@@ -4153,6 +4155,94 @@ fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement
 // == 14.1 Function Definitions ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-function-definitions
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionDeclaration
+
+enum FunctionDeclaration {
+    NamedFunction(NamedFunction),
+    AnonymousFunction
+}
+
+struct NamedFunction;
+
+// TODO: test
+fn function_declaration<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FunctionDeclaration> {
+
+    // validation
+    if !(params.is_empty() ||
+        params.contains(&Parameter::Yield) ||
+        params.contains(&Parameter::Default)) {
+        panic!("misuse of function_declaration");
+    }
+
+    #[inline]
+    fn named_function<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, NamedFunction> {
+
+        // validation
+        if !(params.is_empty() ||
+            params.contains(&Parameter::Yield)) {
+            panic!("misuse of named_function");
+        }
+
+        parse!{i;
+
+            string_not_utf8(b"function");
+
+            let delim_1 = common_delim();
+
+            let ident = binding_identifier(&params);
+
+            let delim_2 = common_delim();
+
+            token(b'(');
+
+            // TODO: fix
+
+            token(b')');
+
+            let delim_3 = common_delim();
+
+            token(b'{');
+
+            // TODO: fix
+
+            token(b'}');
+
+            ret {
+                // TODO: fix
+                NamedFunction
+            }
+        }
+    }
+
+    if params.contains(&Parameter::Default) {
+        parse!{i;
+            let named = named_function(&params);
+
+            ret {
+                FunctionDeclaration::NamedFunction(named)
+            }
+        }
+
+
+    } else {
+        parse!{i;
+            let named = named_function(&params);
+
+            ret {
+                FunctionDeclaration::NamedFunction(named)
+            }
+        }
+    }
+
+
+}
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionExpression
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-FormalParameters
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-FormalParameterList
 
 struct FormalsList(Vec<FormalsListItem>);
 
