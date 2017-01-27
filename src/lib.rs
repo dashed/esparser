@@ -1,7 +1,8 @@
 #![recursion_limit="1000"]
 #![feature(unicode)]
 // == crates ==
-#[macro_use] extern crate chomp;
+#[macro_use]
+extern crate chomp;
 extern crate enum_set;
 
 // == rust std imports ==
@@ -19,7 +20,7 @@ use chomp::types::{Buffer, Input, ParseResult, U8Input};
 use chomp::parse_only;
 use chomp::parsers::Error as ChompError;
 use chomp::primitives::Primitives;
-use chomp::prelude::{Either};
+use chomp::prelude::Either;
 use chomp::types::numbering::{InputPosition, LineNumber, Numbering};
 use chomp::primitives::IntoInner;
 
@@ -52,37 +53,37 @@ type U8Error = ChompError<u8>;
 #[derive(Debug)]
 struct ErrorChain {
     current: Box<::std::error::Error>,
-    next: Option<Box<ErrorChain>>
+    next: Option<Box<ErrorChain>>,
 }
 
 impl ErrorChain {
-
     fn new<T: ::std::error::Error + 'static>(err_to_wrap: T) -> Self
-        where ErrorChain: std::convert::From<T> {
+        where ErrorChain: std::convert::From<T>
+    {
 
         let error_to_chain = ErrorChain::from(err_to_wrap);
 
         ErrorChain {
             current: error_to_chain.current,
-            next: None
+            next: None,
         }
     }
 
     fn chain_err<T: ::std::error::Error + 'static>(self, error_to_chain: T) -> Self
-        where ErrorChain: std::convert::From<T> {
+        where ErrorChain: std::convert::From<T>
+    {
 
         let error_to_chain = ErrorChain::from(error_to_chain);
 
         ErrorChain {
             current: error_to_chain.current,
-            next: Some(Box::new(self))
+            next: Some(Box::new(self)),
         }
     }
 
     fn iter(&self) -> ErrorChainIter {
         ErrorChainIter(Some(self))
     }
-
 }
 
 impl ::std::error::Error for ErrorChain {
@@ -93,9 +94,7 @@ impl ::std::error::Error for ErrorChain {
     fn cause(&self) -> Option<&::std::error::Error> {
         match self.next {
             Some(ref c) => Some(&**c),
-            None => {
-                self.current.cause()
-            }
+            None => self.current.cause(),
         }
     }
 }
@@ -141,7 +140,7 @@ impl<'a> ::std::convert::From<&'a str> for ErrorChain {
     fn from(err: &str) -> Self {
         ErrorChain {
             current: Box::new(ErrorMsg(format!("{}", err))),
-            next: None
+            next: None,
         }
     }
 }
@@ -150,7 +149,7 @@ impl ::std::convert::From<String> for ErrorChain {
     fn from(err: String) -> Self {
         ErrorChain {
             current: Box::new(ErrorMsg(err)),
-            next: None
+            next: None,
         }
     }
 }
@@ -174,14 +173,14 @@ impl<'a> Iterator for ErrorChainIter<'a> {
 #[derive(Debug)]
 struct ErrorLocation {
     location: CurrentPosition,
-    description: String
+    description: String,
 }
 
 impl ErrorLocation {
     fn new(location: CurrentPosition, description: String) -> Self {
         ErrorLocation {
             location: location,
-            description: description
+            description: description,
         }
     }
 }
@@ -194,7 +193,11 @@ impl ::std::error::Error for ErrorLocation {
 
 impl ::std::fmt::Display for ErrorLocation {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
-        write!(f, "Line {}, Column {}: {}", self.location.line(), self.location.col(), self.description)
+        write!(f,
+               "Line {}, Column {}: {}",
+               self.location.line(),
+               self.location.col(),
+               self.description)
     }
 }
 
@@ -203,14 +206,19 @@ impl ::std::fmt::Display for ErrorLocation {
 // like ParseResult::map_err, but this higher-order helper passes &Input to
 // error mapping/transform function
 #[inline]
-fn on_error<I: Input, T, E: ::std::error::Error + 'static, F, V: ::std::error::Error + 'static, G>(i: I, f: F, g: G) -> ParseResult<I, T, ErrorChain>
+fn on_error<I: Input, T, E: ::std::error::Error + 'static, F, V: ::std::error::Error + 'static, G>
+    (i: I,
+     f: F,
+     g: G)
+     -> ParseResult<I, T, ErrorChain>
     where F: FnOnce(I) -> ParseResult<I, T, E>,
           G: FnOnce(&I) -> V,
           ErrorChain: std::convert::From<E>,
-          ErrorChain: std::convert::From<V> {
+          ErrorChain: std::convert::From<V>
+{
 
     match f(i).into_inner() {
-        (i, Ok(t))  => i.ret(t),
+        (i, Ok(t)) => i.ret(t),
         (i, Err(e)) => {
             let err_val = g(&i);
 
@@ -239,12 +247,10 @@ fn on_error<I: Input, T, E: ::std::error::Error + 'static, F, V: ::std::error::E
 // }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub struct CurrentPosition(
-    // The current line, zero-indexed.
-    u64,
-    // The current col, zero-indexed.
-    u64
-);
+pub struct CurrentPosition(// The current line, zero-indexed.
+                           u64,
+                           // The current col, zero-indexed.
+                           u64);
 
 impl CurrentPosition {
     // Creates a new (line, col) counter with zero.
@@ -264,16 +270,19 @@ impl CurrentPosition {
 }
 
 impl Numbering for CurrentPosition {
-    type Token  = u8;
+    type Token = u8;
 
     fn update<'a, B>(&mut self, b: &'a B)
-        where B: Buffer<Token=Self::Token> {
-            b.iterate(|c| if c == b'\n' {
+        where B: Buffer<Token = Self::Token>
+    {
+        b.iterate(|c| {
+            if c == b'\n' {
                 self.0 += 1; // line num
                 self.1 = 0;  // col num
             } else {
                 self.1 += 1; // col num
-            });
+            }
+        });
     }
 
     fn add(&mut self, t: Self::Token) {
@@ -307,7 +316,10 @@ impl Numbering for CurrentPosition {
 // rest(delim, accumulator, reducer) = delim reducer(accumulator) rest(delim, accumulator, reducer) |
 //                                     delim reducer(accumulator)
 #[inline]
-fn parse_list<I: U8Input, D, Delim, A, R, Reduced, E>(input: I, delimiter: D, reducer: R) -> ParseResult<I, A, E>
+fn parse_list<I: U8Input, D, Delim, A, R, Reduced, E>(input: I,
+                                                      delimiter: D,
+                                                      reducer: R)
+                                                      -> ParseResult<I, A, E>
     where D: Fn(I, Rc<RefCell<A>>) -> ParseResult<I, Delim, E>,
           R: Fn(I, Rc<RefCell<A>>) -> ParseResult<I, Reduced, E>,
           A: Default
@@ -319,9 +331,8 @@ fn parse_list<I: U8Input, D, Delim, A, R, Reduced, E>(input: I, delimiter: D, re
     reducer(input, initial_accumulator.clone())
         .then(|i| {
             either(i,
-                |i| parse_list_rest(i, delimiter, initial_accumulator.clone(), reducer),
-                |i| i.ret(())
-            )
+                   |i| parse_list_rest(i, delimiter, initial_accumulator.clone(), reducer),
+                   |i| i.ret(()))
         })
         .map(|_| {
             Rc::try_unwrap(initial_accumulator)
@@ -332,8 +343,11 @@ fn parse_list<I: U8Input, D, Delim, A, R, Reduced, E>(input: I, delimiter: D, re
 }
 
 #[inline]
-fn parse_list_rest<I: U8Input, D, Delim, A, R, Reduced, E>(input: I, delimiter: D, accumulator: Rc<RefCell<A>>,
-    reducer: R) -> ParseResult<I, (), E>
+fn parse_list_rest<I: U8Input, D, Delim, A, R, Reduced, E>(input: I,
+                                                           delimiter: D,
+                                                           accumulator: Rc<RefCell<A>>,
+                                                           reducer: R)
+                                                           -> ParseResult<I, (), E>
     where D: Fn(I, Rc<RefCell<A>>) -> ParseResult<I, Delim, E>,
           R: Fn(I, Rc<RefCell<A>>) -> ParseResult<I, Reduced, E>,
           A: Default
@@ -349,24 +363,22 @@ fn parse_list_rest<I: U8Input, D, Delim, A, R, Reduced, E>(input: I, delimiter: 
         });
 
     while should_continue {
-        parse_result = parse_result
-            .then(|i| {
+        parse_result = parse_result.then(|i| {
                 either(i,
-                    // left
-                    |i| {
-                        delimiter(i, accumulator.clone())
-                            .then(|i| reducer(i, accumulator.clone()))
-                            .map(|_| ())
-                    },
-                    // right
-                    |i| i.ret(())
-                )
+                       // left
+                       |i| {
+                           delimiter(i, accumulator.clone())
+                               .then(|i| reducer(i, accumulator.clone()))
+                               .map(|_| ())
+                       },
+                       // right
+                       |i| i.ret(()))
             })
             .bind(|i, result| {
                 match result {
                     Either::Left(_) => {
                         // continue while loop
-                    },
+                    }
                     Either::Right(_) => {
                         // break while loop
                         should_continue = false;
@@ -415,8 +427,9 @@ fn parse_single_quote_string<I: U8Input>(input: I) -> SimpleResult<I, String> {
 }
 
 #[inline]
-fn parse_single_quote_string_reducer<I: U8Input>(input: I, accumulator: Rc<RefCell<Vec<u8>>>)
-    -> SimpleResult<I, ()> {
+fn parse_single_quote_string_reducer<I: U8Input>(input: I,
+                                                 accumulator: Rc<RefCell<Vec<u8>>>)
+                                                 -> SimpleResult<I, ()> {
     parse!{input;
 
         let line: Vec<u8> = many_till(chomp::parsers::any, parse_single_quote_string_look_ahead);
@@ -535,20 +548,17 @@ fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 
 #[inline]
 fn token<I: U8Input>(i: ESInput<I>, tok: I::Token) -> ESParseResult<I, I::Token> {
-    on_error(
-        i,
-        |i| chomp::parsers::token(i, tok),
-        |i| {
-            let reason = format!("Expected {}", tok);
-            ErrorLocation::new(i.position(), reason)
-        }
-    )
+    on_error(i, |i| chomp::parsers::token(i, tok), |i| {
+        let reason = format!("Expected {}", tok);
+        ErrorLocation::new(i.position(), reason)
+    })
 }
 
 // TODO: test
 #[inline]
 fn string_till<I: U8Input, F>(input: ESInput<I>, mut stop_at: F) -> ESParseResult<I, String>
-    where F: Fn(ESInput<I>) -> ESParseResult<I, ()> {
+    where F: Fn(ESInput<I>) -> ESParseResult<I, ()>
+{
     parse!{input;
         let line: Vec<char> = many_till(parse_utf8_char, |i| look_ahead(i, &mut stop_at));
 
@@ -560,10 +570,7 @@ fn string_till<I: U8Input, F>(input: ESInput<I>, mut stop_at: F) -> ESParseResul
 
 #[inline]
 fn token_as_char<I: U8Input>(i: ESInput<I>, c: u8) -> ESParseResult<I, char> {
-    token(i, c)
-        .bind(|i, c| {
-            i.ret(c as char)
-        })
+    token(i, c).bind(|i, c| i.ret(c as char))
 }
 
 // TODO: test
@@ -571,16 +578,12 @@ fn token_as_char<I: U8Input>(i: ESInput<I>, c: u8) -> ESParseResult<I, char> {
 fn parse_utf8_char_of_bytes<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I, char> {
     // TODO: refactor this
     on_error(i,
-        |i| {
-            look_ahead(i, |i| string(i, needle))
-                .then(parse_utf8_char)
-        },
-        |i| {
-            let loc = i.position();
-            let reason = "Expected utf8 character.".to_string();
-            ErrorLocation::new(loc, reason)
-        }
-    )
+             |i| look_ahead(i, |i| string(i, needle)).then(parse_utf8_char),
+             |i| {
+                 let loc = i.position();
+                 let reason = "Expected utf8 character.".to_string();
+                 ErrorLocation::new(loc, reason)
+             })
 }
 
 #[inline]
@@ -606,7 +609,7 @@ fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
             match std::str::from_utf8(&internal_buf) {
                 Err(_) => {
                     // not valid_utf8
-                },
+                }
                 Ok(__result) => {
                     result = __result.to_string();
                     valid_utf8 = true;
@@ -644,12 +647,16 @@ fn parse_utf8_char_test() {
 
     // case: only sparkle heart is parsed
 
-    let sparkle_heart_and_smile = vec![
-        // http://graphemica.com/%F0%9F%92%96
-        240, 159, 146, 150,
-        // http://graphemica.com/%F0%9F%98%80
-        240, 159, 152, 128
-    ];
+    let sparkle_heart_and_smile = vec![// http://graphemica.com/%F0%9F%92%96
+                                       240,
+                                       159,
+                                       146,
+                                       150,
+                                       // http://graphemica.com/%F0%9F%98%80
+                                       240,
+                                       159,
+                                       152,
+                                       128];
 
     let i = InputPosition::new(sparkle_heart_and_smile.as_slice(), CurrentPosition::new());
     match parse_utf8_char(i).into_inner().1 {
@@ -670,24 +677,23 @@ fn string_not_utf8<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I,
     let mut should_continue = true;
 
     let mut parse_result = either(i,
-        // left
-        escaped_unicode_escape_seq,
-        // right
-        parse_utf8_char
-    ).map_err(|e| {
-        should_continue = false;
-        e
-    });
+                                  // left
+                                  escaped_unicode_escape_seq,
+                                  // right
+                                  parse_utf8_char)
+        .map_err(|e| {
+            should_continue = false;
+            e
+        });
 
     while should_continue {
 
-        parse_result = parse_result
-            .bind(|i, result| {
+        parse_result = parse_result.bind(|i, result| {
                 match result {
                     Either::Left(c) => {
                         // NOTE: Reserved keyword must not contain escaped characters.
                         i.err("Reserved keyword must not contain escaped characters.".into())
-                    },
+                    }
                     Either::Right(c) => {
 
                         let mut buf = String::with_capacity(1);
@@ -713,14 +719,12 @@ fn string_not_utf8<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I,
             break;
         }
 
-        parse_result = parse_result
-            .then(|i| {
+        parse_result = parse_result.then(|i| {
                 either(i,
-                    // left
-                    escaped_unicode_escape_seq,
-                    // right
-                    parse_utf8_char
-                )
+                       // left
+                       escaped_unicode_escape_seq,
+                       // right
+                       parse_utf8_char)
             })
             .map_err(|e| {
                 should_continue = false;
@@ -728,19 +732,17 @@ fn string_not_utf8<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I,
             });
     }
 
-    parse_result
-    .then(|i| {
-        on_error(
-            i,
-            |mut i| -> ESParseResult<I, I::Buffer> {
-                let res = (&mut i).consume_from(mark);
-                i.ret(res)
-            },
-            |i| {
-                let reason = format!("Expected keyword: {}.", std::str::from_utf8(needle).unwrap());
-                ErrorLocation::new(i.position(), reason)
-            }
-        )
+    parse_result.then(|i| {
+        on_error(i,
+                 |mut i| -> ESParseResult<I, I::Buffer> {
+                     let res = (&mut i).consume_from(mark);
+                     i.ret(res)
+                 },
+                 |i| {
+                     let reason = format!("Expected keyword: {}.",
+                                          std::str::from_utf8(needle).unwrap());
+                     ErrorLocation::new(i.position(), reason)
+                 })
     })
 
 
@@ -752,7 +754,7 @@ fn string_not_utf8<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I,
 enum CommonDelim {
     WhiteSpace(char),
     LineTerminator(char),
-    Comment(Comment)
+    Comment(Comment),
 }
 
 // Since there is no separate lexing step apart from parsing step,
@@ -766,11 +768,14 @@ enum CommonDelim {
 //
 // as defined in: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-lexical-grammar
 #[inline]
-fn __common_delim<I: U8Input>(i: ESInput<I>, parse_line_terminator: bool) -> ESParseResult<I, CommonDelim> {
+fn __common_delim<I: U8Input>(i: ESInput<I>,
+                              parse_line_terminator: bool)
+                              -> ESParseResult<I, CommonDelim> {
 
     if !parse_line_terminator {
         return on_error(i,
-            |i| -> ESParseResult<I, CommonDelim> {parse!{i;
+                        |i| -> ESParseResult<I, CommonDelim> {
+            parse!{i;
                 let delim =
                     (i -> whitespace(i).map(|w| {
                         let WhiteSpace(w) = w;
@@ -783,17 +788,18 @@ fn __common_delim<I: U8Input>(i: ESInput<I>, parse_line_terminator: bool) -> ESP
                     // })) <|>
                     (i -> comment(i).map(|c| CommonDelim::Comment(c)));
                 ret delim
-            }},
-            |i| {
-                let loc = i.position();
-                let reason = "Expected whitespace, or comment.".to_string();
-                ErrorLocation::new(loc, reason)
             }
-        );
+        },
+                        |i| {
+                            let loc = i.position();
+                            let reason = "Expected whitespace, or comment.".to_string();
+                            ErrorLocation::new(loc, reason)
+                        });
     }
 
     on_error(i,
-        |i| -> ESParseResult<I, CommonDelim> {parse!{i;
+             |i| -> ESParseResult<I, CommonDelim> {
+        parse!{i;
             let delim =
                 (i -> whitespace(i).map(|w| {
                     let WhiteSpace(w) = w;
@@ -805,13 +811,13 @@ fn __common_delim<I: U8Input>(i: ESInput<I>, parse_line_terminator: bool) -> ESP
                 })) <|>
                 (i -> comment(i).map(|c| CommonDelim::Comment(c)));
             ret delim
-        }},
-        |i| {
-            let loc = i.position();
-            let reason = "Expected whitespace, line terminator, or comment.".to_string();
-            ErrorLocation::new(loc, reason)
         }
-    )
+    },
+             |i| {
+                 let loc = i.position();
+                 let reason = "Expected whitespace, line terminator, or comment.".to_string();
+                 ErrorLocation::new(loc, reason)
+             })
 }
 
 #[inline]
@@ -837,7 +843,7 @@ enum Parameter {
     In,
     Yield,
     Return,
-    Default
+    Default,
 }
 
 impl CLike for Parameter {
@@ -862,21 +868,20 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
 
     #[inline]
     fn other_whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
-        parse_utf8_char(i)
-            .bind(|i, c: char| {
-                if c.is_whitespace() {
-                    i.ret(c)
-                } else {
-                    let loc = i.position();
-                    let reason = "Expected whitespace.".to_string();
-                    i.err(ErrorLocation::new(loc, reason).into())
-                }
-            })
+        parse_utf8_char(i).bind(|i, c: char| {
+            if c.is_whitespace() {
+                i.ret(c)
+            } else {
+                let loc = i.position();
+                let reason = "Expected whitespace.".to_string();
+                i.err(ErrorLocation::new(loc, reason).into())
+            }
+        })
     }
 
-    on_error(
-        i,
-        |i| -> ESParseResult<I, WhiteSpace> {parse!{i;
+    on_error(i,
+             |i| -> ESParseResult<I, WhiteSpace> {
+        parse!{i;
 
             let whitespace_char =
                 parse_utf8_char_of_bytes(b"\x0009") <|> // <TAB>; CHARACTER TABULATION
@@ -888,11 +893,9 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
                 other_whitespace(); // Any other Unicode "Separator, space" code point
 
             ret WhiteSpace(whitespace_char)
-        }},
-        |i| {
-            ErrorLocation::new(i.position(), "Expected whitespace.".to_string())
         }
-    )
+    },
+             |i| ErrorLocation::new(i.position(), "Expected whitespace.".to_string()))
 
 
 }
@@ -907,7 +910,8 @@ struct LineTerminator(char);
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LineTerminator
 fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTerminator> {
     on_error(i,
-        |i| -> ESParseResult<I, LineTerminator> {parse!{i;
+             |i| -> ESParseResult<I, LineTerminator> {
+        parse!{i;
 
             let line_terminator_char =
                 parse_utf8_char_of_bytes(b"\x000A") <|> // <LF>; LINE FEED (LF)
@@ -916,13 +920,13 @@ fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTerminator
                 parse_utf8_char_of_bytes(b"\x2029");    // <PS>; PARAGRAPH SEPARATOR
 
             ret LineTerminator(line_terminator_char)
-        }},
-        |i| {
-            let loc = i.position();
-            let reason = "Expected utf8 character.".to_string();
-            ErrorLocation::new(loc, reason)
         }
-    )
+    },
+             |i| {
+                 let loc = i.position();
+                 let reason = "Expected utf8 character.".to_string();
+                 ErrorLocation::new(loc, reason)
+             })
 }
 
 struct LineTerminatorSequence(String);
@@ -939,7 +943,8 @@ fn line_terminator_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTermin
     }
 
     on_error(i,
-        |i| -> ESParseResult<I, LineTerminatorSequence> {parse!{i;
+             |i| -> ESParseResult<I, LineTerminatorSequence> {
+        parse!{i;
 
             let seq =
                 (i -> parse_utf8_char_of_bytes(i, b"\x000A").map(char_to_string)) <|> // <LF>; LINE FEED (LF)
@@ -960,13 +965,13 @@ fn line_terminator_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTermin
                 (i -> parse_utf8_char_of_bytes(i, b"\x2029").map(char_to_string));    // <PS>; PARAGRAPH SEPARATOR
 
             ret LineTerminatorSequence(seq)
-        }},
-        |i| {
-            let loc = i.position();
-            let reason = "Expected linte terminator sequence.".to_string();
-            ErrorLocation::new(loc, reason)
         }
-    )
+    },
+             |i| {
+                 let loc = i.position();
+                 let reason = "Expected linte terminator sequence.".to_string();
+                 ErrorLocation::new(loc, reason)
+             })
 }
 
 // == 11.4 Comments ==
@@ -976,7 +981,7 @@ fn line_terminator_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTermin
 #[derive(Debug)]
 enum Comment {
     MultiLineComment(String),
-    SingleLineComment(String)
+    SingleLineComment(String),
 }
 
 // TODO: test
@@ -991,14 +996,10 @@ fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Comment> {
 
         #[inline]
         fn stop_at<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
-            on_error(
-                i,
-                |i| string(i, END).map(|_| ()),
-                |i| {
-                    let loc = i.position();
-                    ErrorLocation::new(loc, "Expected */.".to_string())
-                }
-            )
+            on_error(i, |i| string(i, END).map(|_| ()), |i| {
+                let loc = i.position();
+                ErrorLocation::new(loc, "Expected */.".to_string())
+            })
         }
 
         // TODO: verify production rule satisfaction
@@ -1058,10 +1059,9 @@ struct IdentifierName(String);
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierName
 fn identifier_name<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierName> {
 
-    on_error(
-        i,
-        |i| -> ESParseResult<I, IdentifierName> {
-            parse!{i;
+    on_error(i,
+             |i| -> ESParseResult<I, IdentifierName> {
+        parse!{i;
 
                 let start: Vec<char> = many1(identifier_start);
                 let rest: Vec<char> = many(identifier_part);
@@ -1074,12 +1074,11 @@ fn identifier_name<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierName
                     IdentifierName(start)
                 }
             }
-        },
-        |i| {
-            let reason = format!("Invalid identifier.");
-            ErrorLocation::new(i.position(), reason)
-        }
-    )
+    },
+             |i| {
+                 let reason = format!("Invalid identifier.");
+                 ErrorLocation::new(i.position(), reason)
+             })
 
 
 }
@@ -1110,8 +1109,7 @@ fn identifier_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
 
     #[inline]
     fn identifier_part_unicode<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
-        token(i, b'\\')
-            .then(unicode_escape_seq)
+        token(i, b'\\').then(unicode_escape_seq)
     }
 
     parse!{i;
@@ -1129,17 +1127,16 @@ fn identifier_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDStart
 fn unicode_id_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
-    parse_utf8_char(i)
-        .bind(|i, c: char| {
-            if c.is_xid_start() {
-                i.ret(c)
-            } else {
-                // TODO: better error
-                let loc = i.position();
-                let reason = format!("Invalid utf8 character.");
-                i.err(ErrorLocation::new(loc, reason).into())
-            }
-        })
+    parse_utf8_char(i).bind(|i, c: char| {
+        if c.is_xid_start() {
+            i.ret(c)
+        } else {
+            // TODO: better error
+            let loc = i.position();
+            let reason = format!("Invalid utf8 character.");
+            i.err(ErrorLocation::new(loc, reason).into())
+        }
+    })
 }
 
 #[test]
@@ -1172,19 +1169,18 @@ fn unicode_id_start_test() {
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDContinue
 fn unicode_id_continue<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
-    parse_utf8_char(i)
-        .bind(|i, c: char| {
+    parse_utf8_char(i).bind(|i, c: char| {
 
-            if c.is_xid_continue() {
-                i.ret(c)
-            } else {
-                // TODO: better error
-                let loc = i.position();
-                let reason = format!("Invalid utf8 character: `{}`", c);
-                i.err(ErrorLocation::new(loc, reason).into())
-            }
+        if c.is_xid_continue() {
+            i.ret(c)
+        } else {
+            // TODO: better error
+            let loc = i.position();
+            let reason = format!("Invalid utf8 character: `{}`", c);
+            i.err(ErrorLocation::new(loc, reason).into())
+        }
 
-        })
+    })
 }
 
 #[test]
@@ -1304,13 +1300,11 @@ fn reserved_word_test() {
 
     // A code point in a ReservedWord cannot be expressed by a \UnicodeEscapeSequence.
 
-    let fails = vec![
-        r"\u0076\u0061\u0072",
-        r"\u0076\u{0061}\u0072",
-        r"v\u0061\u0072",
-        r"\u0076a\u0072",
-        r"\u0076\u0061r",
-    ];
+    let fails = vec![r"\u0076\u0061\u0072",
+                     r"\u0076\u{0061}\u0072",
+                     r"v\u0061\u0072",
+                     r"\u0076a\u0072",
+                     r"\u0076\u0061r"];
 
     for fail in fails {
         let i = InputPosition::new(fail.as_bytes(), CurrentPosition::new());
@@ -1339,14 +1333,10 @@ struct Null;
 // http://www.ecma-international.org/ecma-262/7.0/#prod-NullLiteral
 #[inline]
 fn null_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Null> {
-    on_error(
-        i,
-        |i| string(i, b"null").map(|_| Null),
-        |i| {
-            let loc = i.position();
-            ErrorLocation::new(loc, "Expected null keyword.".to_string())
-        }
-    )
+    on_error(i, |i| string(i, b"null").map(|_| Null), |i| {
+        let loc = i.position();
+        ErrorLocation::new(loc, "Expected null keyword.".to_string())
+    })
 }
 
 // == 11.8.2 Boolean Literals ==
@@ -1355,39 +1345,36 @@ fn null_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Null> {
 
 enum Bool {
     True,
-    False
+    False,
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BooleanLiteral
 #[inline]
 fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
-    on_error(
-        i,
-        |i| {
-            either(i,
-                // left
-                |i| string(i, b"true"),
-                // right
-                |i| string(i, b"false")
-            )
+    on_error(i,
+             |i| {
+        either(i,
+               // left
+               |i| string(i, b"true"),
+               // right
+               |i| string(i, b"false"))
             .bind::<_, _, U8Error>(|i, result| {
                 match result {
                     Either::Left(_left) => {
                         let _left: I::Buffer = _left;
                         i.ret(Bool::True)
-                    },
+                    }
                     Either::Right(_left) => {
                         let _left: I::Buffer = _left;
                         i.ret(Bool::False)
                     }
                 }
             })
-        },
-        |i| {
-            let loc = i.position();
-            ErrorLocation::new(loc, "Expected boolean literal.".to_string())
-        }
-    )
+    },
+             |i| {
+                 let loc = i.position();
+                 ErrorLocation::new(loc, "Expected boolean literal.".to_string())
+             })
 }
 
 // == 11.8.3 Numeric Literals ==
@@ -1398,7 +1385,7 @@ enum NumericLiteral {
     Decimal(DecimalLiteral),
     BinaryInteger(BinaryDigits),
     OctalInteger(OctalDigits),
-    HexInteger(HexDigits)
+    HexInteger(HexDigits),
 }
 
 // TODO: test
@@ -1426,16 +1413,22 @@ fn numeric_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NumericLiteral
 }
 
 enum DecimalLiteral {
-    WholeFractionDecimal(DecimalIntegerLiteral, /* . */ Option<DecimalDigits>, Option<ExponentPart>),
-    FractionDecimal(/* . */ DecimalDigits, Option<ExponentPart>),
-    WholeDecimal(DecimalIntegerLiteral, Option<ExponentPart>)
+    WholeFractionDecimal(DecimalIntegerLiteral,
+                         /* . */
+                         Option<DecimalDigits>,
+                         Option<ExponentPart>),
+    FractionDecimal(/* . */
+                    DecimalDigits,
+                    Option<ExponentPart>),
+    WholeDecimal(DecimalIntegerLiteral, Option<ExponentPart>),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalLiteral
 fn decimal_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalLiteral> {
     or(i,
-        |i| parse!{i;
+       |i| {
+        parse!{i;
 
             let whole = decimal_integer_literal();
             token(b'.');
@@ -1443,24 +1436,30 @@ fn decimal_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalLiteral
             let exp_part = option(|i| exponent_part(i).map(|c| Some(c)), None);
 
             ret DecimalLiteral::WholeFractionDecimal(whole, fraction, exp_part)
-        },
-        |i| or(i,
-            |i| parse!{i;
+        }
+    },
+       |i| {
+        or(i,
+           |i| {
+            parse!{i;
 
                 token(b'.');
                 let fraction = decimal_digits();
                 let exp_part = option(|i| exponent_part(i).map(|c| Some(c)), None);
 
                 ret DecimalLiteral::FractionDecimal(fraction, exp_part)
-            },
-            |i| parse!{i;
+            }
+        },
+           |i| {
+            parse!{i;
 
                 let whole = decimal_integer_literal();
                 let exp_part = option(|i| exponent_part(i).map(|c| Some(c)), None);
 
                 ret DecimalLiteral::WholeDecimal(whole, exp_part)
             }
-        ))
+        })
+    })
 }
 
 struct DecimalIntegerLiteral(DecimalDigits);
@@ -1469,10 +1468,11 @@ struct DecimalIntegerLiteral(DecimalDigits);
 // http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalIntegerLiteral
 fn decimal_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalIntegerLiteral> {
     either(i,
-        // left
-        |i| token(i, b'0'),
-        // right
-        |i| parse!{i;
+           // left
+           |i| token(i, b'0'),
+           // right
+           |i| {
+        parse!{i;
             // TODO: optimize this
             let prefix = non_zero_digit();
             let suffix = decimal_digits();
@@ -1484,19 +1484,17 @@ fn decimal_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Decima
                 DecimalDigits(s)
             }
         }
-    )
-    .bind(|i, result| {
-        match result {
-            Either::Left(c) => {
-                let mut s = String::with_capacity(1);
-                s.push(c as char);
-                i.ret(DecimalIntegerLiteral(DecimalDigits(s)))
-            },
-            Either::Right(dd) => {
-                i.ret(DecimalIntegerLiteral(dd))
-            }
-        }
     })
+        .bind(|i, result| {
+            match result {
+                Either::Left(c) => {
+                    let mut s = String::with_capacity(1);
+                    s.push(c as char);
+                    i.ret(DecimalIntegerLiteral(DecimalDigits(s)))
+                }
+                Either::Right(dd) => i.ret(DecimalIntegerLiteral(dd)),
+            }
+        })
 }
 
 struct DecimalDigits(String);
@@ -1504,28 +1502,24 @@ struct DecimalDigits(String);
 impl MathematicalValue for DecimalDigits {
     // TODO: test
     fn mathematical_value(&self) -> i64 {
-        i64::from_str_radix(&self.0, 10)
-            .unwrap()
+        i64::from_str_radix(&self.0, 10).unwrap()
     }
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalDigits
 fn decimal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalDigits> {
-    on_error(
-        i,
-        |i| -> ESParseResult<I, DecimalDigits> {
-            many1(i, decimal_digit)
-                .bind(|i, buf: Vec<u8>| {
-                    let contents = String::from_utf8_lossy(&buf).into_owned();
-                    i.ret(DecimalDigits(contents))
-                })
-        },
-        |i| {
-            let loc = i.position();
-            ErrorLocation::new(loc, "Expected decimal digit (0 or 9).".to_string())
-        }
-    )
+    on_error(i,
+             |i| -> ESParseResult<I, DecimalDigits> {
+                 many1(i, decimal_digit).bind(|i, buf: Vec<u8>| {
+                     let contents = String::from_utf8_lossy(&buf).into_owned();
+                     i.ret(DecimalDigits(contents))
+                 })
+             },
+             |i| {
+                 let loc = i.position();
+                 ErrorLocation::new(loc, "Expected decimal digit (0 or 9).".to_string())
+             })
 }
 
 // TODO: test
@@ -1537,14 +1531,10 @@ fn decimal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
         (b'0' <= c && c <= b'9')
     }
 
-    on_error(
-        i,
-        |i| satisfy(i, is_decimal_digit),
-        |i| {
-            let loc = i.position();
-            ErrorLocation::new(loc, "Expected decimal digit (0 to 9).".to_string())
-        }
-    )
+    on_error(i, |i| satisfy(i, is_decimal_digit), |i| {
+        let loc = i.position();
+        ErrorLocation::new(loc, "Expected decimal digit (0 to 9).".to_string())
+    })
 }
 
 // TODO: test
@@ -1556,14 +1546,10 @@ fn non_zero_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
         (b'1' <= c && c <= b'9')
     }
 
-    on_error(
-        i,
-        |i| satisfy(i, is_non_zero_digit),
-        |i| {
-            let loc = i.position();
-            ErrorLocation::new(loc, "Expected non-zero digit (1 to 9).".to_string())
-        }
-    )
+    on_error(i, |i| satisfy(i, is_non_zero_digit), |i| {
+        let loc = i.position();
+        ErrorLocation::new(loc, "Expected non-zero digit (1 to 9).".to_string())
+    })
 }
 
 struct ExponentPart(SignedInteger);
@@ -1582,7 +1568,7 @@ fn exponent_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ExponentPart> {
 enum SignedInteger {
     Unsigned(DecimalDigits),
     Positive(DecimalDigits),
-    Negative(DecimalDigits)
+    Negative(DecimalDigits),
 }
 
 // TODO: test
@@ -1592,7 +1578,7 @@ fn signed_integer<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SignedInteger> 
     enum Signed {
         Unsigned,
         Positive,
-        Negative
+        Negative,
     }
 
     parse!{i;
@@ -1635,28 +1621,24 @@ struct BinaryDigits(String);
 impl MathematicalValue for BinaryDigits {
     // TODO: test
     fn mathematical_value(&self) -> i64 {
-        i64::from_str_radix(&self.0, 2)
-            .unwrap()
+        i64::from_str_radix(&self.0, 2).unwrap()
     }
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BinaryDigits
 fn binary_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryDigits> {
-    on_error(
-        i,
-        |i| -> ESParseResult<I, BinaryDigits> {
-            many1(i, binary_digit)
-                .bind(|i, buf: Vec<u8>| {
-                    let contents = String::from_utf8_lossy(&buf).into_owned();
-                    i.ret(BinaryDigits(contents))
-                })
-        },
-        |i| {
-            let loc = i.position();
-            ErrorLocation::new(loc, "Expected binary digit (0 or 1).".to_string())
-        }
-    )
+    on_error(i,
+             |i| -> ESParseResult<I, BinaryDigits> {
+                 many1(i, binary_digit).bind(|i, buf: Vec<u8>| {
+                     let contents = String::from_utf8_lossy(&buf).into_owned();
+                     i.ret(BinaryDigits(contents))
+                 })
+             },
+             |i| {
+                 let loc = i.position();
+                 ErrorLocation::new(loc, "Expected binary digit (0 or 1).".to_string())
+             })
 }
 
 // TODO: test
@@ -1669,14 +1651,10 @@ fn binary_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
         (b'0' <= c && c <= b'1')
     }
 
-    on_error(
-        i,
-        |i| satisfy(i, is_binary_digit),
-        |i| {
-            let loc = i.position();
-            ErrorLocation::new(loc, "Expected binary digit (0 or 1).".to_string())
-        }
-    )
+    on_error(i, |i| satisfy(i, is_binary_digit), |i| {
+        let loc = i.position();
+        ErrorLocation::new(loc, "Expected binary digit (0 or 1).".to_string())
+    })
 
 }
 
@@ -1698,28 +1676,24 @@ struct OctalDigits(String);
 impl MathematicalValue for OctalDigits {
     // TODO: test
     fn mathematical_value(&self) -> i64 {
-        i64::from_str_radix(&self.0, 8)
-            .unwrap()
+        i64::from_str_radix(&self.0, 8).unwrap()
     }
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-OctalDigits
 fn octal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalDigits> {
-    on_error(
-        i,
-        |i| -> ESParseResult<I, OctalDigits> {
-            many1(i, octal_digit)
-                .bind(|i, buf: Vec<u8>| {
-                    let contents = String::from_utf8_lossy(&buf).into_owned();
-                    i.ret(OctalDigits(contents))
-                })
-        },
-        |i| {
-            let loc = i.position();
-            ErrorLocation::new(loc, "Expected octal digit (0 to 7).".to_string())
-        }
-    )
+    on_error(i,
+             |i| -> ESParseResult<I, OctalDigits> {
+                 many1(i, octal_digit).bind(|i, buf: Vec<u8>| {
+                     let contents = String::from_utf8_lossy(&buf).into_owned();
+                     i.ret(OctalDigits(contents))
+                 })
+             },
+             |i| {
+                 let loc = i.position();
+                 ErrorLocation::new(loc, "Expected octal digit (0 to 7).".to_string())
+             })
 }
 
 // TODO: test
@@ -1732,14 +1706,10 @@ fn octal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
         (b'0' <= c && c <= b'7')
     }
 
-    on_error(
-        i,
-        |i| satisfy(i, is_octal_digit),
-        |i| {
-            let loc = i.position();
-            ErrorLocation::new(loc, "Expected octal digit (0 to 7).".to_string())
-        }
-    )
+    on_error(i, |i| satisfy(i, is_octal_digit), |i| {
+        let loc = i.position();
+        ErrorLocation::new(loc, "Expected octal digit (0 to 7).".to_string())
+    })
 
 }
 
@@ -1761,27 +1731,23 @@ struct HexDigits(String);
 impl MathematicalValue for HexDigits {
     // TODO: test
     fn mathematical_value(&self) -> i64 {
-        i64::from_str_radix(&self.0, 16)
-            .unwrap()
+        i64::from_str_radix(&self.0, 16).unwrap()
     }
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexDigits
 fn hex_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexDigits> {
-    on_error(
-        i,
-        |i| -> ESParseResult<I, HexDigits> {
-            many1(i, hex_digit)
-                .bind(|i, buf: Vec<u8>| {
-                    let contents = String::from_utf8_lossy(&buf).into_owned();
-                    i.ret(HexDigits(contents))
-                })
-        },
-        |i| {
-            let loc = i.position();
-            ErrorLocation::new(loc, "Expected hex digit.".to_string())
-        }
-    )
+    on_error(i,
+             |i| -> ESParseResult<I, HexDigits> {
+                 many1(i, hex_digit).bind(|i, buf: Vec<u8>| {
+                     let contents = String::from_utf8_lossy(&buf).into_owned();
+                     i.ret(HexDigits(contents))
+                 })
+             },
+             |i| {
+                 let loc = i.position();
+                 ErrorLocation::new(loc, "Expected hex digit.".to_string())
+             })
 }
 
 #[test]
@@ -1827,19 +1793,13 @@ fn hex_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
 
     #[inline]
     fn is_hex_digit(c: u8) -> bool {
-        (b'0' <= c && c <= b'9') ||
-        (b'a' <= c && c <= b'f') ||
-        (b'A' <= c && c <= b'F')
+        (b'0' <= c && c <= b'9') || (b'a' <= c && c <= b'f') || (b'A' <= c && c <= b'F')
     }
 
-    on_error(
-        i,
-        |i| satisfy(i, is_hex_digit),
-        |i| {
-            let loc = i.position();
-            ErrorLocation::new(loc, "Expected hex digit (0 to F).".to_string())
-        }
-    )
+    on_error(i, |i| satisfy(i, is_hex_digit), |i| {
+        let loc = i.position();
+        ErrorLocation::new(loc, "Expected hex digit (0 to F).".to_string())
+    })
 }
 
 // == 11.8.3.1 Static Semantics: MV ==
@@ -1854,7 +1814,7 @@ trait MathematicalValue {
 
 enum StringLiteral {
     SingleQuoted(String),
-    DoubleQuoted(String)
+    DoubleQuoted(String),
 }
 
 // TODO: test
@@ -1875,29 +1835,28 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
     #[inline]
     fn string_char<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<I, String> {
         either(i,
-            |i| parse!{i;
+               |i| {
+            parse!{i;
                 token(b'\\');
                 token(quote_type);
                 ret {
                     (quote_type as char).to_string()
                 }
-            },
-            parse_utf8_char
-        )
-        .bind(|i, result| {
-            match result {
-                Either::Left(escaped) => {
-                    i.ret(escaped)
-                },
-                Either::Right(c) => {
-                    if c == (quote_type as char) {
-                        i.err("End of string".into())
-                    } else {
-                        i.ret(c.to_string())
+            }
+        },
+               parse_utf8_char)
+            .bind(|i, result| {
+                match result {
+                    Either::Left(escaped) => i.ret(escaped),
+                    Either::Right(c) => {
+                        if c == (quote_type as char) {
+                            i.err("End of string".into())
+                        } else {
+                            i.ret(c.to_string())
+                        }
                     }
                 }
-            }
-        })
+            })
     }
 
     parse!{i;
@@ -1983,8 +1942,7 @@ fn unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
 }
 
 fn escaped_unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
-    token(i, b'\\')
-        .then(unicode_escape_seq)
+    token(i, b'\\').then(unicode_escape_seq)
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Hex4Digits
@@ -2026,43 +1984,36 @@ fn hex_4_digits_test() {
 
 enum IdentifierReference {
     Identifier(Identifier),
-    Yield
+    Yield,
 }
 
 #[inline]
 fn yield_keyword<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
-    on_error(
-        i,
-        |i| string(i, b"yield"),
-        |i| {
-            let reason = format!("Expected yield keyword.");
-            ErrorLocation::new(i.position(), reason)
-        }
-    )
+    on_error(i, |i| string(i, b"yield"), |i| {
+        let reason = format!("Expected yield keyword.");
+        ErrorLocation::new(i.position(), reason)
+    })
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierReference
-fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, IdentifierReference> {
+fn identifier_reference<I: U8Input>(i: ESInput<I>,
+                                    params: &EnumSet<Parameter>)
+                                    -> ESParseResult<I, IdentifierReference> {
 
     if !params.contains(&Parameter::Yield) {
 
         let result = either(i,
-            // left
-            yield_keyword,
-            // right
-            identifier
-        )
-        .bind(|i, result| {
-            match result {
-                Either::Left(_) => {
-                    i.ret(IdentifierReference::Yield)
-                },
-                Either::Right(ident) => {
-                    i.ret(IdentifierReference::Identifier(ident))
+                            // left
+                            yield_keyword,
+                            // right
+                            identifier)
+            .bind(|i, result| {
+                match result {
+                    Either::Left(_) => i.ret(IdentifierReference::Yield),
+                    Either::Right(ident) => i.ret(IdentifierReference::Identifier(ident)),
                 }
-            }
-        });
+            });
 
         return result;
     }
@@ -2071,39 +2022,34 @@ fn identifier_reference<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) 
         panic!("misuse of identifier_reference");
     }
 
-    identifier(i).map(|ident| {
-        IdentifierReference::Identifier(ident)
-    })
+    identifier(i).map(|ident| IdentifierReference::Identifier(ident))
 
 }
 
 enum BindingIdentifier {
     Identifier(Identifier),
-    Yield
+    Yield,
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingIdentifier
-fn binding_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingIdentifier> {
+fn binding_identifier<I: U8Input>(i: ESInput<I>,
+                                  params: &EnumSet<Parameter>)
+                                  -> ESParseResult<I, BindingIdentifier> {
 
     if !params.contains(&Parameter::Yield) {
 
         let result = either(i,
-            // left
-            yield_keyword,
-            // right
-            identifier
-        )
-        .bind(|i, result| {
-            match result {
-                Either::Left(_) => {
-                    i.ret(BindingIdentifier::Yield)
-                },
-                Either::Right(ident) => {
-                    i.ret(BindingIdentifier::Identifier(ident))
+                            // left
+                            yield_keyword,
+                            // right
+                            identifier)
+            .bind(|i, result| {
+                match result {
+                    Either::Left(_) => i.ret(BindingIdentifier::Yield),
+                    Either::Right(ident) => i.ret(BindingIdentifier::Identifier(ident)),
                 }
-            }
-        });
+            });
 
         return result;
     }
@@ -2112,39 +2058,34 @@ fn binding_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
         panic!("misuse of binding_identifier");
     }
 
-    identifier(i).map(|ident| {
-        BindingIdentifier::Identifier(ident)
-    })
+    identifier(i).map(|ident| BindingIdentifier::Identifier(ident))
 
 }
 
 enum LabelIdentifier {
     Identifier(Identifier),
-    Yield
+    Yield,
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LabelIdentifier
-fn label_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, LabelIdentifier> {
+fn label_identifier<I: U8Input>(i: ESInput<I>,
+                                params: &EnumSet<Parameter>)
+                                -> ESParseResult<I, LabelIdentifier> {
 
     if !params.contains(&Parameter::Yield) {
 
         let result = either(i,
-            // left
-            yield_keyword,
-            // right
-            identifier
-        )
-        .bind(|i, result| {
-            match result {
-                Either::Left(_) => {
-                    i.ret(LabelIdentifier::Yield)
-                },
-                Either::Right(ident) => {
-                    i.ret(LabelIdentifier::Identifier(ident))
+                            // left
+                            yield_keyword,
+                            // right
+                            identifier)
+            .bind(|i, result| {
+                match result {
+                    Either::Left(_) => i.ret(LabelIdentifier::Yield),
+                    Either::Right(ident) => i.ret(LabelIdentifier::Identifier(ident)),
                 }
-            }
-        });
+            });
 
         return result;
     }
@@ -2153,9 +2094,7 @@ fn label_identifier<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> E
         panic!("misuse of binding_identifier");
     }
 
-    identifier(i).map(|ident| {
-        LabelIdentifier::Identifier(ident)
-    })
+    identifier(i).map(|ident| LabelIdentifier::Identifier(ident))
 
 }
 
@@ -2165,22 +2104,21 @@ struct Identifier(String);
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Identifier
 fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
     either(i,
-        |i| reserved_word(i),  // left
-        |i| identifier_name(i) // right
-    )
-    .bind(|i, result| {
-        match result {
-            Either::Left(_) => {
-                let loc = i.position();
-                let reason = format!("Reserved keyword may not be used as an identifier.");
-                i.err(ErrorLocation::new(loc, reason).into())
-            },
-            Either::Right(name) => {
-                let IdentifierName(name) = name;
-                i.ret(Identifier(name))
+           |i| reserved_word(i), // left
+           |i| identifier_name(i) /* right */)
+        .bind(|i, result| {
+            match result {
+                Either::Left(_) => {
+                    let loc = i.position();
+                    let reason = format!("Reserved keyword may not be used as an identifier.");
+                    i.err(ErrorLocation::new(loc, reason).into())
+                }
+                Either::Right(name) => {
+                    let IdentifierName(name) = name;
+                    i.ret(Identifier(name))
+                }
             }
-        }
-    })
+        })
 }
 
 // == 12.2 Primary Expression ==
@@ -2196,7 +2134,9 @@ enum PrimaryExpression {
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
-fn primary_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, PrimaryExpression> {
+fn primary_expression<I: U8Input>(i: ESInput<I>,
+                                  params: &EnumSet<Parameter>)
+                                  -> ESParseResult<I, PrimaryExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -2239,7 +2179,7 @@ enum Literal {
     Null,
     Boolean(Bool),
     Numeric(NumericLiteral),
-    String(StringLiteral)
+    String(StringLiteral),
 }
 
 // TODO: test
@@ -2259,26 +2199,36 @@ fn literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Literal> {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-array-initializer
 
-struct ArrayLiteral(/* [ (left bracket) */ Vec<CommonDelim>, ArrayLiteralContents, Vec<CommonDelim> /* ] (right bracket) */);
+struct ArrayLiteral(/* [ (left bracket) */
+                    Vec<CommonDelim>,
+                    ArrayLiteralContents,
+                    Vec<CommonDelim> /* ] (right bracket) */);
 
 enum ArrayLiteralContents {
     Empty(Option<Elision>),
     List(ElementList),
-    ListWithElision(ElementList, Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>, Elision)
+    ListWithElision(ElementList,
+                    Vec<CommonDelim>,
+                    /* , (comma) */
+                    Vec<CommonDelim>,
+                    Elision),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ArrayLiteral
-fn array_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ArrayLiteral> {
+fn array_literal<I: U8Input>(i: ESInput<I>,
+                             params: &EnumSet<Parameter>)
+                             -> ESParseResult<I, ArrayLiteral> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of array_literal");
     }
 
     #[inline]
-    fn array_literal_contents<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ArrayLiteralContents> {
+    fn array_literal_contents<I: U8Input>(i: ESInput<I>,
+                                          params: &EnumSet<Parameter>)
+                                          -> ESParseResult<I, ArrayLiteralContents> {
         parse!{i;
 
             // [ElementList_[?Yield]]
@@ -2335,18 +2285,21 @@ fn array_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPa
 struct ElementList(Vec<ElementListItem>);
 
 enum ElementListItem {
-    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
+    Delim(Vec<CommonDelim>,
+          /* , (comma) */
+          Vec<CommonDelim>),
     ItemExpression(()),
     ItemSpread(()),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ElementList
-fn element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ElementList> {
+fn element_list<I: U8Input>(i: ESInput<I>,
+                            params: &EnumSet<Parameter>)
+                            -> ESParseResult<I, ElementList> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of element_list");
     }
 
@@ -2416,7 +2369,7 @@ struct Elision(Vec<ElisionItem>);
 
 enum ElisionItem {
     CommonDelim(Vec<CommonDelim>),
-    Comma
+    Comma,
 }
 
 // TODO: test
@@ -2442,11 +2395,12 @@ struct SpreadElement(());
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-SpreadElement
-fn spread_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, SpreadElement> {
+fn spread_element<I: U8Input>(i: ESInput<I>,
+                              params: &EnumSet<Parameter>)
+                              -> ESParseResult<I, SpreadElement> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of spread_element");
     }
 
@@ -2472,27 +2426,32 @@ fn spread_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
 // http://www.ecma-international.org/ecma-262/7.0/#sec-object-initializer
 
 // TODO: complete
-struct ObjectLiteral(/* { (left curly bracket) */ Vec<CommonDelim>, ObjectLiteralContents,
-    Vec<CommonDelim> /* } (right curly bracket) */);
+struct ObjectLiteral(/* { (left curly bracket) */
+                     Vec<CommonDelim>,
+                     ObjectLiteralContents,
+                     Vec<CommonDelim> /* } (right curly bracket) */);
 
 enum ObjectLiteralContents {
     Empty,
     PropertyDefinitionList(PropertyDefinitionList),
-    PropertyDefinitionListTrailingComma(PropertyDefinitionList, Vec<CommonDelim>)
+    PropertyDefinitionListTrailingComma(PropertyDefinitionList, Vec<CommonDelim>),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ObjectLiteral
-fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ObjectLiteral> {
+fn object_literal<I: U8Input>(i: ESInput<I>,
+                              params: &EnumSet<Parameter>)
+                              -> ESParseResult<I, ObjectLiteral> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of object_literal");
     }
 
     #[inline]
-    fn object_literal_contents<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ObjectLiteralContents> {
+    fn object_literal_contents<I: U8Input>(i: ESInput<I>,
+                                           params: &EnumSet<Parameter>)
+                                           -> ESParseResult<I, ObjectLiteralContents> {
         parse!{i;
 
             let list = property_definition_list(&params);
@@ -2532,13 +2491,17 @@ fn object_literal<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
 struct PropertyDefinitionList(Vec<PropertyDefinitionListItem>);
 
 enum PropertyDefinitionListItem {
-    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
-    PropertyDefinition(PropertyDefinition)
+    Delim(Vec<CommonDelim>,
+          /* , (comma) */
+          Vec<CommonDelim>),
+    PropertyDefinition(PropertyDefinition),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyDefinitionList
-fn property_definition_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, PropertyDefinitionList> {
+fn property_definition_list<I: U8Input>(i: ESInput<I>,
+                                        params: &EnumSet<Parameter>)
+                                        -> ESParseResult<I, PropertyDefinitionList> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -2598,22 +2561,29 @@ fn property_definition_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Paramet
 enum PropertyDefinition {
     IdentifierReference(IdentifierReference),
     CoverInitializedName(CoverInitializedName),
-    PropertyName(PropertyName, Vec<CommonDelim>, /* : */ Vec<CommonDelim>, ()),
-    MethodDefinition(MethodDefinition)
+    PropertyName(PropertyName,
+                 Vec<CommonDelim>,
+                 /* : */
+                 Vec<CommonDelim>,
+                 ()),
+    MethodDefinition(MethodDefinition),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyDefinition
-fn property_definition<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, PropertyDefinition> {
+fn property_definition<I: U8Input>(i: ESInput<I>,
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, PropertyDefinition> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of property_definition");
     }
 
     #[inline]
-    fn prop_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, PropertyDefinition> {
+    fn prop_name<I: U8Input>(i: ESInput<I>,
+                             params: &EnumSet<Parameter>)
+                             -> ESParseResult<I, PropertyDefinition> {
 
         let mut expr_params = params.clone();
         expr_params.insert(Parameter::In);
@@ -2650,16 +2620,17 @@ fn property_definition<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -
 
 enum PropertyName {
     LiteralPropertyName(LiteralPropertyName),
-    ComputedPropertyName(ComputedPropertyName)
+    ComputedPropertyName(ComputedPropertyName),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyName
-fn property_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, PropertyName> {
+fn property_name<I: U8Input>(i: ESInput<I>,
+                             params: &EnumSet<Parameter>)
+                             -> ESParseResult<I, PropertyName> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of property_name");
     }
 
@@ -2676,7 +2647,7 @@ fn property_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPa
 enum LiteralPropertyName {
     IdentifierName(IdentifierName),
     StringLiteral(StringLiteral),
-    NumericLiteral(NumericLiteral)
+    NumericLiteral(NumericLiteral),
 }
 
 // TODO: test
@@ -2699,11 +2670,12 @@ struct ComputedPropertyName(Vec<CommonDelim>, (), Vec<CommonDelim>);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ComputedPropertyName
-fn computed_property_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ComputedPropertyName> {
+fn computed_property_name<I: U8Input>(i: ESInput<I>,
+                                      params: &EnumSet<Parameter>)
+                                      -> ESParseResult<I, ComputedPropertyName> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of computed_property_name");
     }
 
@@ -2729,11 +2701,12 @@ struct CoverInitializedName(IdentifierReference, Vec<CommonDelim>, Initializer);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-CoverInitializedName
-fn cover_initialized_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, CoverInitializedName> {
+fn cover_initialized_name<I: U8Input>(i: ESInput<I>,
+                                      params: &EnumSet<Parameter>)
+                                      -> ESParseResult<I, CoverInitializedName> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of cover_initialized_name");
     }
 
@@ -2759,12 +2732,13 @@ struct Initializer(Vec<CommonDelim>, ());
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Initializer
-fn initializer<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, Initializer> {
+fn initializer<I: U8Input>(i: ESInput<I>,
+                           params: &EnumSet<Parameter>)
+                           -> ESParseResult<I, Initializer> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::In) ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::In) ||
+         params.contains(&Parameter::Yield)) {
         panic!("misuse of initializer");
     }
 
@@ -2785,18 +2759,20 @@ fn initializer<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESPars
 // http://www.ecma-international.org/ecma-262/7.0/#sec-conditional-operator
 
 // TODO: test
-fn conditional_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
+fn conditional_expression<I: U8Input>(i: ESInput<I>,
+                                      params: &EnumSet<Parameter>)
+                                      -> ESParseResult<I, ()> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::In) ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::In) ||
+         params.contains(&Parameter::Yield)) {
         panic!("misuse of conditional_expression");
     }
 
     either(i,
-        // left
-        |i| -> ESParseResult<I, ()> {parse!{i;
+           // left
+           |i| -> ESParseResult<I, ()> {
+        parse!{i;
 
             logical_or_expression(&params);
 
@@ -2819,22 +2795,24 @@ fn conditional_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>
             // TODO: token
             ret {()}
 
-        }},
-        // right
-        |i| -> ESParseResult<I, ()> {parse!{i;
+        }
+    },
+           // right
+           |i| -> ESParseResult<I, ()> {
+        parse!{i;
 
             logical_or_expression(&params);
 
             // TODO: token
             ret {()}
-        }}
-    )
+        }
+    })
         .bind(|i, result| {
             match result {
                 Either::Left(_) => {
                     // TODO: fix
                     i.ret(())
-                },
+                }
                 Either::Right(_) => {
                     // TODO: fix
                     i.ret(())
@@ -2849,13 +2827,13 @@ fn conditional_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalANDExpression
-fn logical_and_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
+fn logical_and_expression<I: U8Input>(i: ESInput<I>,
+                                      params: &EnumSet<Parameter>)
+                                      -> ESParseResult<I, ()> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::In) ||
-        params.contains(&Parameter::Yield)
-        ) {
+    if !(params.is_empty() || params.contains(&Parameter::In) ||
+         params.contains(&Parameter::Yield)) {
         panic!("misuse of logical_and_expression");
     }
 
@@ -2868,15 +2846,13 @@ fn logical_and_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>
 
 #[derive(Debug)]
 enum LogicOrExpression {
-    Or(
-        Box<LogicOrExpression>,
-        Vec<CommonDelim>, // common_delim
-        /* || */
-        Vec<CommonDelim>, // common_delim
-        Box<LogicOrExpression>
-    ),
+    Or(Box<LogicOrExpression>,
+       Vec<CommonDelim>, // common_delim
+       /* || */
+       Vec<CommonDelim>, // common_delim
+       Box<LogicOrExpression>),
     Leaf(bool),
-    None
+    None,
 }
 
 impl Default for LogicOrExpression {
@@ -2891,19 +2867,17 @@ impl LogicOrExpression {
         match *self {
             LogicOrExpression::None => {
                 panic!("invariant violation");
-            },
+            }
             _ => {}
         }
 
         let lhs = mem::replace(self, LogicOrExpression::None);
 
-        let new_val = LogicOrExpression::Or(
-            Box::new(lhs),
-            delim_1,
-            /* || */
-            delim_2,
-            Box::new(LogicOrExpression::None)
-        );
+        let new_val = LogicOrExpression::Or(Box::new(lhs),
+                                            delim_1,
+                                            /* || */
+                                            delim_2,
+                                            Box::new(LogicOrExpression::None));
 
         mem::replace(self, new_val);
     }
@@ -2915,21 +2889,19 @@ impl LogicOrExpression {
         match *self {
             LogicOrExpression::Leaf(_) => {
                 panic!("invariant violation");
-            },
+            }
             LogicOrExpression::None => {
                 mem::replace(self, rhs);
-            },
+            }
             LogicOrExpression::Or(_, _, _, _) => {
                 if let LogicOrExpression::Or(lhs, delim_1, delim_2, _) =
                     mem::replace(self, LogicOrExpression::None) {
 
-                    let new_val = LogicOrExpression::Or(
-                        lhs,
-                        delim_1,
-                        /* || */
-                        delim_2,
-                        Box::new(rhs)
-                    );
+                    let new_val = LogicOrExpression::Or(lhs,
+                                                        delim_1,
+                                                        /* || */
+                                                        delim_2,
+                                                        Box::new(rhs));
 
                     mem::replace(self, new_val);
                 } else {
@@ -2942,13 +2914,13 @@ impl LogicOrExpression {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalORExpression
-fn logical_or_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
-    -> ESParseResult<I, LogicOrExpression> {
+fn logical_or_expression<I: U8Input>(i: ESInput<I>,
+                                     params: &EnumSet<Parameter>)
+                                     -> ESParseResult<I, LogicOrExpression> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::In) ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::In) ||
+         params.contains(&Parameter::Yield)) {
         panic!("misuse of logical_or_expression");
     }
 
@@ -3017,10 +2989,13 @@ fn logical_or_expression_test() {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-AssignmentExpression
-fn assignment_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ()> {
+fn assignment_expression<I: U8Input>(i: ESInput<I>,
+                                     params: &EnumSet<Parameter>)
+                                     -> ESParseResult<I, ()> {
 
     // validation
-    if !(params.is_empty() || params.contains(&Parameter::In) || params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::In) ||
+         params.contains(&Parameter::Yield)) {
         panic!("misuse of assignment_expression");
     }
 
@@ -3041,16 +3016,19 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
 struct ExpressionList(Vec<ExpressionListItem>);
 
 enum ExpressionListItem {
-    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
+    Delim(Vec<CommonDelim>,
+          /* , (comma) */
+          Vec<CommonDelim>),
     AssignmentExpression(()),
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Expression
-fn expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ExpressionList> {
+fn expression<I: U8Input>(i: ESInput<I>,
+                          params: &EnumSet<Parameter>)
+                          -> ESParseResult<I, ExpressionList> {
 
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield) ||
-        params.contains(&Parameter::In)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::In)) {
         panic!("misuse of expression");
     }
 
@@ -3111,16 +3089,17 @@ fn expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParse
 enum Statement {
     // BlockStatement(BlockStatement),
     VariableStatement(VariableStatement),
-    EmptyStatement(EmptyStatement)
+    EmptyStatement(EmptyStatement),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Statement
-fn statement<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, Statement> {
+fn statement<I: U8Input>(i: ESInput<I>,
+                         params: &EnumSet<Parameter>)
+                         -> ESParseResult<I, Statement> {
 
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield) ||
-        params.contains(&Parameter::Return)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::Return)) {
         panic!("misuse of statement");
     }
 
@@ -3142,15 +3121,16 @@ fn statement<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParse
 
 enum Declaration {
     // TODO: complete
-    Foo
+    Foo,
 }
 
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-Declaration
-fn declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, Declaration> {
+fn declaration<I: U8Input>(i: ESInput<I>,
+                           params: &EnumSet<Parameter>)
+                           -> ESParseResult<I, Declaration> {
 
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of declaration");
     }
 
@@ -3177,11 +3157,12 @@ struct BlockStatement(Block);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BlockStatement
-fn block_statement<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, BlockStatement> {
+fn block_statement<I: U8Input>(i: ESInput<I>,
+                               params: &EnumSet<Parameter>)
+                               -> ESParseResult<I, BlockStatement> {
 
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield) ||
-        params.contains(&Parameter::Return)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::Return)) {
         panic!("misuse of block_statement");
     }
 
@@ -3192,11 +3173,10 @@ struct Block(Vec<CommonDelim>, Option<StatementList>, Vec<CommonDelim>);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#sec-block
-fn block<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, Block> {
+fn block<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, Block> {
 
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield) ||
-        params.contains(&Parameter::Return)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::Return)) {
         panic!("misuse of block");
     }
 
@@ -3217,17 +3197,20 @@ fn block<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResu
 struct StatementList(Vec<StatementListItemWrap>);
 
 enum StatementListItemWrap {
-    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
-    StatementListItem(StatementListItem)
+    Delim(Vec<CommonDelim>,
+          /* , (comma) */
+          Vec<CommonDelim>),
+    StatementListItem(StatementListItem),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-StatementList
-fn statement_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, StatementList> {
+fn statement_list<I: U8Input>(i: ESInput<I>,
+                              params: &EnumSet<Parameter>)
+                              -> ESParseResult<I, StatementList> {
 
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield) ||
-        params.contains(&Parameter::Return)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::Return)) {
         panic!("misuse of statement_list");
     }
 
@@ -3282,16 +3265,17 @@ fn statement_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ES
 
 enum StatementListItem {
     Statement(Statement),
-    Declaration(Declaration)
+    Declaration(Declaration),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-StatementListItem
-fn statement_list_item<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, StatementListItem> {
+fn statement_list_item<I: U8Input>(i: ESInput<I>,
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, StatementListItem> {
 
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield) ||
-        params.contains(&Parameter::Return)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::Return)) {
         panic!("misuse of statement_list_item");
     }
 
@@ -3319,32 +3303,34 @@ fn statement_list_item<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) 
 
 enum LexicalDeclaration {
     Let(Vec<CommonDelim>, BindingList, Vec<CommonDelim>),
-    Const(Vec<CommonDelim>, BindingList, Vec<CommonDelim>)
+    Const(Vec<CommonDelim>, BindingList, Vec<CommonDelim>),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LexicalDeclaration
-fn lexical_declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, LexicalDeclaration> {
+fn lexical_declaration<I: U8Input>(i: ESInput<I>,
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, LexicalDeclaration> {
 
     // validation
-    if !(params.is_empty() || params.contains(&Parameter::Yield) || params.contains(&Parameter::In)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::In)) {
         panic!("misuse of lexical_declaration");
     }
 
     // http://www.ecma-international.org/ecma-262/7.0/#prod-LetOrConst
-    on_error(
-        i,
-        |i| either(i,
-            |i| string(i, b"let"), // left
-            |i| string(i, b"const") // right
-        ),
-        |i| {
-            let reason = "Expected either 'let' or 'const'.".to_string();
-            ErrorLocation::new(i.position(), reason)
-        }
-    )
-    .bind(|i, result| {
-        parse!{i;
+    on_error(i,
+             |i| {
+                 either(i,
+                        |i| string(i, b"let"), // left
+                        |i| string(i, b"const") /* right */)
+             },
+             |i| {
+                 let reason = "Expected either 'let' or 'const'.".to_string();
+                 ErrorLocation::new(i.position(), reason)
+             })
+        .bind(|i, result| {
+            parse!{i;
             let delim_1 = common_delim_required();
             let list = binding_list(&params);
             let delim_2 = common_delim();
@@ -3360,23 +3346,28 @@ fn lexical_declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) 
                 }
             }
         }
-    })
+        })
 
 }
 
 struct BindingList(Vec<BindingListItem>);
 
 enum BindingListItem {
-    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
-    LexicalBinding(LexicalBinding)
+    Delim(Vec<CommonDelim>,
+          /* , (comma) */
+          Vec<CommonDelim>),
+    LexicalBinding(LexicalBinding),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingList
-fn binding_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, BindingList> {
+fn binding_list<I: U8Input>(i: ESInput<I>,
+                            params: &EnumSet<Parameter>)
+                            -> ESParseResult<I, BindingList> {
 
     // validation
-    if !(params.is_empty() || params.contains(&Parameter::Yield) || params.contains(&Parameter::In)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::In)) {
         panic!("misuse of binding_list");
     }
 
@@ -3431,15 +3422,18 @@ fn binding_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESPa
 
 enum LexicalBinding {
     BindingIdentifier(BindingIdentifier, Vec<CommonDelim>, Option<Initializer>),
-    BindingPattern(BindingPattern, Vec<CommonDelim>, Initializer)
+    BindingPattern(BindingPattern, Vec<CommonDelim>, Initializer),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LexicalBinding
-fn lexical_binding<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, LexicalBinding> {
+fn lexical_binding<I: U8Input>(i: ESInput<I>,
+                               params: &EnumSet<Parameter>)
+                               -> ESParseResult<I, LexicalBinding> {
 
     // validation
-    if !(params.is_empty() || params.contains(&Parameter::Yield) || params.contains(&Parameter::In)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::In)) {
         panic!("misuse of lexical_binding");
     }
 
@@ -3448,13 +3442,12 @@ fn lexical_binding<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> E
     let binding_params = binding_params;
 
     either(i,
-        |i| binding_identifier(i, &binding_params), // left
-        |i| binding_pattern(i, &binding_params) // right
-    )
-    .bind(|i, result| {
-        match result {
-            Either::Left(binding_identifier) => {
-                parse!{i;
+           |i| binding_identifier(i, &binding_params), // left
+           |i| binding_pattern(i, &binding_params) /* right */)
+        .bind(|i, result| {
+            match result {
+                Either::Left(binding_identifier) => {
+                    parse!{i;
 
                     // TODO: tie this to be optional with initializer (below)?
                     let delim = common_delim();
@@ -3462,16 +3455,16 @@ fn lexical_binding<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> E
                     let init = option(|i| initializer(i, &params).map(|x| Some(x)), None);
                     ret LexicalBinding::BindingIdentifier(binding_identifier, delim, init)
                 }
-            },
-            Either::Right(binding_pattern) => {
-                parse!{i;
+                }
+                Either::Right(binding_pattern) => {
+                    parse!{i;
                     let delim = common_delim();
                     let init = initializer(&params);
                     ret LexicalBinding::BindingPattern(binding_pattern, delim, init)
                 }
+                }
             }
-        }
-    })
+        })
 }
 
 // == 13.3.2 Variable Statement ==
@@ -3482,7 +3475,9 @@ struct VariableStatement(Vec<CommonDelim>, BindingList, Vec<CommonDelim>);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableStatement
-fn variable_statement<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, VariableStatement> {
+fn variable_statement<I: U8Input>(i: ESInput<I>,
+                                  params: &EnumSet<Parameter>)
+                                  -> ESParseResult<I, VariableStatement> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -3516,16 +3511,21 @@ fn variable_statement<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
 struct VariableDeclarationList(Vec<VariableDeclarationListItem>);
 
 enum VariableDeclarationListItem {
-    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
-    VariableDeclaration(VariableDeclaration)
+    Delim(Vec<CommonDelim>,
+          /* , (comma) */
+          Vec<CommonDelim>),
+    VariableDeclaration(VariableDeclaration),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableDeclarationList
-fn variable_declaration_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, VariableDeclarationList> {
+fn variable_declaration_list<I: U8Input>(i: ESInput<I>,
+                                         params: &EnumSet<Parameter>)
+                                         -> ESParseResult<I, VariableDeclarationList> {
 
     // validation
-    if !(params.is_empty() || params.contains(&Parameter::Yield) || params.contains(&Parameter::In)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::In)) {
         panic!("misuse of variable_declaration_list");
     }
 
@@ -3580,15 +3580,18 @@ fn variable_declaration_list<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parame
 
 enum VariableDeclaration {
     BindingIdentifier(BindingIdentifier, Vec<CommonDelim>, Option<Initializer>),
-    BindingPattern(BindingPattern, Vec<CommonDelim>, Initializer)
+    BindingPattern(BindingPattern, Vec<CommonDelim>, Initializer),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableDeclaration
-fn variable_declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>) -> ESParseResult<I, VariableDeclaration> {
+fn variable_declaration<I: U8Input>(i: ESInput<I>,
+                                    params: &EnumSet<Parameter>)
+                                    -> ESParseResult<I, VariableDeclaration> {
 
     // validation
-    if !(params.is_empty() || params.contains(&Parameter::Yield) || params.contains(&Parameter::In)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::In)) {
         panic!("misuse of variable_declaration");
     }
 
@@ -3597,13 +3600,12 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>)
     let binding_params = binding_params;
 
     either(i,
-        |i| binding_identifier(i, &binding_params), // left
-        |i| binding_pattern(i, &binding_params) // right
-    )
-    .bind(|i, result| {
-        match result {
-            Either::Left(binding_identifier) => {
-                parse!{i;
+           |i| binding_identifier(i, &binding_params), // left
+           |i| binding_pattern(i, &binding_params) /* right */)
+        .bind(|i, result| {
+            match result {
+                Either::Left(binding_identifier) => {
+                    parse!{i;
 
                     // TODO: tie this to be optional with initializer (below)?
                     let delim = common_delim();
@@ -3611,16 +3613,16 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>)
                     let init = option(|i| initializer(i, &params).map(|x| Some(x)), None);
                     ret VariableDeclaration::BindingIdentifier(binding_identifier, delim, init)
                 }
-            },
-            Either::Right(binding_pattern) => {
-                parse!{i;
+                }
+                Either::Right(binding_pattern) => {
+                    parse!{i;
                     let delim = common_delim();
                     let init = initializer(&params);
                     ret VariableDeclaration::BindingPattern(binding_pattern, delim, init)
                 }
+                }
             }
-        }
-    })
+        })
 }
 
 // == 13.3.3 Destructuring Binding Patterns ==
@@ -3629,16 +3631,17 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>,  params: &EnumSet<Parameter>)
 
 enum BindingPattern {
     ObjectBindingPattern(ObjectBindingPattern),
-    ArrayBindingPattern(Box<ArrayBindingPattern>)
+    ArrayBindingPattern(Box<ArrayBindingPattern>),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingPattern
-fn binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingPattern> {
+fn binding_pattern<I: U8Input>(i: ESInput<I>,
+                               params: &EnumSet<Parameter>)
+                               -> ESParseResult<I, BindingPattern> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of binding_pattern");
     }
 
@@ -3656,21 +3659,26 @@ fn binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ES
 enum ObjectBindingPattern {
     Empty(Vec<CommonDelim>, Vec<CommonDelim>),
     BindingPropertyList(BindingPropertyList),
-    BindingPropertyListTrailingComma(BindingPropertyList, /* , (comma) */ Vec<CommonDelim>)
+    BindingPropertyListTrailingComma(BindingPropertyList,
+                                     /* , (comma) */
+                                     Vec<CommonDelim>),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ObjectBindingPattern
-fn object_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ObjectBindingPattern> {
+fn object_binding_pattern<I: U8Input>(i: ESInput<I>,
+                                      params: &EnumSet<Parameter>)
+                                      -> ESParseResult<I, ObjectBindingPattern> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of object_binding_pattern");
     }
 
     #[inline]
-    fn contents<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ObjectBindingPattern> {
+    fn contents<I: U8Input>(i: ESInput<I>,
+                            params: &EnumSet<Parameter>)
+                            -> ESParseResult<I, ObjectBindingPattern> {
         parse!{i;
 
             let list = binding_property_list(params);
@@ -3713,36 +3721,38 @@ fn object_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>
     }
 }
 
-struct ArrayBindingPattern(
-    /* [ (left bracket) */ Vec<CommonDelim>,
-    ArrayBindingPatternContents,
-    Vec<CommonDelim> /* ] (right bracket) */);
+struct ArrayBindingPattern(/* [ (left bracket) */
+                           Vec<CommonDelim>,
+                           ArrayBindingPatternContents,
+                           Vec<CommonDelim> /* ] (right bracket) */);
 
 enum ArrayBindingPatternContents {
-    Rest(Option<Elision>,  Vec<CommonDelim>, Option<BindingRestElement>),
+    Rest(Option<Elision>, Vec<CommonDelim>, Option<BindingRestElement>),
     List(BindingElementList),
-    ListWithRest(
-        BindingElementList,
-        Vec<CommonDelim>, /* , (comma) */
-        Vec<CommonDelim>,
-        Option<Elision>,
-        Vec<CommonDelim>,
-        Option<BindingRestElement>)
+    ListWithRest(BindingElementList,
+                 Vec<CommonDelim>, /* , (comma) */
+                 Vec<CommonDelim>,
+                 Option<Elision>,
+                 Vec<CommonDelim>,
+                 Option<BindingRestElement>),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ArrayBindingPattern
-fn array_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, ArrayBindingPattern> {
+fn array_binding_pattern<I: U8Input>(i: ESInput<I>,
+                                     params: &EnumSet<Parameter>)
+                                     -> ESParseResult<I, ArrayBindingPattern> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of array_binding_pattern");
     }
 
     #[inline]
-    fn array_binding_pattern_rest<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
-        ESParseResult<I, (Option<Elision>, Vec<CommonDelim>, Option<BindingRestElement>)> {
+    fn array_binding_pattern_rest<I: U8Input>
+        (i: ESInput<I>,
+         params: &EnumSet<Parameter>)
+         -> ESParseResult<I, (Option<Elision>, Vec<CommonDelim>, Option<BindingRestElement>)> {
         parse!{i;
 
             let elision = option(|i| elision(i).map(|x| Some(x)),
@@ -3757,8 +3767,10 @@ fn array_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
     }
 
     #[inline]
-    fn array_binding_pattern_contents<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) ->
-        ESParseResult<I, ArrayBindingPatternContents> {
+    fn array_binding_pattern_contents<I: U8Input>
+        (i: ESInput<I>,
+         params: &EnumSet<Parameter>)
+         -> ESParseResult<I, ArrayBindingPatternContents> {
         parse!{i;
 
             // [BindingElementList_[?Yield]]
@@ -3819,17 +3831,20 @@ fn array_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
 struct BindingPropertyList(Vec<BindingPropertyListItem>);
 
 enum BindingPropertyListItem {
-    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
-    BindingProperty(BindingProperty)
+    Delim(Vec<CommonDelim>,
+          /* , (comma) */
+          Vec<CommonDelim>),
+    BindingProperty(BindingProperty),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingPropertyList
-fn binding_property_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingPropertyList> {
+fn binding_property_list<I: U8Input>(i: ESInput<I>,
+                                     params: &EnumSet<Parameter>)
+                                     -> ESParseResult<I, BindingPropertyList> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of binding_property_list");
     }
 
@@ -3885,17 +3900,20 @@ fn binding_property_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
 struct BindingElementList(Vec<BindingElementListItem>);
 
 enum BindingElementListItem {
-    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
-    BindingElisionElement(BindingElisionElement)
+    Delim(Vec<CommonDelim>,
+          /* , (comma) */
+          Vec<CommonDelim>),
+    BindingElisionElement(BindingElisionElement),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElementList
-fn binding_element_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingElementList> {
+fn binding_element_list<I: U8Input>(i: ESInput<I>,
+                                    params: &EnumSet<Parameter>)
+                                    -> ESParseResult<I, BindingElementList> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of binding_elision_list");
     }
 
@@ -3952,11 +3970,12 @@ struct BindingElisionElement(Option<Elision>, Vec<CommonDelim>, BindingElement);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElisionElement
-fn binding_elision_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingElisionElement> {
+fn binding_elision_element<I: U8Input>(i: ESInput<I>,
+                                       params: &EnumSet<Parameter>)
+                                       -> ESParseResult<I, BindingElisionElement> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of binding_elision_element");
     }
 
@@ -3975,21 +3994,28 @@ fn binding_elision_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter
 
 enum BindingProperty {
     SingleNameBinding(SingleNameBinding),
-    PropertyName(PropertyName, Vec<CommonDelim>, /* : (colon) */ Vec<CommonDelim>, BindingElement)
+    PropertyName(PropertyName,
+                 Vec<CommonDelim>,
+                 /* : (colon) */
+                 Vec<CommonDelim>,
+                 BindingElement),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingProperty
-fn binding_property<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingProperty> {
+fn binding_property<I: U8Input>(i: ESInput<I>,
+                                params: &EnumSet<Parameter>)
+                                -> ESParseResult<I, BindingProperty> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of binding_property");
     }
 
     #[inline]
-    fn binding_property_property_name<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingProperty> {
+    fn binding_property_property_name<I: U8Input>(i: ESInput<I>,
+                                                  params: &EnumSet<Parameter>)
+                                                  -> ESParseResult<I, BindingProperty> {
 
         let mut init_params = params.clone();
         init_params.insert(Parameter::In);
@@ -4020,21 +4046,24 @@ fn binding_property<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> E
 
 enum BindingElement {
     SingleNameBinding(SingleNameBinding),
-    BindingPattern(BindingPattern, Vec<CommonDelim>, Option<Initializer>)
+    BindingPattern(BindingPattern, Vec<CommonDelim>, Option<Initializer>),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingElement
-fn binding_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingElement> {
+fn binding_element<I: U8Input>(i: ESInput<I>,
+                               params: &EnumSet<Parameter>)
+                               -> ESParseResult<I, BindingElement> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of binding_element");
     }
 
     #[inline]
-    fn binding_element_binding_pattern<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingElement> {
+    fn binding_element_binding_pattern<I: U8Input>(i: ESInput<I>,
+                                                   params: &EnumSet<Parameter>)
+                                                   -> ESParseResult<I, BindingElement> {
 
         let mut init_params = params.clone();
         init_params.insert(Parameter::In);
@@ -4066,11 +4095,12 @@ struct SingleNameBinding(BindingIdentifier, Vec<CommonDelim>, Option<Initializer
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-SingleNameBinding
-fn single_name_binding<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, SingleNameBinding> {
+fn single_name_binding<I: U8Input>(i: ESInput<I>,
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, SingleNameBinding> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of single_name_binding");
     }
 
@@ -4092,22 +4122,23 @@ fn single_name_binding<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -
 
 enum BindingRestElement {
     BindingIdentifier(Vec<CommonDelim>, BindingIdentifier),
-    BindingPattern(Vec<CommonDelim>, BindingPattern)
+    BindingPattern(Vec<CommonDelim>, BindingPattern),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingRestElement
-fn binding_rest_element<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingRestElement> {
+fn binding_rest_element<I: U8Input>(i: ESInput<I>,
+                                    params: &EnumSet<Parameter>)
+                                    -> ESParseResult<I, BindingRestElement> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of binding_rest_element");
     }
 
     enum BindingRestElementContent {
         BindingIdentifier(BindingIdentifier),
-        BindingPattern(BindingPattern)
+        BindingPattern(BindingPattern),
     }
 
     parse!{i;
@@ -4160,27 +4191,29 @@ fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement
 
 enum FunctionDeclaration {
     NamedFunction(NamedFunction),
-    AnonymousFunction
+    AnonymousFunction,
 }
 
 struct NamedFunction;
 
 // TODO: test
-fn function_declaration<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FunctionDeclaration> {
+fn function_declaration<I: U8Input>(i: ESInput<I>,
+                                    params: &EnumSet<Parameter>)
+                                    -> ESParseResult<I, FunctionDeclaration> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield) ||
-        params.contains(&Parameter::Default)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::Default)) {
         panic!("misuse of function_declaration");
     }
 
     #[inline]
-    fn named_function<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, NamedFunction> {
+    fn named_function<I: U8Input>(i: ESInput<I>,
+                                  params: &EnumSet<Parameter>)
+                                  -> ESParseResult<I, NamedFunction> {
 
         // validation
-        if !(params.is_empty() ||
-            params.contains(&Parameter::Yield)) {
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
             panic!("misuse of named_function");
         }
 
@@ -4247,31 +4280,35 @@ fn function_declaration<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) 
 enum FormalParameterList {
     FunctionRestParameter(FunctionRestParameter),
     FormalsList(FormalsList),
-    FormalsListWithRest(FormalsList, FunctionRestParameter)
+    FormalsListWithRest(FormalsList, FunctionRestParameter),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FormalParameterList
-fn formal_parameter_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FormalParameterList> {
+fn formal_parameter_list<I: U8Input>(i: ESInput<I>,
+                                     params: &EnumSet<Parameter>)
+                                     -> ESParseResult<I, FormalParameterList> {
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of formal_parameter_list");
     }
 
     or(i,
-        |i| parse!{i;
+       |i| {
+        parse!{i;
             let rest = function_rest_parameter(&params);
 
             ret {
                 FormalParameterList::FunctionRestParameter(rest)
             }
-        },
-        |i| parse!{i;
+        }
+    },
+       |i| {
+        parse!{i;
 
             let list = formals_list(&params);
 
-            let rest = option(|i| -> ESParseResult<I, FunctionRestParameter> {parse!{i;
+            let rest = option(|i| -> ESParseResult<I, Option<FunctionRestParameter>> {parse!{i;
 
                 let delim_1 = common_delim();
 
@@ -4297,23 +4334,26 @@ fn formal_parameter_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>)
                 }
             }
         }
-    )
+    })
 }
 
 struct FormalsList(Vec<FormalsListItem>);
 
 enum FormalsListItem {
-    Delim(Vec<CommonDelim>, /* , (comma) */ Vec<CommonDelim>),
-    FormalParameter(BindingElement)
+    Delim(Vec<CommonDelim>,
+          /* , (comma) */
+          Vec<CommonDelim>),
+    FormalParameter(BindingElement),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FormalsList
-fn formals_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FormalsList> {
+fn formals_list<I: U8Input>(i: ESInput<I>,
+                            params: &EnumSet<Parameter>)
+                            -> ESParseResult<I, FormalsList> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of formals_list");
     }
 
@@ -4372,11 +4412,12 @@ type FunctionRestParameter = BindingRestElement;
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionRestParameter
-fn function_rest_parameter<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FunctionRestParameter> {
+fn function_rest_parameter<I: U8Input>(i: ESInput<I>,
+                                       params: &EnumSet<Parameter>)
+                                       -> ESParseResult<I, FunctionRestParameter> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of function_rest_parameter");
     }
 
@@ -4385,11 +4426,12 @@ fn function_rest_parameter<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FormalParameter
-fn formal_parameter<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, BindingElement> {
+fn formal_parameter<I: U8Input>(i: ESInput<I>,
+                                params: &EnumSet<Parameter>)
+                                -> ESParseResult<I, BindingElement> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of formal_parameter");
     }
 
@@ -4398,11 +4440,12 @@ fn formal_parameter<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> E
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionBody
-fn function_body<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FunctionStatementList> {
+fn function_body<I: U8Input>(i: ESInput<I>,
+                             params: &EnumSet<Parameter>)
+                             -> ESParseResult<I, FunctionStatementList> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of function_body");
     }
 
@@ -4413,11 +4456,12 @@ struct FunctionStatementList(Option<StatementList>);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionStatementList
-fn function_statement_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, FunctionStatementList> {
+fn function_statement_list<I: U8Input>(i: ESInput<I>,
+                                       params: &EnumSet<Parameter>)
+                                       -> ESParseResult<I, FunctionStatementList> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of function_statement_list");
     }
 
@@ -4439,22 +4483,30 @@ fn function_statement_list<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter
 enum MethodDefinition {
     Method,
     GeneratorMethod,
-    Get(Vec<CommonDelim>, PropertyName, Vec<CommonDelim>, Vec<CommonDelim>, Vec<CommonDelim>, Vec<CommonDelim>),
-    Set(Vec<CommonDelim>, PropertyName)
+    Get(Vec<CommonDelim>,
+        PropertyName,
+        Vec<CommonDelim>,
+        Vec<CommonDelim>,
+        Vec<CommonDelim>,
+        Vec<CommonDelim>),
+    Set(Vec<CommonDelim>, PropertyName),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-MethodDefinition
-fn method_definition<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, MethodDefinition> {
+fn method_definition<I: U8Input>(i: ESInput<I>,
+                                 params: &EnumSet<Parameter>)
+                                 -> ESParseResult<I, MethodDefinition> {
 
     // validation
-    if !(params.is_empty() ||
-        params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of method_definition");
     }
 
     #[inline]
-    fn method_definition_get<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, MethodDefinition> {
+    fn method_definition_get<I: U8Input>(i: ESInput<I>,
+                                         params: &EnumSet<Parameter>)
+                                         -> ESParseResult<I, MethodDefinition> {
         parse!{i;
 
             on_error(
