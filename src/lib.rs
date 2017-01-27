@@ -4275,7 +4275,21 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
 
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-StrictFormalParameters
 
+struct StrictFormalParameters(FormalParameterList);
 
+fn strict_formal_parameters<I: U8Input>(i: ESInput<I>,
+                                 params: &EnumSet<Parameter>)
+                                 -> ESParseResult<I, StrictFormalParameters> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of strict_formal_parameters");
+    }
+
+    formal_parameter_list(i, params)
+        .map(|x| StrictFormalParameters(x))
+
+}
 
 enum FormalParameters {
     Empty,
@@ -4287,6 +4301,11 @@ enum FormalParameters {
 fn formal_parameters<I: U8Input>(i: ESInput<I>,
                                  params: &EnumSet<Parameter>)
                                  -> ESParseResult<I, FormalParameters> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of formal_parameters");
+    }
 
     option(i,
            |i| {
