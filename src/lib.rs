@@ -1107,17 +1107,12 @@ fn identifier_name<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierName
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierStart
 fn identifier_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
 
-    #[inline]
-    fn identifier_start_unicode<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
-        escaped_unicode_escape_seq(i)
-    }
-
     parse!{i;
 
         let start = unicode_id_start() <|>
         token_as_char(b'$') <|>
         token_as_char(b'_') <|>
-        identifier_start_unicode();
+        escaped_unicode_escape_seq();
 
         ret start
     }
@@ -1127,17 +1122,12 @@ fn identifier_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierPart
 fn identifier_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
 
-    #[inline]
-    fn identifier_part_unicode<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
-        token(i, b'\\').then(unicode_escape_seq)
-    }
-
     parse!{i;
 
         let part = unicode_id_continue() <|>
         token_as_char(b'$') <|>
         token_as_char(b'_') <|>
-        identifier_part_unicode() <|>
+        escaped_unicode_escape_seq() <|>
         parse_utf8_char_of_bytes(b"\x200C") <|> // <ZWNJ>
         parse_utf8_char_of_bytes(b"\x200D"); // <ZWJ>
 
@@ -1147,6 +1137,9 @@ fn identifier_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDStart
 fn unicode_id_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+
+    // any Unicode code point with the Unicode property "ID_Start"
+
     parse_utf8_char(i).bind(|i, c: char| {
         if c.is_xid_start() {
             i.ret(c)
@@ -4413,7 +4406,7 @@ enum FormalsListItem {
     Delim(Vec<CommonDelim>,
           /* , (comma) */
           Vec<CommonDelim>),
-    FormalParameter(BindingElement),
+    FormalParameter(FormalParameter),
 }
 
 // TODO: test
@@ -4474,7 +4467,13 @@ fn formals_list<I: U8Input>(i: ESInput<I>,
             reducer
         );
 
-        ret FormalsList(list)
+        ret {
+
+            // TODO: dev mode
+            assert!(list.len() > 0);
+
+            FormalsList(list)
+        }
     }
 }
 
@@ -4494,11 +4493,13 @@ fn function_rest_parameter<I: U8Input>(i: ESInput<I>,
     binding_rest_element(i, params)
 }
 
+type FormalParameter = BindingElement;
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FormalParameter
 fn formal_parameter<I: U8Input>(i: ESInput<I>,
                                 params: &EnumSet<Parameter>)
-                                -> ESParseResult<I, BindingElement> {
+                                -> ESParseResult<I, FormalParameter> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
