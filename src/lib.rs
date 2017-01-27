@@ -4275,12 +4275,42 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
 
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-StrictFormalParameters
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-FormalParameters
+
+
+enum FormalParameters {
+    Empty,
+    FormalParameterList(FormalParameterList),
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-FormalParameters
+fn formal_parameters<I: U8Input>(i: ESInput<I>,
+                                 params: &EnumSet<Parameter>)
+                                 -> ESParseResult<I, FormalParameters> {
+
+    option(i,
+           |i| {
+        parse!{i;
+
+        let list = formal_parameter_list(params);
+
+        ret {
+            FormalParameters::FormalParameterList(list)
+        }
+
+    }
+    },
+           FormalParameters::Empty)
+}
 
 enum FormalParameterList {
     FunctionRestParameter(FunctionRestParameter),
     FormalsList(FormalsList),
-    FormalsListWithRest(FormalsList, FunctionRestParameter),
+    FormalsListWithRest(FormalsList,
+                        Vec<CommonDelim>,
+                        /* comma */
+                        Vec<CommonDelim>,
+                        FunctionRestParameter),
 }
 
 // TODO: test
@@ -4308,7 +4338,7 @@ fn formal_parameter_list<I: U8Input>(i: ESInput<I>,
 
             let list = formals_list(&params);
 
-            let rest = option(|i| -> ESParseResult<I, Option<FunctionRestParameter>> {parse!{i;
+            let rest = option(|i| -> ESParseResult<I, Option<(Vec<CommonDelim>, Vec<CommonDelim>, FunctionRestParameter)>> {parse!{i;
 
                 let delim_1 = common_delim();
 
@@ -4319,7 +4349,8 @@ fn formal_parameter_list<I: U8Input>(i: ESInput<I>,
                 let rest = function_rest_parameter(&params);
 
                 ret {
-                    Some(rest)
+
+                    Some((delim_1, delim_2, rest))
                 }
 
             }}, None);
@@ -4328,8 +4359,8 @@ fn formal_parameter_list<I: U8Input>(i: ESInput<I>,
 
                 match rest {
                     None => FormalParameterList::FormalsList(list),
-                    Some(rest) => {
-                        FormalParameterList::FormalsListWithRest(list, rest)
+                    Some((delim_1, delim_2, rest)) => {
+                        FormalParameterList::FormalsListWithRest(list, delim_1, delim_2, rest)
                     }
                 }
             }
