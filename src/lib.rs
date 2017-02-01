@@ -4291,7 +4291,7 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
                        FunctionBody,
                        Vec<CommonDelim> /* } */);
 
-    let foo: ESParseResult<I, ReturnType> = (parse!{i;
+    let foo: ESParseResult<I, ReturnType> = parse!{i;
 
         string_not_utf8(b"function");
 
@@ -4324,7 +4324,7 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
         ret {
             (delim_1, name, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7)
         }
-    });
+    };
 
     foo.bind(|i, result| {
 
@@ -4639,10 +4639,21 @@ enum MethodDefinition {
         Vec<CommonDelim>,
         Vec<CommonDelim>,
         Vec<CommonDelim>,
+        Vec<CommonDelim>,
         FunctionBody,
         Vec<CommonDelim>),
 
-    Set(Vec<CommonDelim>, PropertyName, PropertySetParameterList, FunctionBody),
+    Set(
+        Vec<CommonDelim>,
+        PropertyName,
+        Vec<CommonDelim>,
+        Vec<CommonDelim>,
+        PropertySetParameterList,
+        Vec<CommonDelim>,
+        Vec<CommonDelim>,
+        Vec<CommonDelim>,
+        FunctionBody,
+        Vec<CommonDelim>),
 }
 
 struct PropertySetParameterList(FormalParameter);
@@ -4682,13 +4693,14 @@ fn method_definition<I: U8Input>(i: ESInput<I>,
 
             let delim_4 = common_delim();
             token(b'{');
+            let delim_5 = common_delim();
 
             let body = function_body(&params);
 
-            let delim_5 = common_delim();
+            let delim_6 = common_delim();
             token(b'}');
 
-            ret MethodDefinition::Get(delim_1, prop_name, delim_2, delim_3, delim_4, body, delim_5)
+            ret MethodDefinition::Get(delim_1, prop_name, delim_2, delim_3, delim_4, delim_5, body, delim_6)
         }
     }
 
@@ -4720,13 +4732,14 @@ fn method_definition<I: U8Input>(i: ESInput<I>,
 
             let delim_5 = common_delim();
             token(b'{');
+            let delim_6 = common_delim();
 
             let body = function_body(&params);
 
-            let delim_6 = common_delim();
+            let delim_7 = common_delim();
             token(b'}');
 
-            ret MethodDefinition::Set(delim_1, prop_name, delim_2, delim_3, list, delim_4, body, delim_5, delim_6)
+            ret MethodDefinition::Set(delim_1, prop_name, delim_2, delim_3, list, delim_4, delim_5, delim_6, body, delim_7)
         }
     }
 
