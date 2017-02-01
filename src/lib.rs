@@ -4247,18 +4247,20 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
     fn function_name<I: U8Input>
         (i: ESInput<I>,
          params: &EnumSet<Parameter>)
-         -> ESParseResult<I, Option<(BindingIdentifier, Vec<CommonDelim>)>> {
+         -> ESParseResult<I, Option<(Vec<CommonDelim>, BindingIdentifier)>> {
 
         if params.contains(&Parameter::Default) {
 
             option(i,
                    |i| {
                 parse!{i;
+
+                        let delim = common_delim_required();
                         let ident = binding_identifier(&params);
-                        let delim = common_delim();
+
 
                         ret {
-                            Some((ident, delim))
+                            Some((delim, ident))
                         }
                     }
             },
@@ -4266,11 +4268,13 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
 
         } else {
             parse!{i;
+
+                let delim = common_delim_required();
                 let ident = binding_identifier(&params);
-                let delim = common_delim();
+
 
                 ret {
-                    Some((ident, delim))
+                    Some((delim, ident))
                 }
             }
         }
@@ -4278,8 +4282,8 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
     }
 
     type ReturnType = (/* function */
+                       Option<(Vec<CommonDelim>, BindingIdentifier)>,
                        Vec<CommonDelim>,
-                       Option<(BindingIdentifier, Vec<CommonDelim>)>,
                        /* ( */
                        Vec<CommonDelim>,
                        FormalParameters,
@@ -4295,10 +4299,9 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
 
         string_not_utf8(b"function");
 
-        let delim_1 = common_delim();
-
         let name = function_name(&params);
 
+        let delim_2 = common_delim();
         token(b'(');
 
         let delim_3 = common_delim();
@@ -4322,17 +4325,17 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
         token(b'}');
 
         ret {
-            (delim_1, name, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7)
+            (name, delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7)
         }
     };
 
     foo.bind(|i, result| {
 
-        let (delim_1, name, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7) =
+        let (name, delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7) =
             result;
 
         let result = match name {
-            Some((ident, delim_2)) => {
+            Some((delim_1, ident)) => {
                 FunctionDeclaration::NamedFunction(delim_1,
                                                    ident,
                                                    delim_2,
@@ -4345,7 +4348,7 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
                                                    delim_7)
             }
             None => {
-                FunctionDeclaration::AnonymousFunction(delim_1,
+                FunctionDeclaration::AnonymousFunction(delim_2,
                                                        delim_3,
                                                        formal_params,
                                                        delim_4,
