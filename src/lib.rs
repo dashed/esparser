@@ -4217,11 +4217,11 @@ fn expression_statement<I: U8Input>(i: ESInput<I>,
     }
 
     #[inline]
-    fn look_ahead_guard<I: U8Input>(i: ESInput<I>)
-                                    -> ESParseResult<I, ()> {
+    fn look_ahead_guard<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 
         either(i,
-            |i| look_ahead(i, |i| -> ESParseResult<I, ()> {
+               |i| {
+            look_ahead(i, |i| -> ESParseResult<I, ()> {
                 parse!{i;
 
                     let _ = (i -> token(i, b'{').map(|_| ())) <|>
@@ -4232,14 +4232,15 @@ fn expression_statement<I: U8Input>(i: ESInput<I>,
 
                     ret {()}
                 }
-            }),
-            |i| i.ret(())
-        ).bind(|i, result| {
-            match result {
-                Either::Left(_) => i.err("".into()),
-                Either::Right(_) => i.ret(())
-            }
-        })
+            })
+        },
+               |i| i.ret(()))
+            .bind(|i, result| {
+                match result {
+                    Either::Left(_) => i.err("".into()),
+                    Either::Right(_) => i.ret(()),
+                }
+            })
     }
 
     parse!{i;
@@ -4461,8 +4462,7 @@ enum FunctionExpression {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionExpression
-fn function_expression<I: U8Input>(i: ESInput<I>)
-                                        -> ESParseResult<I, FunctionExpression> {
+fn function_expression<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, FunctionExpression> {
 
     // this is intentionally empty
     let params = EnumSet::new();
@@ -4530,14 +4530,31 @@ fn function_expression<I: U8Input>(i: ESInput<I>)
 
     foo.bind(|i, result| {
 
-        let (fn_name, delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7) = result;
+        let (fn_name, delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7) =
+            result;
 
         let result = match fn_name {
             Some((delim_1, ident)) => {
-                FunctionExpression::NamedFunction(delim_1, ident, delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7)
-            },
+                FunctionExpression::NamedFunction(delim_1,
+                                                  ident,
+                                                  delim_2,
+                                                  delim_3,
+                                                  formal_params,
+                                                  delim_4,
+                                                  delim_5,
+                                                  delim_6,
+                                                  body,
+                                                  delim_7)
+            }
             None => {
-                FunctionExpression::AnonymousFunction(delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7)
+                FunctionExpression::AnonymousFunction(delim_2,
+                                                      delim_3,
+                                                      formal_params,
+                                                      delim_4,
+                                                      delim_5,
+                                                      delim_6,
+                                                      body,
+                                                      delim_7)
             }
         };
 
@@ -4781,8 +4798,7 @@ fn function_body<I: U8Input>(i: ESInput<I>,
         panic!("misuse of function_body");
     }
 
-    function_statement_list(i, params)
-        .map(|x| FunctionBody(x))
+    function_statement_list(i, params).map(|x| FunctionBody(x))
 }
 
 struct FunctionStatementList(Option<StatementList>);
@@ -4814,17 +4830,15 @@ fn function_statement_list<I: U8Input>(i: ESInput<I>,
 // http://www.ecma-international.org/ecma-262/7.0/#sec-method-definitions
 
 enum MethodDefinition {
-
-    Method(
-        PropertyName,
-        Vec<CommonDelim>,
-        Vec<CommonDelim>,
-        StrictFormalParameters,
-        Vec<CommonDelim>,
-        Vec<CommonDelim>,
-        Vec<CommonDelim>,
-        FunctionBody,
-        Vec<CommonDelim>),
+    Method(PropertyName,
+           Vec<CommonDelim>,
+           Vec<CommonDelim>,
+           StrictFormalParameters,
+           Vec<CommonDelim>,
+           Vec<CommonDelim>,
+           Vec<CommonDelim>,
+           FunctionBody,
+           Vec<CommonDelim>),
 
     GeneratorMethod(GeneratorMethod),
 
@@ -4837,8 +4851,7 @@ enum MethodDefinition {
         FunctionBody,
         Vec<CommonDelim>),
 
-    Set(
-        Vec<CommonDelim>,
+    Set(Vec<CommonDelim>,
         PropertyName,
         Vec<CommonDelim>,
         Vec<CommonDelim>,
@@ -4865,8 +4878,8 @@ fn method_definition<I: U8Input>(i: ESInput<I>,
 
     #[inline]
     fn method_definition<I: U8Input>(i: ESInput<I>,
-                                         params: &EnumSet<Parameter>)
-                                         -> ESParseResult<I, MethodDefinition> {
+                                     params: &EnumSet<Parameter>)
+                                     -> ESParseResult<I, MethodDefinition> {
 
         parse!{i;
 
@@ -4983,8 +4996,8 @@ fn method_definition<I: U8Input>(i: ESInput<I>,
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PropertySetParameterList
 fn property_set_parameter_list<I: U8Input>(i: ESInput<I>,
-                                 params: &EnumSet<Parameter>)
-                                 -> ESParseResult<I, PropertySetParameterList> {
+                                           params: &EnumSet<Parameter>)
+                                           -> ESParseResult<I, PropertySetParameterList> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -4998,24 +5011,22 @@ fn property_set_parameter_list<I: U8Input>(i: ESInput<I>,
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-generator-function-definitions
 
-struct GeneratorMethod(
-    Vec<CommonDelim>,
-    PropertyName,
-    Vec<CommonDelim>,
-    Vec<CommonDelim>,
-    StrictFormalParameters,
-    Vec<CommonDelim>,
-    Vec<CommonDelim>,
-    Vec<CommonDelim>,
-    GeneratorBody,
-    Vec<CommonDelim>,
-);
+struct GeneratorMethod(Vec<CommonDelim>,
+                       PropertyName,
+                       Vec<CommonDelim>,
+                       Vec<CommonDelim>,
+                       StrictFormalParameters,
+                       Vec<CommonDelim>,
+                       Vec<CommonDelim>,
+                       Vec<CommonDelim>,
+                       GeneratorBody,
+                       Vec<CommonDelim>);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-GeneratorMethod
 fn generator_method<I: U8Input>(i: ESInput<I>,
-                                 params: &EnumSet<Parameter>)
-                                 -> ESParseResult<I, GeneratorMethod> {
+                                params: &EnumSet<Parameter>)
+                                -> ESParseResult<I, GeneratorMethod> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -5061,15 +5072,13 @@ struct GeneratorBody(FunctionBody);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-GeneratorBody
-fn generator_body<I: U8Input>(i: ESInput<I>)
-                                 -> ESParseResult<I, GeneratorBody> {
+fn generator_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, GeneratorBody> {
 
 
     let mut params = EnumSet::new();
     params.insert(Parameter::Yield);
 
-    function_body(i, &params)
-        .map(|x| GeneratorBody(x))
+    function_body(i, &params).map(|x| GeneratorBody(x))
 }
 
 // TODO: YieldExpression
