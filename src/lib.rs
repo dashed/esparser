@@ -4646,7 +4646,7 @@ enum MethodDefinition {
         FunctionBody,
         Vec<CommonDelim>),
 
-    GeneratorMethod,
+    GeneratorMethod(GeneratorMethod),
 
     Get(Vec<CommonDelim>,
         PropertyName,
@@ -4792,7 +4792,7 @@ fn method_definition<I: U8Input>(i: ESInput<I>,
 
         let result =
             method_definition(&params) <|>
-            // TODO: generator
+            (i -> generator_method(i, &params).map(|x| MethodDefinition::GeneratorMethod(x))) <|>
             method_definition_get(&params) <|>
             method_definition_set(&params);
 
