@@ -1141,6 +1141,7 @@ fn unicode_id_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
     // any Unicode code point with the Unicode property "ID_Start"
 
     parse_utf8_char(i).bind(|i, c: char| {
+        // TODO: https://github.com/rust-lang/rust/issues/4928
         if c.is_xid_start() {
             i.ret(c)
         } else {
@@ -4200,16 +4201,38 @@ fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-function-definitions
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionDeclaration
-
 enum FunctionDeclaration {
-    NamedFunction(NamedFunction),
-    AnonymousFunction,
+    NamedFunction(/* function */
+                  Vec<CommonDelim>,
+                  BindingIdentifier,
+                  Vec<CommonDelim>,
+                  /* ( */
+                  Vec<CommonDelim>,
+                  FormalParameters,
+                  Vec<CommonDelim>,
+                  /* ) */
+                  Vec<CommonDelim>,
+                  /* { */
+                  Vec<CommonDelim>,
+                  FunctionStatementList,
+                  Vec<CommonDelim> /* } */),
+
+    AnonymousFunction(/* function */
+                      Vec<CommonDelim>,
+                      /* ( */
+                      Vec<CommonDelim>,
+                      FormalParameters,
+                      Vec<CommonDelim>,
+                      /* ) */
+                      Vec<CommonDelim>,
+                      /* { */
+                      Vec<CommonDelim>,
+                      FunctionStatementList,
+                      Vec<CommonDelim> /* } */),
 }
 
-struct NamedFunction;
-
 // TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionDeclaration
 fn function_declaration<I: U8Input>(i: ESInput<I>,
                                     params: &EnumSet<Parameter>)
                                     -> ESParseResult<I, FunctionDeclaration> {
@@ -4221,86 +4244,139 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
     }
 
     #[inline]
-    fn named_function<I: U8Input>(i: ESInput<I>,
-                                  params: &EnumSet<Parameter>)
-                                  -> ESParseResult<I, NamedFunction> {
+    fn function_name<I: U8Input>
+        (i: ESInput<I>,
+         params: &EnumSet<Parameter>)
+         -> ESParseResult<I, Option<(BindingIdentifier, Vec<CommonDelim>)>> {
 
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
-            panic!("misuse of named_function");
-        }
+        if params.contains(&Parameter::Default) {
 
-        parse!{i;
+            option(i,
+                   |i| {
+                parse!{i;
+                        let ident = binding_identifier(&params);
+                        let delim = common_delim();
 
-            string_not_utf8(b"function");
+                        ret {
+                            Some((ident, delim))
+                        }
+                    }
+            },
+                   None)
 
-            let delim_1 = common_delim();
+        } else {
+            parse!{i;
+                let ident = binding_identifier(&params);
+                let delim = common_delim();
 
-            let ident = binding_identifier(&params);
-
-            let delim_2 = common_delim();
-
-            token(b'(');
-
-            // TODO: fix
-
-            token(b')');
-
-            let delim_3 = common_delim();
-
-            token(b'{');
-
-            // TODO: fix
-
-            token(b'}');
-
-            ret {
-                // TODO: fix
-                NamedFunction
+                ret {
+                    Some((ident, delim))
+                }
             }
         }
+
     }
 
-    if params.contains(&Parameter::Default) {
-        parse!{i;
-            let named = named_function(&params);
+    type ReturnType = (/* function */
+                       Vec<CommonDelim>,
+                       Option<(BindingIdentifier, Vec<CommonDelim>)>,
+                       /* ( */
+                       Vec<CommonDelim>,
+                       FormalParameters,
+                       Vec<CommonDelim>,
+                       /* ) */
+                       Vec<CommonDelim>,
+                       /* { */
+                       Vec<CommonDelim>,
+                       FunctionStatementList,
+                       Vec<CommonDelim> /* } */);
 
-            ret {
-                FunctionDeclaration::NamedFunction(named)
-            }
+    let foo: ESParseResult<I, ReturnType> = (parse!{i;
+
+        string_not_utf8(b"function");
+
+        let delim_1 = common_delim();
+
+        let name = function_name(&params);
+
+        token(b'(');
+
+        let delim_3 = common_delim();
+
+        let formal_params = formal_parameters(&params);
+
+        let delim_4 = common_delim();
+
+        token(b')');
+
+        let delim_5 = common_delim();
+
+        token(b'{');
+
+        let delim_6 = common_delim();
+
+        let body = function_body(&params);
+
+        let delim_7 = common_delim();
+
+        token(b'}');
+
+        ret {
+            (delim_1, name, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7)
         }
+    });
 
+    foo.bind(|i, result| {
 
-    } else {
-        parse!{i;
-            let named = named_function(&params);
+        let (delim_1, name, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7) =
+            result;
 
-            ret {
-                FunctionDeclaration::NamedFunction(named)
+        let result = match name {
+            Some((ident, delim_2)) => {
+                FunctionDeclaration::NamedFunction(delim_1,
+                                                   ident,
+                                                   delim_2,
+                                                   delim_3,
+                                                   formal_params,
+                                                   delim_4,
+                                                   delim_5,
+                                                   delim_6,
+                                                   body,
+                                                   delim_7)
             }
-        }
-    }
+            None => {
+                FunctionDeclaration::AnonymousFunction(delim_1,
+                                                       delim_3,
+                                                       formal_params,
+                                                       delim_4,
+                                                       delim_5,
+                                                       delim_6,
+                                                       body,
+                                                       delim_7)
+            }
+        };
 
+        i.ret(result)
+    })
 
 }
 
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionExpression
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-StrictFormalParameters
-
 struct StrictFormalParameters(FormalParameterList);
 
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-StrictFormalParameters
 fn strict_formal_parameters<I: U8Input>(i: ESInput<I>,
-                                 params: &EnumSet<Parameter>)
-                                 -> ESParseResult<I, StrictFormalParameters> {
+                                        params: &EnumSet<Parameter>)
+                                        -> ESParseResult<I, StrictFormalParameters> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of strict_formal_parameters");
     }
 
-    formal_parameter_list(i, params)
-        .map(|x| StrictFormalParameters(x))
+    formal_parameter_list(i, params).map(|x| StrictFormalParameters(x))
 
 }
 
