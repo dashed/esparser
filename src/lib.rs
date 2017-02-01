@@ -4214,7 +4214,7 @@ enum FunctionDeclaration {
                   Vec<CommonDelim>,
                   /* { */
                   Vec<CommonDelim>,
-                  FunctionStatementList,
+                  FunctionBody,
                   Vec<CommonDelim> /* } */),
 
     AnonymousFunction(/* function */
@@ -4227,7 +4227,7 @@ enum FunctionDeclaration {
                       Vec<CommonDelim>,
                       /* { */
                       Vec<CommonDelim>,
-                      FunctionStatementList,
+                      FunctionBody,
                       Vec<CommonDelim> /* } */),
 }
 
@@ -4288,7 +4288,7 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
                        Vec<CommonDelim>,
                        /* { */
                        Vec<CommonDelim>,
-                       FunctionStatementList,
+                       FunctionBody,
                        Vec<CommonDelim> /* } */);
 
     let foo: ESParseResult<I, ReturnType> = (parse!{i;
@@ -4585,11 +4585,13 @@ fn formal_parameter<I: U8Input>(i: ESInput<I>,
     binding_element(i, params)
 }
 
+struct FunctionBody(FunctionStatementList);
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionBody
 fn function_body<I: U8Input>(i: ESInput<I>,
                              params: &EnumSet<Parameter>)
-                             -> ESParseResult<I, FunctionStatementList> {
+                             -> ESParseResult<I, FunctionBody> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -4597,6 +4599,7 @@ fn function_body<I: U8Input>(i: ESInput<I>,
     }
 
     function_statement_list(i, params)
+        .map(|x| FunctionBody(x))
 }
 
 struct FunctionStatementList(Option<StatementList>);
@@ -4630,14 +4633,19 @@ fn function_statement_list<I: U8Input>(i: ESInput<I>,
 enum MethodDefinition {
     Method,
     GeneratorMethod,
+
     Get(Vec<CommonDelim>,
         PropertyName,
         Vec<CommonDelim>,
         Vec<CommonDelim>,
         Vec<CommonDelim>,
+        FunctionBody,
         Vec<CommonDelim>),
-    Set(Vec<CommonDelim>, PropertyName),
+
+    Set(Vec<CommonDelim>, PropertyName, PropertySetParameterList, FunctionBody),
 }
+
+struct PropertySetParameterList(FormalParameter);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-MethodDefinition
@@ -4675,18 +4683,57 @@ fn method_definition<I: U8Input>(i: ESInput<I>,
             let delim_4 = common_delim();
             token(b'{');
 
-            // TODO: function body
+            let body = function_body(&params);
 
             let delim_5 = common_delim();
             token(b'}');
 
-            ret MethodDefinition::Get(delim_1, prop_name, delim_2, delim_3, delim_4, delim_5)
+            ret MethodDefinition::Get(delim_1, prop_name, delim_2, delim_3, delim_4, body, delim_5)
+        }
+    }
+
+    #[inline]
+    fn method_definition_set<I: U8Input>(i: ESInput<I>,
+                                         params: &EnumSet<Parameter>)
+                                         -> ESParseResult<I, MethodDefinition> {
+        parse!{i;
+
+            on_error(
+                |i| string(i, b"set"),
+                |i| {
+                    let loc = i.position();
+                    ErrorLocation::new(loc, "Expected 'set' keyword.".to_string())
+                }
+            );
+
+            let delim_1 = common_delim_required();
+            let prop_name = property_name(&params);
+            let delim_2 = common_delim();
+
+            token(b'(');
+            let delim_3 = common_delim();
+
+            let list = property_set_parameter_list(&params);
+
+            let delim_4 = common_delim();
+            token(b')');
+
+            let delim_5 = common_delim();
+            token(b'{');
+
+            let body = function_body(&params);
+
+            let delim_6 = common_delim();
+            token(b'}');
+
+            ret MethodDefinition::Set(delim_1, prop_name, delim_2, delim_3, list, delim_4, body, delim_5, delim_6)
         }
     }
 
     parse!{i;
 
-        let defs = method_definition_get(&params);
+        let defs = method_definition_get(&params) <|>
+            method_definition_set(&params);
 
         // TODO: complete
 
@@ -4694,6 +4741,19 @@ fn method_definition<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-PropertySetParameterList
+fn property_set_parameter_list<I: U8Input>(i: ESInput<I>,
+                                 params: &EnumSet<Parameter>)
+                                 -> ESParseResult<I, PropertySetParameterList> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of property_set_parameter_list");
+    }
+
+    formal_parameter(i, params).map(|x| PropertySetParameterList(x))
+}
 
 // ==== sandbox ===>
 // see: https://github.com/m4rw3r/chomp/issues/60
