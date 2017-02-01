@@ -3107,6 +3107,7 @@ enum Statement {
     BlockStatement(BlockStatement),
     VariableStatement(VariableStatement),
     EmptyStatement(EmptyStatement),
+    ExpressionStatement(ExpressionStatement),
 }
 
 // TODO: test
@@ -3131,7 +3132,9 @@ fn statement<I: U8Input>(i: ESInput<I>,
         <|>
         (i -> variable_statement(i, &yield_params).map(|x| Statement::VariableStatement(x)))
         <|>
-        (i -> empty_statement(i).map(|x| Statement::EmptyStatement(x)));
+        (i -> empty_statement(i).map(|x| Statement::EmptyStatement(x)))
+        <|>
+        (i -> expression_statement(i, &params).map(|x| Statement::ExpressionStatement(x)));
 
         // TODO: more statements
 
@@ -4243,11 +4246,15 @@ fn expression_statement<I: U8Input>(i: ESInput<I>,
             })
     }
 
+    let mut in_params = params.clone();
+    in_params.insert(Parameter::In);
+    let in_params = in_params;
+
     parse!{i;
 
         look_ahead_guard();
 
-        let expr = expression(&params);
+        let expr = expression(&in_params);
         let delim = common_delim();
 
         // TODO: semicolon insertion rule
