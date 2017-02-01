@@ -2145,6 +2145,7 @@ enum PrimaryExpression {
     Literal(Literal),
     ArrayLiteral(ArrayLiteral),
     ObjectLiteral(ObjectLiteral),
+    FunctionExpression(FunctionExpression),
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
@@ -2178,7 +2179,9 @@ fn primary_expression<I: U8Input>(i: ESInput<I>,
             <|>
             (i -> array_literal(i, &params).map(|arr_literal| PrimaryExpression::ArrayLiteral(arr_literal)))
             <|>
-            (i -> object_literal(i, &params).map(|obj_literal| PrimaryExpression::ObjectLiteral(obj_literal)));
+            (i -> object_literal(i, &params).map(|obj_literal| PrimaryExpression::ObjectLiteral(obj_literal)))
+            <|>
+            (i -> function_expression(i).map(|fn_expr| PrimaryExpression::FunctionExpression(fn_expr)));
 
         ret result
     }
@@ -4258,7 +4261,6 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
                         let delim = common_delim_required();
                         let ident = binding_identifier(&params);
 
-
                         ret {
                             Some((delim, ident))
                         }
@@ -4364,7 +4366,122 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
 
 }
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionExpression
+enum FunctionExpression {
+    NamedFunction(/* function */
+                  Vec<CommonDelim>,
+                  BindingIdentifier,
+                  Vec<CommonDelim>,
+                  /* ( */
+                  Vec<CommonDelim>,
+                  FormalParameters,
+                  Vec<CommonDelim>,
+                  /* ) */
+                  Vec<CommonDelim>,
+                  /* { */
+                  Vec<CommonDelim>,
+                  FunctionBody,
+                  Vec<CommonDelim> /* } */),
+
+    AnonymousFunction(/* function */
+                      Vec<CommonDelim>,
+                      /* ( */
+                      Vec<CommonDelim>,
+                      FormalParameters,
+                      Vec<CommonDelim>,
+                      /* ) */
+                      Vec<CommonDelim>,
+                      /* { */
+                      Vec<CommonDelim>,
+                      FunctionBody,
+                      Vec<CommonDelim> /* } */),
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-FunctionExpression
+fn function_expression<I: U8Input>(i: ESInput<I>)
+                                        -> ESParseResult<I, FunctionExpression> {
+
+    // this is intentionally empty
+    let params = EnumSet::new();
+    assert!(params.len() <= 0);
+
+    type ReturnType = (/* function */
+                       Option<(Vec<CommonDelim>, BindingIdentifier)>,
+                       Vec<CommonDelim>,
+                       /* ( */
+                       Vec<CommonDelim>,
+                       FormalParameters,
+                       Vec<CommonDelim>,
+                       /* ) */
+                       Vec<CommonDelim>,
+                       /* { */
+                       Vec<CommonDelim>,
+                       FunctionBody,
+                       Vec<CommonDelim> /* } */);
+
+    let foo: ESParseResult<I, ReturnType> = parse!{i;
+
+        string_not_utf8(b"function");
+
+        let fn_name = option(|i| -> ESParseResult<I, Option<(Vec<CommonDelim>, BindingIdentifier)>> {
+            parse!{i;
+
+                let delim = common_delim_required();
+                let ident = binding_identifier(&params);
+
+                ret {
+                    Some((delim, ident))
+                }
+            }
+        },
+        None);
+
+        let delim_2 = common_delim();
+        token(b'(');
+
+        let delim_3 = common_delim();
+
+        let formal_params = formal_parameters(&params);
+
+        let delim_4 = common_delim();
+
+        token(b')');
+
+        let delim_5 = common_delim();
+
+        token(b'{');
+
+        let delim_6 = common_delim();
+
+        let body = function_body(&params);
+
+        let delim_7 = common_delim();
+
+        token(b'}');
+
+        ret {
+            (fn_name, delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7)
+        }
+
+    };
+
+    foo.bind(|i, result| {
+
+        let (fn_name, delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7) = result;
+
+        let result = match fn_name {
+            Some((delim_1, ident)) => {
+                FunctionExpression::NamedFunction(delim_1, ident, delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7)
+            },
+            None => {
+                FunctionExpression::AnonymousFunction(delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7)
+            }
+        };
+
+        i.ret(result)
+    })
+
+}
 
 struct StrictFormalParameters(FormalParameterList);
 
