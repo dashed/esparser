@@ -4631,7 +4631,18 @@ fn function_statement_list<I: U8Input>(i: ESInput<I>,
 // http://www.ecma-international.org/ecma-262/7.0/#sec-method-definitions
 
 enum MethodDefinition {
-    Method,
+
+    Method(
+        PropertyName,
+        Vec<CommonDelim>,
+        Vec<CommonDelim>,
+        StrictFormalParameters,
+        Vec<CommonDelim>,
+        Vec<CommonDelim>,
+        Vec<CommonDelim>,
+        FunctionBody,
+        Vec<CommonDelim>),
+
     GeneratorMethod,
 
     Get(Vec<CommonDelim>,
@@ -4667,6 +4678,37 @@ fn method_definition<I: U8Input>(i: ESInput<I>,
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of method_definition");
+    }
+
+    #[inline]
+    fn method_definition<I: U8Input>(i: ESInput<I>,
+                                         params: &EnumSet<Parameter>)
+                                         -> ESParseResult<I, MethodDefinition> {
+
+        parse!{i;
+
+            let prop_name = property_name(&params);
+
+            let delim_1 = common_delim();
+            token(b'(');
+            let delim_2 = common_delim();
+
+            let formal_params = strict_formal_parameters(&params);
+
+            let delim_3 = common_delim();
+            token(b')');
+            let delim_4 = common_delim();
+            token(b'{');
+            let delim_5 = common_delim();
+
+            let body = function_body(&params);
+
+            let delim_6 = common_delim();
+            token(b'}');
+
+            ret MethodDefinition::Method(prop_name, delim_1, delim_2, formal_params, delim_3, delim_4, delim_5, body, delim_6)
+        }
+
     }
 
     #[inline]
@@ -4745,12 +4787,13 @@ fn method_definition<I: U8Input>(i: ESInput<I>,
 
     parse!{i;
 
-        let defs = method_definition_get(&params) <|>
+        let result =
+            method_definition(&params) <|>
+            // TODO: generator
+            method_definition_get(&params) <|>
             method_definition_set(&params);
 
-        // TODO: complete
-
-        ret defs
+        ret result
     }
 }
 
@@ -4767,6 +4810,87 @@ fn property_set_parameter_list<I: U8Input>(i: ESInput<I>,
 
     formal_parameter(i, params).map(|x| PropertySetParameterList(x))
 }
+
+// == 14.4 Generator Function Definitions ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-generator-function-definitions
+
+struct GeneratorMethod(
+    Vec<CommonDelim>,
+    PropertyName,
+    Vec<CommonDelim>,
+    Vec<CommonDelim>,
+    StrictFormalParameters,
+    Vec<CommonDelim>,
+    Vec<CommonDelim>,
+    Vec<CommonDelim>,
+    GeneratorBody,
+    Vec<CommonDelim>,
+);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-GeneratorMethod
+fn generator_method<I: U8Input>(i: ESInput<I>,
+                                 params: &EnumSet<Parameter>)
+                                 -> ESParseResult<I, GeneratorMethod> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of generator_method");
+    }
+
+    parse!{i;
+
+        token(b'*');
+
+        let delim_1 = common_delim();
+
+        let name = property_name(&params);
+
+        let delim_2 = common_delim();
+        token(b'(');
+        let delim_3 = common_delim();
+
+        let formal_params = strict_formal_parameters(&params);
+
+        let delim_4 = common_delim();
+        token(b'(');
+        let delim_5 = common_delim();
+
+        token(b'{');
+        let delim_6 = common_delim();
+
+        let body = generator_body();
+
+        let delim_7 = common_delim();
+        token(b'}');
+
+        ret GeneratorMethod(delim_1, name, delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7)
+    }
+
+}
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-GeneratorDeclaration
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-GeneratorExpression
+
+struct GeneratorBody(FunctionBody);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-GeneratorBody
+fn generator_body<I: U8Input>(i: ESInput<I>)
+                                 -> ESParseResult<I, GeneratorBody> {
+
+
+    let mut params = EnumSet::new();
+    params.insert(Parameter::Yield);
+
+    function_body(i, &params)
+        .map(|x| GeneratorBody(x))
+}
+
+// TODO: YieldExpression
+
 
 // ==== sandbox ===>
 // see: https://github.com/m4rw3r/chomp/issues/60
