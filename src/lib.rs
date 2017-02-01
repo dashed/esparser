@@ -4199,6 +4199,66 @@ fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement
     token(i, b';').map(|x| EmptyStatement)
 }
 
+// == 13.5 Expression Statement ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-expression-statement
+
+struct ExpressionStatement(ExpressionList, Vec<CommonDelim>);
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-ExpressionStatement
+fn expression_statement<I: U8Input>(i: ESInput<I>,
+                                    params: &EnumSet<Parameter>)
+                                    -> ESParseResult<I, ExpressionStatement> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of expression_statement");
+    }
+
+    #[inline]
+    fn look_ahead_guard<I: U8Input>(i: ESInput<I>)
+                                    -> ESParseResult<I, ()> {
+
+        either(i,
+            |i| look_ahead(i, |i| -> ESParseResult<I, ()> {
+                parse!{i;
+
+                    let _ = (i -> token(i, b'{').map(|_| ())) <|>
+                    (i -> string_not_utf8(i, b"function").map(|_| ())) <|>
+                    (i -> string_not_utf8(i, b"class").map(|_| ())) <|>
+                    (i -> string_not_utf8(i, b"let").map(|_| ())) <|>
+                    (i -> token(i, b'[').map(|_| ()));
+
+                    ret {()}
+                }
+            }),
+            |i| i.ret(())
+        ).bind(|i, result| {
+            match result {
+                Either::Left(_) => i.err("".into()),
+                Either::Right(_) => i.ret(())
+            }
+        })
+    }
+
+    parse!{i;
+
+        look_ahead_guard();
+
+        let expr = expression(&params);
+        let delim = common_delim();
+
+        // TODO: semicolon insertion rule
+        semicolon();
+
+        ret {
+            ExpressionStatement(expr, delim)
+        }
+    }
+}
+
+
 // == 14 ECMAScript Language: Functions and Classes ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-functions-and-classes
