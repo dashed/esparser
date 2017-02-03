@@ -3173,7 +3173,30 @@ fn declaration<I: U8Input>(i: ESInput<I>,
 }
 
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-HoistableDeclaration
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BreakableStatement
+
+enum BreakableStatement {
+    IterationStatement,
+    SwitchStatement
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BreakableStatement
+fn breakable_statement<I: U8Input>(i: ESInput<I>,
+                               params: &EnumSet<Parameter>)
+                               -> ESParseResult<I, BreakableStatement> {
+
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::Return)) {
+        panic!("misuse of breakable_statement");
+    }
+
+    parse!{i;
+
+        // TODO: complete
+
+        ret BreakableStatement::IterationStatement
+    }
+}
 
 // == 13.2 Block ==
 //
@@ -3675,15 +3698,9 @@ fn binding_pattern<I: U8Input>(i: ESInput<I>,
         panic!("misuse of binding_pattern");
     }
 
-    parse!{i;
-
-        let binding =
-            (i -> object_binding_pattern(i, &params).map(|x| BindingPattern::ObjectBindingPattern(x)))
-            <|>
-            (i -> array_binding_pattern(i, &params).map(|x| BindingPattern::ArrayBindingPattern(Box::new(x))));
-
-        ret binding
-    }
+    or(i,
+        |i| object_binding_pattern(i, &params).map(|x| BindingPattern::ObjectBindingPattern(x)),
+        |i| array_binding_pattern(i, &params).map(|x| BindingPattern::ArrayBindingPattern(Box::new(x))))
 }
 
 enum ObjectBindingPattern {
@@ -4380,6 +4397,37 @@ fn if_statement<I: U8Input>(i: ESInput<I>,
             }
         }
     }
+}
+
+// == 13.7 Iteration Statements ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-iteration-statements
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-IterationStatement
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-ForDeclaration
+
+enum ForBinding {
+    BindingIdentifier(BindingIdentifier),
+    BindingPattern(BindingPattern)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ForBinding
+fn for_binding<I: U8Input>(i: ESInput<I>,
+                            params: &EnumSet<Parameter>)
+                            -> ESParseResult<I, ForBinding> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of for_binding");
+    }
+
+    or(i,
+        |i| binding_identifier(i, &params).map(|x| ForBinding::BindingIdentifier(x)),
+        |i| binding_pattern(i, &params).map(|x| ForBinding::BindingPattern(x)))
 }
 
 // == 14 ECMAScript Language: Functions and Classes ==
