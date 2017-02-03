@@ -45,6 +45,10 @@ Bookmark:
  */
 
 
+
+
+
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -2147,7 +2151,7 @@ enum PrimaryExpression {
     Literal(Literal),
     ArrayLiteral(ArrayLiteral),
     ObjectLiteral(ObjectLiteral),
-    FunctionExpression(FunctionExpression),
+    FunctionExpression(FunctionExpression), // TODO: other types
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
@@ -2307,8 +2311,8 @@ enum ElementListItem {
     Delim(Vec<CommonDelim>,
           /* , (comma) */
           Vec<CommonDelim>),
-    ItemExpression(()),
-    ItemSpread(()),
+    ItemExpression(Option<Elision>, AssignmentExpression),
+    ItemSpread(Option<Elision>, SpreadElement),
 }
 
 // TODO: test
@@ -2351,21 +2355,32 @@ fn element_list<I: U8Input>(i: ESInput<I>,
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
         parse!{i;
 
-            let l = option(|i| elision(i).map(|x| Some(x)), None);
+            let elision_prefix = option(|i| elision(i).map(|x| Some(x)), None);
 
-            let item = (i -> {
+            let item = either(
+                |i| {
 
-                let mut params = params.clone();
-                params.insert(Parameter::In);
+                    let mut params = params.clone();
+                    params.insert(Parameter::In);
 
-                assignment_expression(i, &params).map(|x| ElementListItem::ItemExpression(x))
-            }) <|>
-            (i -> spread_element(i, &params).map(|x| {
-                let SpreadElement(x) = x;
-                ElementListItem::ItemSpread(x)
-            }));
+                    assignment_expression(i, &params)
+                },
+                |i| {
+                    spread_element(i, &params)
+                }
+            );
 
             ret {
+
+                let item = match item {
+                    Either::Left(x) => {
+                        ElementListItem::ItemExpression(elision_prefix, x)
+                    }
+                    Either::Right(x) => {
+                        ElementListItem::ItemSpread(elision_prefix, x)
+                    }
+                };
+
                 accumulator.borrow_mut().push(item);
                 ()
             }
@@ -2410,7 +2425,7 @@ fn elision<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Elision> {
     }
 }
 
-struct SpreadElement(());
+struct SpreadElement(AssignmentExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-SpreadElement
@@ -2584,7 +2599,7 @@ enum PropertyDefinition {
                  Vec<CommonDelim>,
                  /* : */
                  Vec<CommonDelim>,
-                 ()),
+                 AssignmentExpression),
     MethodDefinition(MethodDefinition),
 }
 
@@ -2685,7 +2700,10 @@ fn literal_property_name<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LiteralP
     }
 }
 
-struct ComputedPropertyName(Vec<CommonDelim>, (), Vec<CommonDelim>);
+struct ComputedPropertyName(/* [ */
+                            Vec<CommonDelim>,
+                            AssignmentExpression,
+                            Vec<CommonDelim> /* ] */);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ComputedPropertyName
@@ -2747,7 +2765,9 @@ fn cover_initialized_name<I: U8Input>(i: ESInput<I>,
     }
 }
 
-struct Initializer(Vec<CommonDelim>, ());
+struct Initializer(/* = */
+                   Vec<CommonDelim>,
+                   AssignmentExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Initializer
@@ -2773,14 +2793,34 @@ fn initializer<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#sec-template-literals
+
+// == 12.3 Left-Hand-Side Expressions ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-left-hand-side-expressions
+
+// TODO: complete
+
 // == 12.14 Conditional Operator ( ? : ) ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-conditional-operator
 
+enum ConditionalExpression {
+    Conditional(LogicOrExpression,
+                Vec<CommonDelim>,
+                Vec<CommonDelim>,
+                AssignmentExpression,
+                Vec<CommonDelim>,
+                Vec<CommonDelim>,
+                AssignmentExpression),
+    LogicOrExpression(LogicOrExpression),
+}
+
 // TODO: test
 fn conditional_expression<I: U8Input>(i: ESInput<I>,
                                       params: &EnumSet<Parameter>)
-                                      -> ESParseResult<I, ()> {
+                                      -> ESParseResult<I, ConditionalExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::In) ||
@@ -2788,12 +2828,18 @@ fn conditional_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of conditional_expression");
     }
 
-    either(i,
-           // left
-           |i| -> ESParseResult<I, ()> {
-        parse!{i;
+    #[inline]
+    fn conditional<I: U8Input>(i: ESInput<I>,
+                               params: &EnumSet<Parameter>)
+                               -> ESParseResult<I,
+                                                (Vec<CommonDelim>,
+                                                 Vec<CommonDelim>,
+                                                 AssignmentExpression,
+                                                 Vec<CommonDelim>,
+                                                 Vec<CommonDelim>,
+                                                 AssignmentExpression)> {
 
-            logical_or_expression(&params);
+        parse!{i;
 
             let delim_1 = common_delim();
             token(b'?');
@@ -2811,33 +2857,31 @@ fn conditional_expression<I: U8Input>(i: ESInput<I>,
 
             let alternative = assignment_expression(&params);
 
-            // TODO: token
-            ret {()}
-
+            ret {
+                (delim_1, delim_2, consequent, delim_3, delim_4, alternative)
+            }
         }
-    },
-           // right
-           |i| -> ESParseResult<I, ()> {
-        parse!{i;
+    }
 
-            logical_or_expression(&params);
+    parse!{i;
 
-            // TODO: token
-            ret {()}
-        }
-    })
-        .bind(|i, result| {
-            match result {
-                Either::Left(_) => {
-                    // TODO: fix
-                    i.ret(())
+        let logical_or_expression = logical_or_expression(&params);
+
+        let conditional = option(|i| conditional(i, &params).map(|x| Some(x)),
+            None);
+
+        ret {
+            match conditional {
+                Some((delim_1, delim_2, consequent, delim_3, delim_4, alternative)) => {
+                    ConditionalExpression::Conditional(
+                        logical_or_expression, delim_1, delim_2, consequent, delim_3, delim_4, alternative)
                 }
-                Either::Right(_) => {
-                    // TODO: fix
-                    i.ret(())
+                None => {
+                    ConditionalExpression::LogicOrExpression(logical_or_expression)
                 }
             }
-        })
+        }
+    }
 }
 
 // == 12.13 Binary Logical Operators ==
@@ -3006,11 +3050,15 @@ fn logical_or_expression_test() {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-assignment-operators
 
+enum AssignmentExpression {
+    ConditionalExpression(Box<ConditionalExpression>),
+}
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-AssignmentExpression
 fn assignment_expression<I: U8Input>(i: ESInput<I>,
                                      params: &EnumSet<Parameter>)
-                                     -> ESParseResult<I, ()> {
+                                     -> ESParseResult<I, AssignmentExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::In) ||
@@ -3020,11 +3068,14 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>,
 
     parse!{i;
 
-        conditional_expression(params);
+        let result = (i -> conditional_expression(i, params)
+            .map(|x| AssignmentExpression::ConditionalExpression(Box::new(x))));
 
         // TODO: complete
 
-        ret {()}
+        ret {
+            result
+        }
     }
 }
 
@@ -3038,7 +3089,7 @@ enum ExpressionListItem {
     Delim(Vec<CommonDelim>,
           /* , (comma) */
           Vec<CommonDelim>),
-    AssignmentExpression(()),
+    AssignmentExpression(AssignmentExpression),
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Expression
@@ -4417,6 +4468,11 @@ fn if_statement<I: U8Input>(i: ESInput<I>,
 // == 13.7 Iteration Statements ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-iteration-statements
+
+enum IterationStatement {
+    DoWhile,
+    While, // TODO: for variants
+}
 
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-IterationStatement
