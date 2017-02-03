@@ -3497,7 +3497,10 @@ fn lexical_binding<I: U8Input>(i: ESInput<I>,
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-variable-statement
 
-struct VariableStatement(Vec<CommonDelim>, BindingList, Vec<CommonDelim>);
+struct VariableStatement(/* var */
+                         Vec<CommonDelim>,
+                         VariableDeclarationList,
+                         Vec<CommonDelim>);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableStatement
@@ -3525,9 +3528,10 @@ fn variable_statement<I: U8Input>(i: ESInput<I>,
         );
 
         let delim_1 = common_delim_required();
-        let list = binding_list(&params);
+        let list = variable_declaration_list(&params);
         let delim_2 = common_delim();
 
+        // TODO: ASI rule
         semicolon();
 
         ret VariableStatement(delim_1, list, delim_2)
@@ -4202,7 +4206,7 @@ struct EmptyStatement;
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-EmptyStatement
 fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement> {
-    token(i, b';').map(|x| EmptyStatement)
+    semicolon(i).map(|_| EmptyStatement)
 }
 
 // == 13.5 Expression Statement ==
@@ -4212,7 +4216,7 @@ fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement
 struct ExpressionStatement(ExpressionList, Vec<CommonDelim>);
 
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-ExpressionStatement
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ExpressionStatement
 fn expression_statement<I: U8Input>(i: ESInput<I>,
                                     params: &EnumSet<Parameter>)
                                     -> ESParseResult<I, ExpressionStatement> {
@@ -4243,6 +4247,7 @@ fn expression_statement<I: U8Input>(i: ESInput<I>,
                |i| i.ret(()))
             .bind(|i, result| {
                 match result {
+                    // TODO: improve error message to indicate token that should not be produced
                     Either::Left(_) => i.err("".into()),
                     Either::Right(_) => i.ret(()),
                 }
