@@ -4266,6 +4266,113 @@ fn expression_statement<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// == 13.6 The `if` Statement ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-if-statement
+
+enum IfStatement {
+    OneBranch(/* if */
+              Vec<CommonDelim>,
+              /* ( */
+              Vec<CommonDelim>,
+              ExpressionList,
+              Vec<CommonDelim>,
+              /* ) */
+              Vec<CommonDelim>,
+              Statement),
+    TwoBranch(/* if */
+              Vec<CommonDelim>,
+              /* ( */
+              Vec<CommonDelim>,
+              ExpressionList,
+              Vec<CommonDelim>,
+              /* ) */
+              Vec<CommonDelim>,
+              Statement,
+              Vec<CommonDelim>,
+              /* else */
+              Vec<CommonDelim>,
+              Statement),
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-IfStatement
+fn if_statement<I: U8Input>(i: ESInput<I>,
+                            params: &EnumSet<Parameter>)
+                            -> ESParseResult<I, IfStatement> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::Return)) {
+        panic!("misuse of if_statement");
+    }
+
+    #[inline]
+    fn optional_else<I: U8Input>
+        (i: ESInput<I>,
+         params: &EnumSet<Parameter>)
+         -> ESParseResult<I, (Vec<CommonDelim>, Vec<CommonDelim>, Statement)> {
+
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+             params.contains(&Parameter::Return)) {
+            panic!("misuse of optional_else");
+        }
+
+        parse!{i;
+
+            let delim_1 = common_delim();
+            string_not_utf8(b"else");
+            let delim_2 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                (delim_1, delim_2, stmt)
+            }
+        }
+    }
+
+    let mut test_condition_params = EnumSet::new();
+    test_condition_params.insert(Parameter::In);
+
+    if params.contains(&Parameter::Yield) {
+        test_condition_params.insert(Parameter::Yield);
+    }
+    let test_condition_params = test_condition_params;
+
+    parse!{i;
+
+        string_not_utf8(b"if");
+
+        let delim_1 = common_delim();
+        token(b'(');
+        let delim_2 = common_delim();
+
+        let expr = expression(&test_condition_params);
+
+        let delim_3 = common_delim();
+        token(b')');
+        let delim_4 = common_delim();
+
+        let stmt = statement(&params);
+
+        let else_branch = option(
+            |i| optional_else(i, &params).map(|x| Some(x)),
+            None);
+
+        ret {
+            match else_branch {
+                Some((delim_5, delim_6, else_branch)) => {
+                    IfStatement::TwoBranch(delim_1, delim_2, expr, delim_3, delim_4, stmt, delim_5, delim_6, else_branch)
+                },
+                None => {
+                    IfStatement::OneBranch(delim_1, delim_2, expr, delim_3, delim_4, stmt)
+                }
+            }
+        }
+    }
+}
 
 // == 14 ECMAScript Language: Functions and Classes ==
 //
