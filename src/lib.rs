@@ -50,6 +50,8 @@ Bookmark:
 
 
 
+
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -2819,7 +2821,24 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 struct BitwiseOrExpression;
 
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseORExpression
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseORExpression
+fn bitwise_or_expression<I: U8Input>(i: ESInput<I>,
+                                     params: &EnumSet<Parameter>)
+                                     -> ESParseResult<I, BitwiseOrExpression> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::In) ||
+         params.contains(&Parameter::Yield)) {
+        panic!("misuse of bitwise_or_expression");
+    }
+
+    parse!{i;
+
+        // TODO: complete
+
+        ret BitwiseOrExpression
+    }
+}
 
 // == 12.13 Binary Logical Operators ==
 //
@@ -2919,14 +2938,39 @@ fn logical_and_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of logical_and_expression");
     }
 
-    parse!{i;
+    type Accumulator = Rc<RefCell<LogicalAndExpressionState>>;
 
-        // TODO: complete
-
-        ret {
-            LogicalAndExpression(BitwiseOrExpression, vec![])
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+            let delim_1 = common_delim();
+            let _or = on_error(
+                |i| string(i, b"&&"),
+                |i| {
+                    let loc = i.position();
+                    ErrorLocation::new(loc, "Expected && operator.".to_string())
+                }
+            );
+            let delim_2 = common_delim();
+            ret {
+                accumulator.borrow_mut().add_delim(delim_1, delim_2);
+                ()
+            }
         }
     }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = bitwise_or_expression(params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 
 }
 
@@ -3045,6 +3089,7 @@ fn logical_or_expression<I: U8Input>(i: ESInput<I>,
         }
     }
 
+    #[inline]
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
         parse!{i;
             let rhs = logical_and_expression(params);
@@ -3055,18 +3100,7 @@ fn logical_or_expression<I: U8Input>(i: ESInput<I>,
         }
     };
 
-    parse!{i;
-
-        let line = parse_list(
-            delimiter,
-            reducer
-        );
-
-        ret {
-            line.unwrap()
-        }
-    }
-
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 #[test]
