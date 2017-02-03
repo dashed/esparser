@@ -26,6 +26,7 @@ use chomp::primitives::IntoInner;
 
 use enum_set::{EnumSet, CLike};
 
+// TODO: remove this comment after stable implementation
 /*
 
 Reference:
@@ -42,6 +43,7 @@ Bookmark:
 - http://www.ecma-international.org/ecma-262/7.0/#prod-VariableStatement
 
  */
+
 
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
@@ -3176,14 +3178,14 @@ fn declaration<I: U8Input>(i: ESInput<I>,
 
 enum BreakableStatement {
     IterationStatement,
-    SwitchStatement
+    SwitchStatement,
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BreakableStatement
 fn breakable_statement<I: U8Input>(i: ESInput<I>,
-                               params: &EnumSet<Parameter>)
-                               -> ESParseResult<I, BreakableStatement> {
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, BreakableStatement> {
 
     if !(params.is_empty() || params.contains(&Parameter::Yield) ||
          params.contains(&Parameter::Return)) {
@@ -3367,9 +3369,8 @@ fn lexical_declaration<I: U8Input>(i: ESInput<I>,
         panic!("misuse of lexical_declaration");
     }
 
-    let_or_const(i)
-        .bind(|i, result| {
-            parse!{i;
+    let_or_const(i).bind(|i, result| {
+        parse!{i;
             let delim_1 = common_delim_required();
             let list = binding_list(&params);
             let delim_2 = common_delim();
@@ -3385,13 +3386,13 @@ fn lexical_declaration<I: U8Input>(i: ESInput<I>,
                 }
             }
         }
-        })
+    })
 
 }
 
 enum LetOrConst {
     Let,
-    Const
+    Const,
 }
 
 // TODO: test
@@ -3401,8 +3402,8 @@ fn let_or_const<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LetOrConst> {
     on_error(i,
              |i| -> ESParseResult<I, LetOrConst> {
                  or(i,
-                        |i| string(i, b"let").then(|i| i.ret(LetOrConst::Let)),
-                        |i| string(i, b"const").then(|i| i.ret(LetOrConst::Const)))
+                    |i| string(i, b"let").then(|i| i.ret(LetOrConst::Let)),
+                    |i| string(i, b"const").then(|i| i.ret(LetOrConst::Const)))
              },
              |i| {
                  let reason = "Expected either 'let' or 'const'.".to_string();
@@ -3710,8 +3711,11 @@ fn binding_pattern<I: U8Input>(i: ESInput<I>,
     }
 
     or(i,
-        |i| object_binding_pattern(i, &params).map(|x| BindingPattern::ObjectBindingPattern(x)),
-        |i| array_binding_pattern(i, &params).map(|x| BindingPattern::ArrayBindingPattern(Box::new(x))))
+       |i| object_binding_pattern(i, &params).map(|x| BindingPattern::ObjectBindingPattern(x)),
+       |i| {
+           array_binding_pattern(i, &params)
+               .map(|x| BindingPattern::ArrayBindingPattern(Box::new(x)))
+       })
 }
 
 enum ObjectBindingPattern {
@@ -4417,19 +4421,43 @@ fn if_statement<I: U8Input>(i: ESInput<I>,
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-IterationStatement
 
+struct ForDeclaration(LetOrConst, Vec<CommonDelim>, ForBinding);
+
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-ForDeclaration
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ForDeclaration
+fn for_declaration<I: U8Input>(i: ESInput<I>,
+                               params: &EnumSet<Parameter>)
+                               -> ESParseResult<I, ForDeclaration> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of for_declaration");
+    }
+
+    parse!{i;
+
+        let let_or_const = let_or_const();
+
+        let delim = common_delim();
+
+        let binding = for_binding(&params);
+
+        ret ForDeclaration(let_or_const, delim, binding)
+
+    }
+
+}
 
 enum ForBinding {
     BindingIdentifier(BindingIdentifier),
-    BindingPattern(BindingPattern)
+    BindingPattern(BindingPattern),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ForBinding
 fn for_binding<I: U8Input>(i: ESInput<I>,
-                            params: &EnumSet<Parameter>)
-                            -> ESParseResult<I, ForBinding> {
+                           params: &EnumSet<Parameter>)
+                           -> ESParseResult<I, ForBinding> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -4437,8 +4465,8 @@ fn for_binding<I: U8Input>(i: ESInput<I>,
     }
 
     or(i,
-        |i| binding_identifier(i, &params).map(|x| ForBinding::BindingIdentifier(x)),
-        |i| binding_pattern(i, &params).map(|x| ForBinding::BindingPattern(x)))
+       |i| binding_identifier(i, &params).map(|x| ForBinding::BindingIdentifier(x)),
+       |i| binding_pattern(i, &params).map(|x| ForBinding::BindingPattern(x)))
 }
 
 // == 14 ECMAScript Language: Functions and Classes ==
