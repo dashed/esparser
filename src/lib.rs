@@ -2893,6 +2893,90 @@ fn conditional_expression<I: U8Input>(i: ESInput<I>,
 
 struct LogicalAndExpression;
 
+// LogicalAndExpression := BitwiseOrExpression LogicalAndExpressionRest*
+// LogicalAndExpressionRest := Delim Delim BitwiseOrExpression
+
+struct LogicalAndExpression(BitwiseOrExpression, Vec<LogicalAndExpressionRest>);
+
+struct LogicalAndExpressionRest(
+    Vec<CommonDelim>,
+    /* || */
+    Vec<CommonDelim>,
+    BitwiseOrExpression);
+
+enum LogicalAndExpressionState {
+    Initial,
+    WellFormed(LogicalAndExpression),
+    // state after the delimiter; but before item is consumed
+    PostDelim(LogicalAndExpression, Vec<CommonDelim>, Vec<CommonDelim>)
+}
+
+impl Default for LogicalAndExpressionState {
+    fn default() -> Self {
+        LogicalAndExpressionState::Initial
+    }
+}
+
+impl LogicalAndExpressionState {
+
+    fn unwrap(self) -> LogicalAndExpression {
+        match self {
+            LogicalAndExpressionState::WellFormed(expr) => expr,
+            _ => panic!("incorrect state")
+        }
+    }
+
+    fn add_delim(&mut self, delim_1: Vec<CommonDelim>, delim_2: Vec<CommonDelim>) {
+
+        let prev_state = mem::replace(self, LogicalAndExpressionState::Initial);
+
+        let next_state = match prev_state {
+            LogicalAndExpressionState::Initial => {
+                panic!("incorrect state");
+            }
+            LogicalAndExpressionState::WellFormed(expr) => {
+                LogicalAndExpressionState::PostDelim(expr, delim_1, delim_2)
+            }
+            LogicalAndExpressionState::PostDelim(_, _, _) => {
+                panic!("incorrect state");
+            }
+        };
+
+        mem::replace(self, next_state);
+    }
+
+    fn add_item(&mut self, rhs_val: LogicalAndExpression) {
+
+        let prev_state = mem::replace(self, LogicalAndExpressionState::Initial);
+
+        let next_state = match prev_state {
+            LogicalAndExpressionState::Initial => {
+
+                let expr = LogicalAndExpression(rhs_val, vec![]);
+                LogicalAndExpressionState::WellFormed(expr)
+
+            }
+            LogicalAndExpressionState::WellFormed(_) => {
+                panic!("incorrect state");
+            }
+            LogicalAndExpressionState::PostDelim(expr, delim_1, delim_2) => {
+
+                let LogicalAndExpression(head, rest) = expr;
+                let mut rest = rest;
+
+                let rhs = LogicalAndExpressionRest(delim_1, delim_2, rhs_val);
+                rest.push(rhs);
+
+                let next_expr = LogicalAndExpression(head, rest);
+
+                LogicalAndExpressionState::WellFormed(next_expr)
+            }
+        };
+
+        mem::replace(self, next_state);
+    }
+}
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalANDExpression
 fn logical_and_expression<I: U8Input>(i: ESInput<I>,
@@ -2916,9 +3000,8 @@ fn logical_and_expression<I: U8Input>(i: ESInput<I>,
 
 }
 
-
 // LogicOrExpression := LogicalAndExpression LogicOrExpressionRest*
-// LogicOrExpressionRest := LogicOrExpressionRest
+// LogicOrExpressionRest := Delim Delim LogicalAndExpression
 
 struct LogicOrExpression(LogicalAndExpression, Vec<LogicOrExpressionRest>);
 
