@@ -3367,17 +3367,7 @@ fn lexical_declaration<I: U8Input>(i: ESInput<I>,
         panic!("misuse of lexical_declaration");
     }
 
-    // http://www.ecma-international.org/ecma-262/7.0/#prod-LetOrConst
-    on_error(i,
-             |i| {
-                 either(i,
-                        |i| string(i, b"let"), // left
-                        |i| string(i, b"const") /* right */)
-             },
-             |i| {
-                 let reason = "Expected either 'let' or 'const'.".to_string();
-                 ErrorLocation::new(i.position(), reason)
-             })
+    let_or_const(i)
         .bind(|i, result| {
             parse!{i;
             let delim_1 = common_delim_required();
@@ -3386,10 +3376,10 @@ fn lexical_declaration<I: U8Input>(i: ESInput<I>,
             semicolon();
             ret {
                 match result {
-                    Either::Left(_) => {
+                    LetOrConst::Let => {
                         LexicalDeclaration::Let(delim_1, list, delim_2)
                     },
-                    Either::Right(_) => {
+                    LetOrConst::Const => {
                         LexicalDeclaration::Const(delim_1, list, delim_2)
                     }
                 }
@@ -3397,6 +3387,27 @@ fn lexical_declaration<I: U8Input>(i: ESInput<I>,
         }
         })
 
+}
+
+enum LetOrConst {
+    Let,
+    Const
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LetOrConst
+fn let_or_const<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LetOrConst> {
+
+    on_error(i,
+             |i| -> ESParseResult<I, LetOrConst> {
+                 or(i,
+                        |i| string(i, b"let").then(|i| i.ret(LetOrConst::Let)),
+                        |i| string(i, b"const").then(|i| i.ret(LetOrConst::Const)))
+             },
+             |i| {
+                 let reason = "Expected either 'let' or 'const'.".to_string();
+                 ErrorLocation::new(i.position(), reason)
+             })
 }
 
 struct BindingList(Vec<BindingListItem>);
