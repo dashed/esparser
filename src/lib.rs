@@ -2805,88 +2805,6 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
-// == 12.14 Conditional Operator ( ? : ) ==
-//
-// http://www.ecma-international.org/ecma-262/7.0/#sec-conditional-operator
-
-enum ConditionalExpression {
-    Conditional(LogicOrExpression,
-                Vec<CommonDelim>,
-                Vec<CommonDelim>,
-                AssignmentExpression,
-                Vec<CommonDelim>,
-                Vec<CommonDelim>,
-                AssignmentExpression),
-    LogicOrExpression(LogicOrExpression),
-}
-
-// TODO: test
-fn conditional_expression<I: U8Input>(i: ESInput<I>,
-                                      params: &EnumSet<Parameter>)
-                                      -> ESParseResult<I, ConditionalExpression> {
-
-    // validation
-    if !(params.is_empty() || params.contains(&Parameter::In) ||
-         params.contains(&Parameter::Yield)) {
-        panic!("misuse of conditional_expression");
-    }
-
-    #[inline]
-    fn conditional<I: U8Input>(i: ESInput<I>,
-                               params: &EnumSet<Parameter>)
-                               -> ESParseResult<I,
-                                                (Vec<CommonDelim>,
-                                                 Vec<CommonDelim>,
-                                                 AssignmentExpression,
-                                                 Vec<CommonDelim>,
-                                                 Vec<CommonDelim>,
-                                                 AssignmentExpression)> {
-
-        parse!{i;
-
-            let delim_1 = common_delim();
-            token(b'?');
-            let delim_2 = common_delim();
-
-            let consequent = (i -> {
-                let mut params = params.clone();
-                params.insert(Parameter::In);
-                assignment_expression(i, &params)
-            });
-
-            let delim_3 = common_delim();
-            token(b':');
-            let delim_4 = common_delim();
-
-            let alternative = assignment_expression(&params);
-
-            ret {
-                (delim_1, delim_2, consequent, delim_3, delim_4, alternative)
-            }
-        }
-    }
-
-    parse!{i;
-
-        let logical_or_expression = logical_or_expression(&params);
-
-        let conditional = option(|i| conditional(i, &params).map(|x| Some(x)),
-            None);
-
-        ret {
-            match conditional {
-                Some((delim_1, delim_2, consequent, delim_3, delim_4, alternative)) => {
-                    ConditionalExpression::Conditional(
-                        logical_or_expression, delim_1, delim_2, consequent, delim_3, delim_4, alternative)
-                }
-                None => {
-                    ConditionalExpression::LogicOrExpression(logical_or_expression)
-                }
-            }
-        }
-    }
-}
-
 // == 12.13 Binary Logical Operators ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-binary-logical-operators
@@ -3152,6 +3070,88 @@ fn logical_or_expression_test() {
         }
         Err(_) => {
             assert!(true);
+        }
+    }
+}
+
+// == 12.14 Conditional Operator ( ? : ) ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-conditional-operator
+
+enum ConditionalExpression {
+    Conditional(LogicOrExpression,
+                Vec<CommonDelim>,
+                Vec<CommonDelim>,
+                AssignmentExpression,
+                Vec<CommonDelim>,
+                Vec<CommonDelim>,
+                AssignmentExpression),
+    LogicOrExpression(LogicOrExpression),
+}
+
+// TODO: test
+fn conditional_expression<I: U8Input>(i: ESInput<I>,
+                                      params: &EnumSet<Parameter>)
+                                      -> ESParseResult<I, ConditionalExpression> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::In) ||
+         params.contains(&Parameter::Yield)) {
+        panic!("misuse of conditional_expression");
+    }
+
+    #[inline]
+    fn conditional<I: U8Input>(i: ESInput<I>,
+                               params: &EnumSet<Parameter>)
+                               -> ESParseResult<I,
+                                                (Vec<CommonDelim>,
+                                                 Vec<CommonDelim>,
+                                                 AssignmentExpression,
+                                                 Vec<CommonDelim>,
+                                                 Vec<CommonDelim>,
+                                                 AssignmentExpression)> {
+
+        parse!{i;
+
+            let delim_1 = common_delim();
+            token(b'?');
+            let delim_2 = common_delim();
+
+            let consequent = (i -> {
+                let mut params = params.clone();
+                params.insert(Parameter::In);
+                assignment_expression(i, &params)
+            });
+
+            let delim_3 = common_delim();
+            token(b':');
+            let delim_4 = common_delim();
+
+            let alternative = assignment_expression(&params);
+
+            ret {
+                (delim_1, delim_2, consequent, delim_3, delim_4, alternative)
+            }
+        }
+    }
+
+    parse!{i;
+
+        let logical_or_expression = logical_or_expression(&params);
+
+        let conditional = option(|i| conditional(i, &params).map(|x| Some(x)),
+            None);
+
+        ret {
+            match conditional {
+                Some((delim_1, delim_2, consequent, delim_3, delim_4, alternative)) => {
+                    ConditionalExpression::Conditional(
+                        logical_or_expression, delim_1, delim_2, consequent, delim_3, delim_4, alternative)
+                }
+                None => {
+                    ConditionalExpression::LogicOrExpression(logical_or_expression)
+                }
+            }
         }
     }
 }
