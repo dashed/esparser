@@ -413,8 +413,10 @@ fn parse_list_rest<I: U8Input, D, Delim, A, R, Reduced, E>(input: I,
 fn parse_single_quote_string<I: U8Input>(input: I) -> SimpleResult<I, String> {
     parse!{input;
 
+        // beginning of string
         i -> chomp::parsers::token(i, b'\'');
 
+        // string contents
         let line: Vec<u8> = parse_list(
             // delimiter
             |i, _| string(i, br#"\'"#),
@@ -423,6 +425,7 @@ fn parse_single_quote_string<I: U8Input>(input: I) -> SimpleResult<I, String> {
 
         );
 
+        // end of string
         i -> chomp::parsers::token(i, b'\'');
 
         ret {
@@ -2888,11 +2891,13 @@ fn conditional_expression<I: U8Input>(i: ESInput<I>,
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-binary-logical-operators
 
+struct LogicalAndExpression;
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalANDExpression
 fn logical_and_expression<I: U8Input>(i: ESInput<I>,
                                       params: &EnumSet<Parameter>)
-                                      -> ESParseResult<I, ()> {
+                                      -> ESParseResult<I, LogicalAndExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::In) ||
@@ -2902,76 +2907,97 @@ fn logical_and_expression<I: U8Input>(i: ESInput<I>,
 
     parse!{i;
 
-        ret {()}
+        // TODO: complete
+
+        ret {
+            LogicalAndExpression
+        }
     }
 
 }
 
-#[derive(Debug)]
-enum LogicOrExpression {
-    Or(Box<LogicOrExpression>,
-       Vec<CommonDelim>, // common_delim
-       /* || */
-       Vec<CommonDelim>, // common_delim
-       Box<LogicOrExpression>),
-    Leaf(bool),
-    None,
+
+// LogicOrExpression := LogicalAndExpression LogicOrExpressionRest*
+// LogicOrExpressionRest := LogicOrExpressionRest
+
+struct LogicOrExpression(LogicalAndExpression, Vec<LogicOrExpressionRest>);
+
+struct LogicOrExpressionRest(
+    Vec<CommonDelim>,
+    /* || */
+    Vec<CommonDelim>,
+    LogicalAndExpression);
+
+enum LogicOrExpressionState {
+    Initial,
+    WellFormed(LogicOrExpression),
+    // state after the delimiter; but before item is consumed
+    PostDelim(LogicOrExpression, Vec<CommonDelim>, Vec<CommonDelim>)
 }
 
-impl Default for LogicOrExpression {
+impl Default for LogicOrExpressionState {
     fn default() -> Self {
-        LogicOrExpression::None
+        LogicOrExpressionState::Initial
     }
 }
 
-impl LogicOrExpression {
+impl LogicOrExpressionState {
+
+    fn unwrap(self) -> LogicOrExpression {
+        match self {
+            LogicOrExpressionState::WellFormed(expr) => expr,
+            _ => panic!("incorrect state")
+        }
+    }
+
     fn add_delim(&mut self, delim_1: Vec<CommonDelim>, delim_2: Vec<CommonDelim>) {
 
-        match *self {
-            LogicOrExpression::None => {
-                panic!("invariant violation");
+        let prev_state = mem::replace(self, LogicOrExpressionState::Initial);
+
+        let next_state = match prev_state {
+            LogicOrExpressionState::Initial => {
+                panic!("incorrect state");
             }
-            _ => {}
-        }
+            LogicOrExpressionState::WellFormed(expr) => {
+                LogicOrExpressionState::PostDelim(expr, delim_1, delim_2)
+            }
+            LogicOrExpressionState::PostDelim(_, _, _) => {
+                panic!("incorrect state");
+            }
+        };
 
-        let lhs = mem::replace(self, LogicOrExpression::None);
-
-        let new_val = LogicOrExpression::Or(Box::new(lhs),
-                                            delim_1,
-                                            /* || */
-                                            delim_2,
-                                            Box::new(LogicOrExpression::None));
-
-        mem::replace(self, new_val);
+        mem::replace(self, next_state);
     }
 
-    fn add_item(&mut self, rhs_val: bool) {
+    fn add_item(&mut self, rhs_val: LogicalAndExpression) {
 
-        let rhs = LogicOrExpression::Leaf(rhs_val);
+        let prev_state = mem::replace(self, LogicOrExpressionState::Initial);
 
-        match *self {
-            LogicOrExpression::Leaf(_) => {
-                panic!("invariant violation");
+        let next_state = match prev_state {
+            LogicOrExpressionState::Initial => {
+
+                let expr = LogicOrExpression(rhs_val, vec![]);
+                LogicOrExpressionState::WellFormed(expr)
+
             }
-            LogicOrExpression::None => {
-                mem::replace(self, rhs);
+            LogicOrExpressionState::WellFormed(_) => {
+                panic!("incorrect state");
             }
-            LogicOrExpression::Or(_, _, _, _) => {
-                if let LogicOrExpression::Or(lhs, delim_1, delim_2, _) =
-                    mem::replace(self, LogicOrExpression::None) {
+            LogicOrExpressionState::PostDelim(expr, delim_1, delim_2) => {
 
-                    let new_val = LogicOrExpression::Or(lhs,
-                                                        delim_1,
-                                                        /* || */
-                                                        delim_2,
-                                                        Box::new(rhs));
+                let LogicOrExpression(head, rest) = expr;
+                let mut rest = rest;
 
-                    mem::replace(self, new_val);
-                } else {
-                    unreachable!();
-                }
+                let rhs = LogicOrExpressionRest(delim_1, delim_2, rhs_val);
+                rest.push(rhs);
+
+                let next_expr = LogicOrExpression(head, rest);
+
+                LogicOrExpressionState::WellFormed(next_expr)
             }
-        }
+        };
+
+        mem::replace(self, next_state);
     }
 }
 
@@ -2987,7 +3013,7 @@ fn logical_or_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of logical_or_expression");
     }
 
-    type Accumulator = Rc<RefCell<LogicOrExpression>>;
+    type Accumulator = Rc<RefCell<LogicOrExpressionState>>;
 
     #[inline]
     fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
@@ -3012,7 +3038,7 @@ fn logical_or_expression<I: U8Input>(i: ESInput<I>,
         parse!{i;
             let rhs = logical_and_expression(params);
             ret {
-                accumulator.borrow_mut().add_item(false);
+                accumulator.borrow_mut().add_item(rhs);
                 ()
             }
         }
@@ -3025,7 +3051,9 @@ fn logical_or_expression<I: U8Input>(i: ESInput<I>,
             reducer
         );
 
-        ret line
+        ret {
+            line.unwrap()
+        }
     }
 
 }
@@ -3037,7 +3065,6 @@ fn logical_or_expression_test() {
     let i = InputPosition::new(&b"a||a ||    a"[..], CurrentPosition::new());
     match logical_or_expression(i, &EnumSet::new()).into_inner().1 {
         Ok(result) => {
-            println!("{:?}", result);
             assert!(true);
         }
         Err(_) => {
