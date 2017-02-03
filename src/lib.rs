@@ -3108,6 +3108,7 @@ enum Statement {
     VariableStatement(VariableStatement),
     EmptyStatement(EmptyStatement),
     ExpressionStatement(ExpressionStatement),
+    IfStatement(Box<IfStatement>),
 }
 
 // TODO: test
@@ -3134,7 +3135,9 @@ fn statement<I: U8Input>(i: ESInput<I>,
         <|>
         (i -> empty_statement(i).map(|x| Statement::EmptyStatement(x)))
         <|>
-        (i -> expression_statement(i, &params).map(|x| Statement::ExpressionStatement(x)));
+        (i -> expression_statement(i, &params).map(|x| Statement::ExpressionStatement(x)))
+        <|>
+        (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))));
 
         // TODO: more statements
 
