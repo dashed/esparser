@@ -49,6 +49,7 @@ Bookmark:
 
 
 
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -2805,28 +2806,40 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
+// == 12.12 Binary Bitwise Operators ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-binary-bitwise-operators
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseANDExpression
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseXORExpression
+
+struct BitwiseOrExpression;
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseORExpression
+
 // == 12.13 Binary Logical Operators ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-binary-logical-operators
-
-struct LogicalAndExpression;
 
 // LogicalAndExpression := BitwiseOrExpression LogicalAndExpressionRest*
 // LogicalAndExpressionRest := Delim Delim BitwiseOrExpression
 
 struct LogicalAndExpression(BitwiseOrExpression, Vec<LogicalAndExpressionRest>);
 
-struct LogicalAndExpressionRest(
-    Vec<CommonDelim>,
-    /* || */
-    Vec<CommonDelim>,
-    BitwiseOrExpression);
+struct LogicalAndExpressionRest(Vec<CommonDelim>,
+                                /* || */
+                                Vec<CommonDelim>,
+                                BitwiseOrExpression);
 
 enum LogicalAndExpressionState {
     Initial,
     WellFormed(LogicalAndExpression),
     // state after the delimiter; but before item is consumed
-    PostDelim(LogicalAndExpression, Vec<CommonDelim>, Vec<CommonDelim>)
+    PostDelim(LogicalAndExpression, Vec<CommonDelim>, Vec<CommonDelim>),
 }
 
 impl Default for LogicalAndExpressionState {
@@ -2836,11 +2849,10 @@ impl Default for LogicalAndExpressionState {
 }
 
 impl LogicalAndExpressionState {
-
     fn unwrap(self) -> LogicalAndExpression {
         match self {
             LogicalAndExpressionState::WellFormed(expr) => expr,
-            _ => panic!("incorrect state")
+            _ => panic!("incorrect state"),
         }
     }
 
@@ -2863,7 +2875,7 @@ impl LogicalAndExpressionState {
         mem::replace(self, next_state);
     }
 
-    fn add_item(&mut self, rhs_val: LogicalAndExpression) {
+    fn add_item(&mut self, rhs_val: BitwiseOrExpression) {
 
         let prev_state = mem::replace(self, LogicalAndExpressionState::Initial);
 
@@ -2912,7 +2924,7 @@ fn logical_and_expression<I: U8Input>(i: ESInput<I>,
         // TODO: complete
 
         ret {
-            LogicalAndExpression
+            LogicalAndExpression(BitwiseOrExpression, vec![])
         }
     }
 
@@ -2923,17 +2935,16 @@ fn logical_and_expression<I: U8Input>(i: ESInput<I>,
 
 struct LogicOrExpression(LogicalAndExpression, Vec<LogicOrExpressionRest>);
 
-struct LogicOrExpressionRest(
-    Vec<CommonDelim>,
-    /* || */
-    Vec<CommonDelim>,
-    LogicalAndExpression);
+struct LogicOrExpressionRest(Vec<CommonDelim>,
+                             /* || */
+                             Vec<CommonDelim>,
+                             LogicalAndExpression);
 
 enum LogicOrExpressionState {
     Initial,
     WellFormed(LogicOrExpression),
     // state after the delimiter; but before item is consumed
-    PostDelim(LogicOrExpression, Vec<CommonDelim>, Vec<CommonDelim>)
+    PostDelim(LogicOrExpression, Vec<CommonDelim>, Vec<CommonDelim>),
 }
 
 impl Default for LogicOrExpressionState {
@@ -2943,11 +2954,10 @@ impl Default for LogicOrExpressionState {
 }
 
 impl LogicOrExpressionState {
-
     fn unwrap(self) -> LogicOrExpression {
         match self {
             LogicOrExpressionState::WellFormed(expr) => expr,
-            _ => panic!("incorrect state")
+            _ => panic!("incorrect state"),
         }
     }
 
