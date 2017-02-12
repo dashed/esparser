@@ -2925,6 +2925,10 @@ fn equality_expression<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// == 12.12 Binary Bitwise Operators ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-binary-bitwise-operators
+
 // BitwiseANDExpression := EqualityExpression BitwiseANDExpressionRest*
 // BitwiseANDExpressionRest := Delim ^ Delim EqualityExpression
 
