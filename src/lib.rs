@@ -557,6 +557,95 @@ fn parse_single_quote_string_test() {
 
 }
 
+// Helper macro to generate the following:
+//
+// $root_name := $inner_parser $rest_name*
+// $rest_name := Delim <operator> Delim $inner_parser
+//
+macro_rules! generate_list_parser {
+    ($root_name: ident; $rest_name: ident; $state_name: ident; $inner_parser: ident) => {
+
+        struct $root_name($inner_parser, Vec<$rest_name>);
+
+        struct $rest_name(Vec<CommonDelim>,
+                                        /* some operator */
+                                        Vec<CommonDelim>,
+                                        $inner_parser);
+
+        enum $state_name {
+            Initial,
+            WellFormed($root_name),
+            // state after the delimiter; but before item is consumed
+            PostDelim($root_name, Vec<CommonDelim>, Vec<CommonDelim>),
+        }
+
+        impl Default for $state_name {
+            fn default() -> Self {
+                $state_name::Initial
+            }
+        }
+
+        impl $state_name {
+            fn unwrap(self) -> $root_name {
+                match self {
+                    $state_name::WellFormed(expr) => expr,
+                    _ => panic!("incorrect state"),
+                }
+            }
+
+            fn add_delim(&mut self, delim_1: Vec<CommonDelim>, delim_2: Vec<CommonDelim>) {
+
+                let prev_state = mem::replace(self, $state_name::Initial);
+
+                let next_state = match prev_state {
+                    $state_name::Initial => {
+                        panic!("incorrect state");
+                    }
+                    $state_name::WellFormed(expr) => {
+                        $state_name::PostDelim(expr, delim_1, delim_2)
+                    }
+                    $state_name::PostDelim(_, _, _) => {
+                        panic!("incorrect state");
+                    }
+                };
+
+                mem::replace(self, next_state);
+            }
+
+            fn add_item(&mut self, rhs_val: $inner_parser) {
+
+                let prev_state = mem::replace(self, $state_name::Initial);
+
+                let next_state = match prev_state {
+                    $state_name::Initial => {
+
+                        let expr = $root_name(rhs_val, vec![]);
+                        $state_name::WellFormed(expr)
+
+                    }
+                    $state_name::WellFormed(_) => {
+                        panic!("incorrect state");
+                    }
+                    $state_name::PostDelim(expr, delim_1, delim_2) => {
+
+                        let $root_name(head, rest) = expr;
+                        let mut rest = rest;
+
+                        let rhs = $rest_name(delim_1, delim_2, rhs_val);
+                        rest.push(rhs);
+
+                        let next_expr = $root_name(head, rest);
+
+                        $state_name::WellFormed(next_expr)
+                    }
+                };
+
+                mem::replace(self, next_state);
+            }
+        }
+    }
+}
+
 // == parser helpers ==
 
 // TODO: better function? refactor this
@@ -2815,16 +2904,38 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseANDExpression
 
+struct BitwiseXORExpression;
+
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseXORExpression
+fn bitwise_xor_expression<I: U8Input>(i: ESInput<I>,
+                                     params: &EnumSet<Parameter>)
+                                     -> ESParseResult<I, BitwiseXORExpression> {
 
-struct BitwiseOrExpression;
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::In) ||
+         params.contains(&Parameter::Yield)) {
+        panic!("misuse of bitwise_xor_expression");
+    }
+
+    parse!{i;
+
+        ret BitwiseXORExpression
+    }
+
+}
+
+
+// BitwiseORExpression := BitwiseXORExpression BitwiseORExpressionRest*
+// BitwiseORExpressionRest := Delim | Delim BitwiseXORExpression
+
+generate_list_parser!(BitwiseORExpression; BitwiseORExpressionRest; BitwiseORExpressionState; BitwiseXORExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseORExpression
 fn bitwise_or_expression<I: U8Input>(i: ESInput<I>,
                                      params: &EnumSet<Parameter>)
-                                     -> ESParseResult<I, BitwiseOrExpression> {
+                                     -> ESParseResult<I, BitwiseORExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::In) ||
@@ -2832,99 +2943,49 @@ fn bitwise_or_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of bitwise_or_expression");
     }
 
-    parse!{i;
+    type Accumulator = Rc<RefCell<BitwiseORExpressionState>>;
 
-        // TODO: complete
-
-        ret BitwiseOrExpression
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+            let delim_1 = common_delim();
+            let _or = on_error(
+                |i| string(i, b"|"),
+                |i| {
+                    let loc = i.position();
+                    ErrorLocation::new(loc, "Expected | operator.".to_string())
+                }
+            );
+            let delim_2 = common_delim();
+            ret {
+                accumulator.borrow_mut().add_delim(delim_1, delim_2);
+                ()
+            }
+        }
     }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = bitwise_xor_expression(params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 // == 12.13 Binary Logical Operators ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-binary-logical-operators
 
-// LogicalAndExpression := BitwiseOrExpression LogicalAndExpressionRest*
-// LogicalAndExpressionRest := Delim Delim BitwiseOrExpression
+// LogicalAndExpression := BitwiseORExpression LogicalAndExpressionRest*
+// LogicalAndExpressionRest := Delim && Delim BitwiseORExpression
 
-struct LogicalAndExpression(BitwiseOrExpression, Vec<LogicalAndExpressionRest>);
-
-struct LogicalAndExpressionRest(Vec<CommonDelim>,
-                                /* || */
-                                Vec<CommonDelim>,
-                                BitwiseOrExpression);
-
-enum LogicalAndExpressionState {
-    Initial,
-    WellFormed(LogicalAndExpression),
-    // state after the delimiter; but before item is consumed
-    PostDelim(LogicalAndExpression, Vec<CommonDelim>, Vec<CommonDelim>),
-}
-
-impl Default for LogicalAndExpressionState {
-    fn default() -> Self {
-        LogicalAndExpressionState::Initial
-    }
-}
-
-impl LogicalAndExpressionState {
-    fn unwrap(self) -> LogicalAndExpression {
-        match self {
-            LogicalAndExpressionState::WellFormed(expr) => expr,
-            _ => panic!("incorrect state"),
-        }
-    }
-
-    fn add_delim(&mut self, delim_1: Vec<CommonDelim>, delim_2: Vec<CommonDelim>) {
-
-        let prev_state = mem::replace(self, LogicalAndExpressionState::Initial);
-
-        let next_state = match prev_state {
-            LogicalAndExpressionState::Initial => {
-                panic!("incorrect state");
-            }
-            LogicalAndExpressionState::WellFormed(expr) => {
-                LogicalAndExpressionState::PostDelim(expr, delim_1, delim_2)
-            }
-            LogicalAndExpressionState::PostDelim(_, _, _) => {
-                panic!("incorrect state");
-            }
-        };
-
-        mem::replace(self, next_state);
-    }
-
-    fn add_item(&mut self, rhs_val: BitwiseOrExpression) {
-
-        let prev_state = mem::replace(self, LogicalAndExpressionState::Initial);
-
-        let next_state = match prev_state {
-            LogicalAndExpressionState::Initial => {
-
-                let expr = LogicalAndExpression(rhs_val, vec![]);
-                LogicalAndExpressionState::WellFormed(expr)
-
-            }
-            LogicalAndExpressionState::WellFormed(_) => {
-                panic!("incorrect state");
-            }
-            LogicalAndExpressionState::PostDelim(expr, delim_1, delim_2) => {
-
-                let LogicalAndExpression(head, rest) = expr;
-                let mut rest = rest;
-
-                let rhs = LogicalAndExpressionRest(delim_1, delim_2, rhs_val);
-                rest.push(rhs);
-
-                let next_expr = LogicalAndExpression(head, rest);
-
-                LogicalAndExpressionState::WellFormed(next_expr)
-            }
-        };
-
-        mem::replace(self, next_state);
-    }
-}
+generate_list_parser!(LogicalAndExpression; LogicalAndExpressionRest; LogicalAndExpressionState; BitwiseORExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalANDExpression
@@ -2975,86 +3036,9 @@ fn logical_and_expression<I: U8Input>(i: ESInput<I>,
 }
 
 // LogicOrExpression := LogicalAndExpression LogicOrExpressionRest*
-// LogicOrExpressionRest := Delim Delim LogicalAndExpression
+// LogicOrExpressionRest := Delim || Delim LogicalAndExpression
 
-struct LogicOrExpression(LogicalAndExpression, Vec<LogicOrExpressionRest>);
-
-struct LogicOrExpressionRest(Vec<CommonDelim>,
-                             /* || */
-                             Vec<CommonDelim>,
-                             LogicalAndExpression);
-
-enum LogicOrExpressionState {
-    Initial,
-    WellFormed(LogicOrExpression),
-    // state after the delimiter; but before item is consumed
-    PostDelim(LogicOrExpression, Vec<CommonDelim>, Vec<CommonDelim>),
-}
-
-impl Default for LogicOrExpressionState {
-    fn default() -> Self {
-        LogicOrExpressionState::Initial
-    }
-}
-
-impl LogicOrExpressionState {
-    fn unwrap(self) -> LogicOrExpression {
-        match self {
-            LogicOrExpressionState::WellFormed(expr) => expr,
-            _ => panic!("incorrect state"),
-        }
-    }
-
-    fn add_delim(&mut self, delim_1: Vec<CommonDelim>, delim_2: Vec<CommonDelim>) {
-
-        let prev_state = mem::replace(self, LogicOrExpressionState::Initial);
-
-        let next_state = match prev_state {
-            LogicOrExpressionState::Initial => {
-                panic!("incorrect state");
-            }
-            LogicOrExpressionState::WellFormed(expr) => {
-                LogicOrExpressionState::PostDelim(expr, delim_1, delim_2)
-            }
-            LogicOrExpressionState::PostDelim(_, _, _) => {
-                panic!("incorrect state");
-            }
-        };
-
-        mem::replace(self, next_state);
-    }
-
-    fn add_item(&mut self, rhs_val: LogicalAndExpression) {
-
-        let prev_state = mem::replace(self, LogicOrExpressionState::Initial);
-
-        let next_state = match prev_state {
-            LogicOrExpressionState::Initial => {
-
-                let expr = LogicOrExpression(rhs_val, vec![]);
-                LogicOrExpressionState::WellFormed(expr)
-
-            }
-            LogicOrExpressionState::WellFormed(_) => {
-                panic!("incorrect state");
-            }
-            LogicOrExpressionState::PostDelim(expr, delim_1, delim_2) => {
-
-                let LogicOrExpression(head, rest) = expr;
-                let mut rest = rest;
-
-                let rhs = LogicOrExpressionRest(delim_1, delim_2, rhs_val);
-                rest.push(rhs);
-
-                let next_expr = LogicOrExpression(head, rest);
-
-                LogicOrExpressionState::WellFormed(next_expr)
-            }
-        };
-
-        mem::replace(self, next_state);
-    }
-}
+generate_list_parser!(LogicOrExpression; LogicOrExpressionRest; LogicOrExpressionState; LogicalAndExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalORExpression
