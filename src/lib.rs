@@ -586,6 +586,8 @@ macro_rules! generate_list_parser {
         }
 
         impl $state_name {
+
+            // TODO: document this
             fn unwrap(self) -> $root_name {
                 match self {
                     $state_name::WellFormed(expr) => expr,
@@ -2897,15 +2899,27 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
+// == 12.10 Relational Operators ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-relational-operators
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-RelationalExpression
+
 // == 12.11 Equality Operators ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-equality-operators
 
-// == 12.12 Binary Bitwise Operators ==
-//
-// http://www.ecma-international.org/ecma-262/7.0/#sec-binary-bitwise-operators
-
+// TODO: fix this
 struct EqualityExpression;
+// struct EqualityExpression(RelationalExpression, Vec<EqualityExpressionRest>);
+
+enum EqualityExpressionRest {
+    Equality(Vec<CommonDelim>, /* == */ Vec<CommonDelim>, RelationalExpression),
+    Inequality(Vec<CommonDelim>, /* != */ Vec<CommonDelim>, RelationalExpression),
+    StrictEquality(Vec<CommonDelim>, /* === */ Vec<CommonDelim>, RelationalExpression),
+    StrictInequality(Vec<CommonDelim>, /* !== */ Vec<CommonDelim>, RelationalExpression),
+}
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-EqualityExpression
