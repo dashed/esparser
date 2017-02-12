@@ -2897,14 +2897,41 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
+// == 12.11 Equality Operators ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-equality-operators
+
 // == 12.12 Binary Bitwise Operators ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-binary-bitwise-operators
 
-struct BitwiseANDExpression;
+struct EqualityExpression;
 
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseANDExpression
+// http://www.ecma-international.org/ecma-262/7.0/#prod-EqualityExpression
+fn equality_expression<I: U8Input>(i: ESInput<I>,
+                                     params: &EnumSet<Parameter>)
+                                     -> ESParseResult<I, EqualityExpression> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::In) ||
+         params.contains(&Parameter::Yield)) {
+        panic!("misuse of equality_expression");
+    }
+
+    parse!{i;
+
+        ret EqualityExpression
+    }
+}
+
+// BitwiseANDExpression := EqualityExpression BitwiseANDExpressionRest*
+// BitwiseANDExpressionRest := Delim ^ Delim EqualityExpression
+
+generate_list_parser!(BitwiseANDExpression; BitwiseANDExpressionRest; BitwiseANDExpressionState; EqualityExpression);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseANDExpression
 fn bitwise_and_expression<I: U8Input>(i: ESInput<I>,
                                      params: &EnumSet<Parameter>)
                                      -> ESParseResult<I, BitwiseANDExpression> {
@@ -2915,10 +2942,39 @@ fn bitwise_and_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of bitwise_and_expression");
     }
 
-    parse!{i;
+    type Accumulator = Rc<RefCell<BitwiseANDExpressionState>>;
 
-        ret BitwiseANDExpression
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+            let delim_1 = common_delim();
+            let _or = on_error(
+                |i| string(i, b"&"),
+                |i| {
+                    let loc = i.position();
+                    ErrorLocation::new(loc, "Expected & operator.".to_string())
+                }
+            );
+            let delim_2 = common_delim();
+            ret {
+                accumulator.borrow_mut().add_delim(delim_1, delim_2);
+                ()
+            }
+        }
     }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = equality_expression(params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 
 }
 
@@ -2928,7 +2984,7 @@ fn bitwise_and_expression<I: U8Input>(i: ESInput<I>,
 generate_list_parser!(BitwiseXORExpression; BitwiseXORExpressionRest; BitwiseXORExpressionState; BitwiseANDExpression);
 
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseXORExpression
+// http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseXORExpression
 fn bitwise_xor_expression<I: U8Input>(i: ESInput<I>,
                                      params: &EnumSet<Parameter>)
                                      -> ESParseResult<I, BitwiseXORExpression> {
