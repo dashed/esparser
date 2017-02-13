@@ -45,15 +45,6 @@ Bookmark:
  */
 
 
-
-
-
-
-
-
-
-
-
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
