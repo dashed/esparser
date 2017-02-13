@@ -53,6 +53,7 @@ Bookmark:
 
 
 
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -2989,8 +2990,6 @@ struct RelationalExpression;
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-equality-operators
 
-// TODO: fix this
-// struct EqualityExpression;
 struct EqualityExpression(RelationalExpression, Vec<EqualityExpressionRest>);
 
 impl EqualityExpression {
@@ -3278,7 +3277,41 @@ fn logical_and_expression<I: U8Input>(i: ESInput<I>,
 // LogicOrExpression := LogicalAndExpression LogicOrExpressionRest*
 // LogicOrExpressionRest := Delim || Delim LogicalAndExpression
 
-generate_list_parser!(LogicOrExpression; LogicOrExpressionRest; LogicOrExpressionState; LogicalAndExpression);
+struct LogicOrExpression(LogicalAndExpression, Vec<LogicOrExpressionRest>);
+
+impl LogicOrExpression {
+    fn new(rhs_val: LogicalAndExpression) -> Self {
+        LogicOrExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: LogicOrExpressionDelim,
+                rhs_val: LogicalAndExpression)
+                -> Self {
+
+        let LogicOrExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let LogicOrExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = LogicOrExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        LogicOrExpression(head, rest)
+    }
+}
+
+struct LogicOrExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, LogicalAndExpression);
+
+struct LogicOrExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
+
+generate_list_parser_foo!(
+    LogicOrExpression;
+    LogicOrExpressionRest;
+    LogicOrExpressionState;
+    LogicOrExpressionDelim;
+    LogicalAndExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalORExpression
@@ -3307,7 +3340,10 @@ fn logical_or_expression<I: U8Input>(i: ESInput<I>,
             );
             let delim_2 = common_delim();
             ret {
-                accumulator.borrow_mut().add_delim(delim_1, delim_2);
+
+                let delim = LogicOrExpressionDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
                 ()
             }
         }
