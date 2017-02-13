@@ -52,6 +52,7 @@ Bookmark:
 
 
 
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -2997,7 +2998,10 @@ impl EqualityExpression {
         EqualityExpression(rhs_val, vec![])
     }
 
-    fn add_item(self, operator_delim: EqualityExpressionDelim, rhs_val: RelationalExpression) -> Self {
+    fn add_item(self,
+                operator_delim: EqualityExpressionDelim,
+                rhs_val: RelationalExpression)
+                -> Self {
 
         let EqualityExpression(head, rest) = self;
         let mut rest = rest;
@@ -3012,7 +3016,10 @@ impl EqualityExpression {
     }
 }
 
-struct EqualityExpressionRest(Vec<CommonDelim>, EqualityExpressionOperator, Vec<CommonDelim>, RelationalExpression);
+struct EqualityExpressionRest(Vec<CommonDelim>,
+                              EqualityExpressionOperator,
+                              Vec<CommonDelim>,
+                              RelationalExpression);
 
 enum EqualityExpressionOperator {
     Equality,
@@ -3034,8 +3041,8 @@ generate_list_parser_foo!(
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-EqualityExpression
 fn equality_expression<I: U8Input>(i: ESInput<I>,
-                                     params: &EnumSet<Parameter>)
-                                     -> ESParseResult<I, EqualityExpression> {
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, EqualityExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::In) ||
@@ -3061,8 +3068,8 @@ generate_list_parser!(BitwiseANDExpression; BitwiseANDExpressionRest; BitwiseAND
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseANDExpression
 fn bitwise_and_expression<I: U8Input>(i: ESInput<I>,
-                                     params: &EnumSet<Parameter>)
-                                     -> ESParseResult<I, BitwiseANDExpression> {
+                                      params: &EnumSet<Parameter>)
+                                      -> ESParseResult<I, BitwiseANDExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::In) ||
@@ -3114,8 +3121,8 @@ generate_list_parser!(BitwiseXORExpression; BitwiseXORExpressionRest; BitwiseXOR
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseXORExpression
 fn bitwise_xor_expression<I: U8Input>(i: ESInput<I>,
-                                     params: &EnumSet<Parameter>)
-                                     -> ESParseResult<I, BitwiseXORExpression> {
+                                      params: &EnumSet<Parameter>)
+                                      -> ESParseResult<I, BitwiseXORExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::In) ||
