@@ -557,6 +557,81 @@ fn parse_single_quote_string_test() {
 
 }
 
+// TODO: replace generate_list_parser macro
+macro_rules! generate_list_parser_foo {
+    ($root_name: ident; $rest_name: ident; $state_name: ident; $delim_name: ident; $inner_parser: ident) => {
+
+        enum $state_name {
+            Initial,
+            WellFormed($root_name),
+            // state after the delimiter; but before item is consumed
+            PostDelim($root_name, $delim_name),
+        }
+
+        impl Default for $state_name {
+            fn default() -> Self {
+                $state_name::Initial
+            }
+        }
+
+        impl $state_name {
+
+            // TODO: document this
+            fn unwrap(self) -> $root_name {
+                match self {
+                    $state_name::WellFormed(expr) => expr,
+                    _ => panic!("incorrect state"),
+                }
+            }
+
+            fn add_delim(&mut self, operator_delim: $delim_name) {
+
+                let prev_state = mem::replace(self, $state_name::Initial);
+
+                let next_state = match prev_state {
+                    $state_name::Initial => {
+                        panic!("incorrect state");
+                    }
+                    $state_name::WellFormed(expr) => {
+                        $state_name::PostDelim(expr, operator_delim)
+                    }
+                    $state_name::PostDelim(_, _) => {
+                        panic!("incorrect state");
+                    }
+                };
+
+                mem::replace(self, next_state);
+            }
+
+            fn add_item(&mut self, rhs_val: $inner_parser) {
+
+                let prev_state = mem::replace(self, $state_name::Initial);
+
+                let next_state = match prev_state {
+                    $state_name::Initial => {
+
+                        let expr = $root_name::new(rhs_val);
+                        $state_name::WellFormed(expr)
+
+                    }
+                    $state_name::WellFormed(_) => {
+                        panic!("incorrect state");
+                    }
+                    $state_name::PostDelim(prev_expr, operator_delim) => {
+
+                        let next_expr = prev_expr.add_item(operator_delim, rhs_val);
+
+                        $state_name::WellFormed(next_expr)
+                    }
+                };
+
+                mem::replace(self, next_state);
+            }
+        }
+
+    }
+}
+
 // Helper macro to generate the following:
 //
 // $root_name := $inner_parser $rest_name*
@@ -2903,6 +2978,9 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-relational-operators
 
+// TODO: refactor
+struct RelationalExpression;
+
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-RelationalExpression
 
@@ -2911,15 +2989,47 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 // http://www.ecma-international.org/ecma-262/7.0/#sec-equality-operators
 
 // TODO: fix this
-struct EqualityExpression;
-// struct EqualityExpression(RelationalExpression, Vec<EqualityExpressionRest>);
+// struct EqualityExpression;
+struct EqualityExpression(RelationalExpression, Vec<EqualityExpressionRest>);
 
-enum EqualityExpressionRest {
-    Equality(Vec<CommonDelim>, /* == */ Vec<CommonDelim>, RelationalExpression),
-    Inequality(Vec<CommonDelim>, /* != */ Vec<CommonDelim>, RelationalExpression),
-    StrictEquality(Vec<CommonDelim>, /* === */ Vec<CommonDelim>, RelationalExpression),
-    StrictInequality(Vec<CommonDelim>, /* !== */ Vec<CommonDelim>, RelationalExpression),
+impl EqualityExpression {
+    fn new(rhs_val: RelationalExpression) -> Self {
+        EqualityExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: EqualityExpressionDelim, rhs_val: RelationalExpression) -> Self {
+
+        let EqualityExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let EqualityExpressionDelim(delim_1, operator, delim_2) = operator_delim;
+
+        let rhs = EqualityExpressionRest(delim_1, operator, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        EqualityExpression(head, rest)
+    }
 }
+
+struct EqualityExpressionRest(Vec<CommonDelim>, EqualityExpressionOperator, Vec<CommonDelim>, RelationalExpression);
+
+enum EqualityExpressionOperator {
+    Equality,
+    Inequality,
+    StrictEquality,
+    StrictInequality,
+}
+
+struct EqualityExpressionDelim(Vec<CommonDelim>, EqualityExpressionOperator, Vec<CommonDelim>);
+
+generate_list_parser_foo!(
+    EqualityExpression;
+    EqualityExpressionRest;
+    EqualityExpressionState;
+    EqualityExpressionDelim;
+    RelationalExpression);
+
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-EqualityExpression
@@ -2935,7 +3045,7 @@ fn equality_expression<I: U8Input>(i: ESInput<I>,
 
     parse!{i;
 
-        ret EqualityExpression
+        ret EqualityExpression(RelationalExpression, vec![])
     }
 }
 
