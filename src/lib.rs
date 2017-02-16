@@ -2880,15 +2880,81 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
+// == 12.9 Bitwise Shift Operators ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-bitwise-shift-operators
+
+struct ShiftExpression;
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ShiftExpression
+fn shift_expression<I: U8Input>(i: ESInput<I>,
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, ShiftExpression> {
+
+    // validation
+    if !(params.is_empty() ||
+         params.contains(&Parameter::Yield)) {
+        panic!("misuse of shift_expression");
+    }
+
+    i.ret(ShiftExpression)
+}
+
 // == 12.10 Relational Operators ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-relational-operators
 
-// TODO: refactor
-struct RelationalExpression;
+struct RelationalExpression(ShiftExpression, Vec<RelationalExpressionRest>);
+
+impl RelationalExpression {
+    fn new(rhs_val: ShiftExpression) -> Self {
+        RelationalExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: RelationalExpressionDelim,
+                rhs_val: ShiftExpression)
+                -> Self {
+
+        let RelationalExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let RelationalExpressionDelim(delim_1, operator, delim_2) = operator_delim;
+
+        let rhs = RelationalExpressionRest(delim_1, operator, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        RelationalExpression(head, rest)
+    }
+}
+
+struct RelationalExpressionRest(Vec<CommonDelim>,
+                              RelationalExpressionOperator,
+                              Vec<CommonDelim>,
+                              ShiftExpression);
+
+enum RelationalExpressionOperator {
+    Less,
+    Greater,
+    LessOrEqual,
+    GreaterOrEqual,
+    InstanceOf,
+    In
+}
+
+struct RelationalExpressionDelim(Vec<CommonDelim>, RelationalExpressionOperator, Vec<CommonDelim>);
+
+generate_list_parser!(
+    RelationalExpression;
+    RelationalExpressionRest;
+    RelationalExpressionState;
+    RelationalExpressionDelim;
+    ShiftExpression);
 
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-RelationalExpression
+// http://www.ecma-international.org/ecma-262/7.0/#prod-RelationalExpression
 fn relational_expression<I: U8Input>(i: ESInput<I>,
                                    params: &EnumSet<Parameter>)
                                    -> ESParseResult<I, RelationalExpression> {
@@ -2899,7 +2965,74 @@ fn relational_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of relational_expression");
     }
 
-    i.ret(RelationalExpression)
+    let has_in = params.contains(&Parameter::In);
+
+    let shift_params = {
+        let mut params = EnumSet::new();
+        if params.contains(&Parameter::Yield) {
+            params.insert(Parameter::Yield);
+        }
+        params
+    };
+
+    type Accumulator = Rc<RefCell<RelationalExpressionState>>;
+
+    #[inline]
+    fn relational_operator<I: U8Input>(i: ESInput<I>, has_in: bool) -> ESParseResult<I, RelationalExpressionOperator> {
+        parse!{i;
+
+            let operator = (i -> string(i, b"<=").map(|_| RelationalExpressionOperator::LessOrEqual)) <|>
+                (i -> string(i, b">=").map(|_| RelationalExpressionOperator::GreaterOrEqual)) <|>
+                (i -> string(i, b"instanceof").map(|_| RelationalExpressionOperator::GreaterOrEqual)) <|>
+                (i -> {
+                    if has_in {
+                        string(i, b"in").map(|_| RelationalExpressionOperator::GreaterOrEqual)
+                    } else {
+                        i.err(ChompError::new())
+                    }
+                }) <|>
+                (i -> string(i, b">").map(|_| RelationalExpressionOperator::Greater)) <|>
+                (i -> string(i, b"<").map(|_| RelationalExpressionOperator::Less));
+
+            ret operator
+        }
+    };
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator, has_in: bool) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            let relational_operator = on_error(
+                |i| relational_operator(i, has_in),
+                |i| {
+                    let loc = i.position();
+                    ErrorLocation::new(loc, "Expected one of these operators: <, >, <=, >=, instanceof, or in.".to_string())
+                }
+            );
+            let delim_2 = common_delim();
+            ret {
+                let delim = RelationalExpressionDelim(delim_1, relational_operator, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = shift_expression(&shift_params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, |i, acc| delimiter(i, acc, has_in), reducer).map(|x| x.unwrap())
 }
 
 // == 12.11 Equality Operators ==
@@ -2951,7 +3084,6 @@ generate_list_parser!(
     EqualityExpressionState;
     EqualityExpressionDelim;
     RelationalExpression);
-
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-EqualityExpression
