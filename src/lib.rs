@@ -59,7 +59,7 @@ struct ErrorChain {
 }
 
 impl ErrorChain {
-    fn new<T: ::std::error::Error + 'static>(err_to_wrap: T) -> Self
+    fn new<T>(err_to_wrap: T) -> Self
         where ErrorChain: std::convert::From<T>
     {
 
@@ -71,7 +71,7 @@ impl ErrorChain {
         }
     }
 
-    fn chain_err<T: ::std::error::Error + 'static>(self, error_to_chain: T) -> Self
+    fn chain_err<T>(self, error_to_chain: T) -> Self
         where ErrorChain: std::convert::From<T>
     {
 
@@ -773,6 +773,7 @@ fn parse_utf8_char_test() {
     }
 }
 
+// TODO: this is probably not necessary at all since source text is interpeted as u8; refactor this out
 #[inline]
 fn string_not_utf8<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I, I::Buffer> {
 
