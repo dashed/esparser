@@ -2889,6 +2889,18 @@ struct RelationalExpression;
 
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-RelationalExpression
+fn relational_expression<I: U8Input>(i: ESInput<I>,
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, RelationalExpression> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::In) ||
+         params.contains(&Parameter::Yield)) {
+        panic!("misuse of relational_expression");
+    }
+
+    i.ret(RelationalExpression)
+}
 
 // == 12.11 Equality Operators ==
 //
@@ -2953,10 +2965,56 @@ fn equality_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of equality_expression");
     }
 
-    parse!{i;
+    type Accumulator = Rc<RefCell<EqualityExpressionState>>;
 
-        ret EqualityExpression(RelationalExpression, vec![])
+    #[inline]
+    fn equality_operator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EqualityExpressionOperator> {
+        parse!{i;
+
+            let operator = (i -> string(i, b"===").map(|_| EqualityExpressionOperator::StrictEquality)) <|>
+            (i -> string(i, b"==").map(|_| EqualityExpressionOperator::Equality)) <|>
+            (i -> string(i, b"!==").map(|_| EqualityExpressionOperator::StrictInequality)) <|>
+            (i -> string(i, b"!=").map(|_| EqualityExpressionOperator::Inequality));
+
+            ret operator
+        }
     }
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            let equality_operator = on_error(
+                equality_operator,
+                |i| {
+                    let loc = i.position();
+                    ErrorLocation::new(loc, "Expected one of these operators: ==, ===, !==, or !=.".to_string())
+                }
+            );
+            let delim_2 = common_delim();
+            ret {
+                let delim = EqualityExpressionDelim(delim_1, equality_operator, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = relational_expression(params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 // == 12.12 Binary Bitwise Operators ==
