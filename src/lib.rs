@@ -46,6 +46,7 @@ Bookmark:
 
 
 
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -2914,7 +2915,16 @@ fn update_expression<I: U8Input>(i: ESInput<I>,
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-unary-operators
 
-struct UnaryExpression;
+enum UnaryExpression {
+    UpdateExpression(UpdateExpression),
+    Delete(Vec<CommonDelim>, Box<UnaryExpression>),
+    Void(Vec<CommonDelim>, Box<UnaryExpression>),
+    TypeOf(Vec<CommonDelim>, Box<UnaryExpression>),
+    Plus(Vec<CommonDelim>, Box<UnaryExpression>),
+    Minus(Vec<CommonDelim>, Box<UnaryExpression>),
+    Tilde(Vec<CommonDelim>, Box<UnaryExpression>),
+    ExclamationMark(Vec<CommonDelim>, Box<UnaryExpression>),
+}
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnaryExpression
@@ -2927,7 +2937,46 @@ fn unary_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of unary_expression");
     }
 
-    i.ret(UnaryExpression)
+    enum UnaryExpressionOperator {
+        Delete, // delete
+        Void, // void
+        TypeOf, // typeof
+        Plus, // +
+        Minus, // -
+        Tilde, // ~
+        ExclamationMark, // !
+    }
+
+    or(i,
+       |i| {
+        parse!{i;
+
+                let operator = (i -> string(i, b"delete").map(|_| UnaryExpressionOperator::Delete)) <|>
+                    (i -> string(i, b"void").map(|_| UnaryExpressionOperator::Void)) <|>
+                    (i -> string(i, b"typeof").map(|_| UnaryExpressionOperator::TypeOf)) <|>
+                    (i -> string(i, b"+").map(|_| UnaryExpressionOperator::Plus)) <|>
+                    (i -> string(i, b"-").map(|_| UnaryExpressionOperator::Minus)) <|>
+                    (i -> string(i, b"~").map(|_| UnaryExpressionOperator::Tilde)) <|>
+                    (i -> string(i, b"!").map(|_| UnaryExpressionOperator::ExclamationMark));
+
+                let delim = common_delim();
+
+                let unary_expr = unary_expression(&params);
+
+                ret {
+                    match operator {
+                        UnaryExpressionOperator::Delete => UnaryExpression::Delete(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::Void => UnaryExpression::Void(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::TypeOf => UnaryExpression::TypeOf(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::Plus => UnaryExpression::Plus(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::Minus => UnaryExpression::Minus(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::Tilde => UnaryExpression::Tilde(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::ExclamationMark => UnaryExpression::ExclamationMark(delim, Box::new(unary_expr)),
+                    }
+                }
+            }
+    },
+       |i| update_expression(i, &params).map(|x| UnaryExpression::UpdateExpression(x)))
 }
 
 // == 12.6 Exponentiation Operator ==
