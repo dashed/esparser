@@ -2914,10 +2914,10 @@ fn left_hand_side_expression<I: U8Input>(i: ESInput<I>,
 
 enum UpdateExpression {
     LeftHandSideExpression(LeftHandSideExpression),
-    PostIncrement(LeftHandSideExpression, Vec<CommonDelim>),
-    PostDecrement(LeftHandSideExpression, Vec<CommonDelim>),
-    PreIncrement(Vec<CommonDelim>, UnaryExpression),
-    PreDecrement(Vec<CommonDelim>, UnaryExpression),
+    PostIncrement(LeftHandSideExpression, /* ++ */ Vec<CommonDelim>),
+    PostDecrement(LeftHandSideExpression, /* -- */ Vec<CommonDelim>),
+    PreIncrement(Vec<CommonDelim>, /* ++ */ UnaryExpression),
+    PreDecrement(Vec<CommonDelim>, /* -- */ UnaryExpression),
 }
 
 // TODO: test
@@ -2967,6 +2967,7 @@ fn update_expression<I: U8Input>(i: ESInput<I>,
                 let lhs_expr = left_hand_side_expression(&params);
 
                 let operator = (i -> {
+                    // TODO: test this case
                     common_delim_no_line_term(i)
                         .bind(|i, delim| {
                             string(i, b"++")
@@ -2974,6 +2975,7 @@ fn update_expression<I: U8Input>(i: ESInput<I>,
                         })
                 }) <|>
                 (i -> {
+                    // TODO: test this case
                     common_delim_no_line_term(i)
                         .bind(|i, delim| {
                             string(i, b"--")
