@@ -2891,8 +2891,21 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-left-hand-side-expressions
 
+struct MemberExpression;
+
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-MemberExpression
+// http://www.ecma-international.org/ecma-262/7.0/#prod-MemberExpression
+fn member_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, MemberExpression> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of member_expression");
+    }
+
+    // TODO: complete
+
+    i.ret(MemberExpression)
+}
 
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-SuperProperty
@@ -2932,8 +2945,38 @@ fn new_target<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NewTarget> {
     }
 }
 
+enum NewExpression {
+    MemberExpression(MemberExpression),
+    NewExpression(/* new */ Vec<CommonDelim>, Box<NewExpression>)
+}
+
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-NewExpression
+// http://www.ecma-international.org/ecma-262/7.0/#prod-NewExpression
+fn new_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, NewExpression> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of new_expression");
+    }
+
+    or(i,
+        |i| {
+            parse!{i;
+                (i -> string(i, b"new"));
+
+                let delim = common_delim();
+
+                let new_expr = new_expression(&params);
+
+                ret {
+                    NewExpression::NewExpression(delim, Box::new(new_expr))
+                }
+            }
+        },
+        |i| {
+            member_expression(i, &params).map(|x| NewExpression::MemberExpression(x))
+        })
+}
 
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-CallExpression
