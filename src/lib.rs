@@ -2896,13 +2896,19 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-SuperProperty
 
+struct MetaProperty(NewTarget);
+
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-MetaProperty
+// http://www.ecma-international.org/ecma-262/7.0/#prod-MetaProperty
+fn meta_property<I: U8Input>(i: ESInput<I>)
+                                 -> ESParseResult<I, MetaProperty> {
+    new_target(i).map(|x| MetaProperty(x))
+}
 
 struct NewTarget(/* new */ Vec<CommonDelim>, /* . (dot) */ Vec<CommonDelim> /* target */);
 
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-NewTarget
+// http://www.ecma-international.org/ecma-262/7.0/#prod-NewTarget
 fn new_target<I: U8Input>(i: ESInput<I>)
                                  -> ESParseResult<I, NewTarget> {
     parse!{i;
