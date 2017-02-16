@@ -3053,7 +3053,41 @@ fn equality_expression<I: U8Input>(i: ESInput<I>,
 // BitwiseANDExpression := EqualityExpression BitwiseANDExpressionRest*
 // BitwiseANDExpressionRest := Delim ^ Delim EqualityExpression
 
-generate_list_parser!(BitwiseANDExpression; BitwiseANDExpressionRest; BitwiseANDExpressionState; EqualityExpression);
+struct BitwiseANDExpression(EqualityExpression, Vec<BitwiseANDExpressionRest>);
+
+impl BitwiseANDExpression {
+    fn new(rhs_val: EqualityExpression) -> Self {
+        BitwiseANDExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: BitwiseANDExpressionDelim,
+                rhs_val: EqualityExpression)
+                -> Self {
+
+        let BitwiseANDExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let BitwiseANDExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = BitwiseANDExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        BitwiseANDExpression(head, rest)
+    }
+}
+
+struct BitwiseANDExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, EqualityExpression);
+
+struct BitwiseANDExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
+
+generate_list_parser_foo!(
+    BitwiseANDExpression;
+    BitwiseANDExpressionRest;
+    BitwiseANDExpressionState;
+    BitwiseANDExpressionDelim;
+    EqualityExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseANDExpression
@@ -3082,7 +3116,10 @@ fn bitwise_and_expression<I: U8Input>(i: ESInput<I>,
             );
             let delim_2 = common_delim();
             ret {
-                accumulator.borrow_mut().add_delim(delim_1, delim_2);
+
+                let delim = BitwiseANDExpressionDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
                 ()
             }
         }
@@ -3106,7 +3143,41 @@ fn bitwise_and_expression<I: U8Input>(i: ESInput<I>,
 // BitwiseXORExpression := BitwiseANDExpression BitwiseXORExpressionRest*
 // BitwiseXORExpressionRest := Delim ^ Delim BitwiseANDExpression
 
-generate_list_parser!(BitwiseXORExpression; BitwiseXORExpressionRest; BitwiseXORExpressionState; BitwiseANDExpression);
+struct BitwiseXORExpression(BitwiseANDExpression, Vec<BitwiseXORExpressionRest>);
+
+impl BitwiseXORExpression {
+    fn new(rhs_val: BitwiseANDExpression) -> Self {
+        BitwiseXORExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: BitwiseXORExpressionDelim,
+                rhs_val: BitwiseANDExpression)
+                -> Self {
+
+        let BitwiseXORExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let BitwiseXORExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = BitwiseXORExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        BitwiseXORExpression(head, rest)
+    }
+}
+
+struct BitwiseXORExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, BitwiseANDExpression);
+
+struct BitwiseXORExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
+
+generate_list_parser_foo!(
+    BitwiseXORExpression;
+    BitwiseXORExpressionRest;
+    BitwiseXORExpressionState;
+    BitwiseXORExpressionDelim;
+    BitwiseANDExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseXORExpression
@@ -3125,6 +3196,7 @@ fn bitwise_xor_expression<I: U8Input>(i: ESInput<I>,
     #[inline]
     fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
         parse!{i;
+
             let delim_1 = common_delim();
             let _or = on_error(
                 |i| string(i, b"^"),
@@ -3134,8 +3206,10 @@ fn bitwise_xor_expression<I: U8Input>(i: ESInput<I>,
                 }
             );
             let delim_2 = common_delim();
+
             ret {
-                accumulator.borrow_mut().add_delim(delim_1, delim_2);
+                let delim = BitwiseXORExpressionDelim(delim_1, delim_2);
+                accumulator.borrow_mut().add_delim(delim);
                 ()
             }
         }
@@ -3159,7 +3233,41 @@ fn bitwise_xor_expression<I: U8Input>(i: ESInput<I>,
 // BitwiseORExpression := BitwiseXORExpression BitwiseORExpressionRest*
 // BitwiseORExpressionRest := Delim | Delim BitwiseXORExpression
 
-generate_list_parser!(BitwiseORExpression; BitwiseORExpressionRest; BitwiseORExpressionState; BitwiseXORExpression);
+struct BitwiseORExpression(BitwiseXORExpression, Vec<BitwiseORExpressionRest>);
+
+impl BitwiseORExpression {
+    fn new(rhs_val: BitwiseXORExpression) -> Self {
+        BitwiseORExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: BitwiseORExpressionDelim,
+                rhs_val: BitwiseXORExpression)
+                -> Self {
+
+        let BitwiseORExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let BitwiseORExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = BitwiseORExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        BitwiseORExpression(head, rest)
+    }
+}
+
+struct BitwiseORExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, BitwiseXORExpression);
+
+struct BitwiseORExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
+
+generate_list_parser_foo!(
+    BitwiseORExpression;
+    BitwiseORExpressionRest;
+    BitwiseORExpressionState;
+    BitwiseORExpressionDelim;
+    BitwiseXORExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BitwiseORExpression
@@ -3188,7 +3296,9 @@ fn bitwise_or_expression<I: U8Input>(i: ESInput<I>,
             );
             let delim_2 = common_delim();
             ret {
-                accumulator.borrow_mut().add_delim(delim_1, delim_2);
+                let delim = BitwiseORExpressionDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
                 ()
             }
         }
@@ -3215,7 +3325,41 @@ fn bitwise_or_expression<I: U8Input>(i: ESInput<I>,
 // LogicalAndExpression := BitwiseORExpression LogicalAndExpressionRest*
 // LogicalAndExpressionRest := Delim && Delim BitwiseORExpression
 
-generate_list_parser!(LogicalAndExpression; LogicalAndExpressionRest; LogicalAndExpressionState; BitwiseORExpression);
+struct LogicalAndExpression(BitwiseORExpression, Vec<LogicalAndExpressionRest>);
+
+impl LogicalAndExpression {
+    fn new(rhs_val: BitwiseORExpression) -> Self {
+        LogicalAndExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: LogicalAndExpressionDelim,
+                rhs_val: BitwiseORExpression)
+                -> Self {
+
+        let LogicalAndExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let LogicalAndExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = LogicalAndExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        LogicalAndExpression(head, rest)
+    }
+}
+
+struct LogicalAndExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, BitwiseORExpression);
+
+struct LogicalAndExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
+
+generate_list_parser_foo!(
+    LogicalAndExpression;
+    LogicalAndExpressionRest;
+    LogicalAndExpressionState;
+    LogicalAndExpressionDelim;
+    BitwiseORExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalANDExpression
@@ -3244,7 +3388,8 @@ fn logical_and_expression<I: U8Input>(i: ESInput<I>,
             );
             let delim_2 = common_delim();
             ret {
-                accumulator.borrow_mut().add_delim(delim_1, delim_2);
+                let delim = LogicalAndExpressionDelim(delim_1, delim_2);
+                accumulator.borrow_mut().add_delim(delim);
                 ()
             }
         }
