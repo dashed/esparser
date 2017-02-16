@@ -2890,8 +2890,60 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-left-hand-side-expressions
 
-// TODO: complete
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-MemberExpression
 
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-SuperProperty
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-MetaProperty
+
+struct NewTarget(/* new */ Vec<CommonDelim>, /* . (dot) */ Vec<CommonDelim> /* target */);
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-NewTarget
+fn new_target<I: U8Input>(i: ESInput<I>)
+                                 -> ESParseResult<I, NewTarget> {
+    parse!{i;
+
+        (i -> string(i, b"new"));
+
+        let delim_1 = common_delim();
+
+        (i -> string(i, b"."));
+
+        let delim_2 = common_delim();
+
+        (i -> string(i, b"target"));
+
+
+        ret {
+            NewTarget(delim_1, delim_2)
+        }
+    }
+}
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-NewExpression
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-CallExpression
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-SuperCall
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-Arguments
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-ArgumentList
+
+// enum LeftHandSideExpression {
+//     NewExpression,
+//     CallExpression
+// }
+// TODO: todo-note
 struct LeftHandSideExpression;
 
 // TODO: test
