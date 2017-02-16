@@ -45,6 +45,7 @@ Bookmark:
  */
 
 
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -2898,12 +2899,11 @@ struct UpdateExpression;
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UpdateExpression
 fn update_expression<I: U8Input>(i: ESInput<I>,
-                                   params: &EnumSet<Parameter>)
-                                   -> ESParseResult<I, UpdateExpression> {
+                                 params: &EnumSet<Parameter>)
+                                 -> ESParseResult<I, UpdateExpression> {
 
     // validation
-    if !(params.is_empty() ||
-         params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of update_expression");
     }
 
@@ -2919,12 +2919,11 @@ struct UnaryExpression;
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnaryExpression
 fn unary_expression<I: U8Input>(i: ESInput<I>,
-                                   params: &EnumSet<Parameter>)
-                                   -> ESParseResult<I, UnaryExpression> {
+                                params: &EnumSet<Parameter>)
+                                -> ESParseResult<I, UnaryExpression> {
 
     // validation
-    if !(params.is_empty() ||
-         params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of unary_expression");
     }
 
@@ -2937,25 +2936,27 @@ fn unary_expression<I: U8Input>(i: ESInput<I>,
 
 enum ExponentiationExpression {
     UnaryExpression(UnaryExpression),
-    UpdateExpression(UpdateExpression, Vec<CommonDelim>, Vec<CommonDelim>, Box<ExponentiationExpression>)
+    UpdateExpression(UpdateExpression,
+                     Vec<CommonDelim>,
+                     Vec<CommonDelim>,
+                     Box<ExponentiationExpression>),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ExponentiationExpression
 fn exponentiation_expression<I: U8Input>(i: ESInput<I>,
-                                   params: &EnumSet<Parameter>)
-                                   -> ESParseResult<I, ExponentiationExpression> {
+                                         params: &EnumSet<Parameter>)
+                                         -> ESParseResult<I, ExponentiationExpression> {
 
     // validation
-    if !(params.is_empty() ||
-         params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of exponentiation_expression");
     }
 
     or(i,
-        |i| unary_expression(i, &params).map(|x| ExponentiationExpression::UnaryExpression(x)),
-        |i| {
-            parse!{i;
+       |i| unary_expression(i, &params).map(|x| ExponentiationExpression::UnaryExpression(x)),
+       |i| {
+        parse!{i;
 
                 let update_expr = update_expression(&params);
 
@@ -2969,8 +2970,7 @@ fn exponentiation_expression<I: U8Input>(i: ESInput<I>,
                     ExponentiationExpression::UpdateExpression(update_expr, delim_1, delim_2, Box::new(exp_expr))
                 }
             }
-        }
-    )
+    })
 }
 
 // == 12.7 Multiplicative Operators ==
@@ -3003,20 +3003,21 @@ impl MultiplicativeExpression {
 }
 
 struct MultiplicativeExpressionRest(Vec<CommonDelim>,
-                              MultiplicativeExpressionOperator,
-                              Vec<CommonDelim>,
-                              ExponentiationExpression);
+                                    MultiplicativeExpressionOperator,
+                                    Vec<CommonDelim>,
+                                    ExponentiationExpression);
 
 enum MultiplicativeExpressionOperator {
-    Multiplication,     // *
-    Division,           // /
-    Remainder           // %
+    Multiplication, // *
+    Division, // /
+    Remainder, // %
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-MultiplicativeOperator
 #[inline]
-fn multiplicative_operator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, MultiplicativeExpressionOperator> {
+fn multiplicative_operator<I: U8Input>(i: ESInput<I>)
+                                       -> ESParseResult<I, MultiplicativeExpressionOperator> {
     parse!{i;
 
         let operator = (i -> string(i, b"*").map(|_| MultiplicativeExpressionOperator::Multiplication)) <|>
@@ -3027,7 +3028,9 @@ fn multiplicative_operator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Multip
     }
 }
 
-struct MultiplicativeExpressionDelim(Vec<CommonDelim>, MultiplicativeExpressionOperator, Vec<CommonDelim>);
+struct MultiplicativeExpressionDelim(Vec<CommonDelim>,
+                                     MultiplicativeExpressionOperator,
+                                     Vec<CommonDelim>);
 
 generate_list_parser!(
     MultiplicativeExpression;
@@ -3039,12 +3042,11 @@ generate_list_parser!(
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-MultiplicativeExpression
 fn multiplicative_expression<I: U8Input>(i: ESInput<I>,
-                                   params: &EnumSet<Parameter>)
-                                   -> ESParseResult<I, MultiplicativeExpression> {
+                                         params: &EnumSet<Parameter>)
+                                         -> ESParseResult<I, MultiplicativeExpression> {
 
     // validation
-    if !(params.is_empty() ||
-         params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of multiplicative_expression");
     }
 
@@ -3123,7 +3125,7 @@ struct AdditiveExpressionRest(Vec<CommonDelim>,
 
 enum AdditiveExpressionOperator {
     Add,
-    Subtract
+    Subtract,
 }
 
 struct AdditiveExpressionDelim(Vec<CommonDelim>, AdditiveExpressionOperator, Vec<CommonDelim>);
@@ -3142,15 +3144,15 @@ fn additive_expression<I: U8Input>(i: ESInput<I>,
                                    -> ESParseResult<I, AdditiveExpression> {
 
     // validation
-    if !(params.is_empty() ||
-         params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of additive_expression");
     }
 
     type Accumulator = Rc<RefCell<AdditiveExpressionState>>;
 
     #[inline]
-    fn additive_operator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, AdditiveExpressionOperator> {
+    fn additive_operator<I: U8Input>(i: ESInput<I>)
+                                     -> ESParseResult<I, AdditiveExpressionOperator> {
         parse!{i;
 
             let operator = (i -> string(i, b"+").map(|_| AdditiveExpressionOperator::Add)) <|>
@@ -3208,10 +3210,7 @@ impl ShiftExpression {
         ShiftExpression(rhs_val, vec![])
     }
 
-    fn add_item(self,
-                operator_delim: ShiftExpressionDelim,
-                rhs_val: AdditiveExpression)
-                -> Self {
+    fn add_item(self, operator_delim: ShiftExpressionDelim, rhs_val: AdditiveExpression) -> Self {
 
         let ShiftExpression(head, rest) = self;
         let mut rest = rest;
@@ -3227,15 +3226,15 @@ impl ShiftExpression {
 }
 
 struct ShiftExpressionRest(Vec<CommonDelim>,
-                              ShiftExpressionOperator,
-                              Vec<CommonDelim>,
-                              AdditiveExpression);
+                           ShiftExpressionOperator,
+                           Vec<CommonDelim>,
+                           AdditiveExpression);
 
 enum ShiftExpressionOperator {
     // TODO: better semantic names
-    Left,        // <<
-    SignRight,   // >>
-    Right        // >>>
+    Left, // <<
+    SignRight, // >>
+    Right, // >>>
 }
 
 struct ShiftExpressionDelim(Vec<CommonDelim>, ShiftExpressionOperator, Vec<CommonDelim>);
@@ -3250,12 +3249,11 @@ generate_list_parser!(
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ShiftExpression
 fn shift_expression<I: U8Input>(i: ESInput<I>,
-                                   params: &EnumSet<Parameter>)
-                                   -> ESParseResult<I, ShiftExpression> {
+                                params: &EnumSet<Parameter>)
+                                -> ESParseResult<I, ShiftExpression> {
 
     // validation
-    if !(params.is_empty() ||
-         params.contains(&Parameter::Yield)) {
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
         panic!("misuse of shift_expression");
     }
 
@@ -3321,10 +3319,7 @@ impl RelationalExpression {
         RelationalExpression(rhs_val, vec![])
     }
 
-    fn add_item(self,
-                operator_delim: RelationalExpressionDelim,
-                rhs_val: ShiftExpression)
-                -> Self {
+    fn add_item(self, operator_delim: RelationalExpressionDelim, rhs_val: ShiftExpression) -> Self {
 
         let RelationalExpression(head, rest) = self;
         let mut rest = rest;
@@ -3340,9 +3335,9 @@ impl RelationalExpression {
 }
 
 struct RelationalExpressionRest(Vec<CommonDelim>,
-                              RelationalExpressionOperator,
-                              Vec<CommonDelim>,
-                              ShiftExpression);
+                                RelationalExpressionOperator,
+                                Vec<CommonDelim>,
+                                ShiftExpression);
 
 enum RelationalExpressionOperator {
     Less,
@@ -3350,7 +3345,7 @@ enum RelationalExpressionOperator {
     LessOrEqual,
     GreaterOrEqual,
     InstanceOf,
-    In
+    In,
 }
 
 struct RelationalExpressionDelim(Vec<CommonDelim>, RelationalExpressionOperator, Vec<CommonDelim>);
@@ -3365,8 +3360,8 @@ generate_list_parser!(
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-RelationalExpression
 fn relational_expression<I: U8Input>(i: ESInput<I>,
-                                   params: &EnumSet<Parameter>)
-                                   -> ESParseResult<I, RelationalExpression> {
+                                     params: &EnumSet<Parameter>)
+                                     -> ESParseResult<I, RelationalExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::In) ||
@@ -3387,7 +3382,9 @@ fn relational_expression<I: U8Input>(i: ESInput<I>,
     type Accumulator = Rc<RefCell<RelationalExpressionState>>;
 
     #[inline]
-    fn relational_operator<I: U8Input>(i: ESInput<I>, has_in: bool) -> ESParseResult<I, RelationalExpressionOperator> {
+    fn relational_operator<I: U8Input>(i: ESInput<I>,
+                                       has_in: bool)
+                                       -> ESParseResult<I, RelationalExpressionOperator> {
         parse!{i;
 
             let operator = (i -> string(i, b"<=").map(|_| RelationalExpressionOperator::LessOrEqual)) <|>
@@ -3408,7 +3405,10 @@ fn relational_expression<I: U8Input>(i: ESInput<I>,
     };
 
     #[inline]
-    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator, has_in: bool) -> ESParseResult<I, ()> {
+    fn delimiter<I: U8Input>(i: ESInput<I>,
+                             accumulator: Accumulator,
+                             has_in: bool)
+                             -> ESParseResult<I, ()> {
         parse!{i;
 
             let delim_1 = common_delim();
@@ -3509,7 +3509,8 @@ fn equality_expression<I: U8Input>(i: ESInput<I>,
     type Accumulator = Rc<RefCell<EqualityExpressionState>>;
 
     #[inline]
-    fn equality_operator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EqualityExpressionOperator> {
+    fn equality_operator<I: U8Input>(i: ESInput<I>)
+                                     -> ESParseResult<I, EqualityExpressionOperator> {
         parse!{i;
 
             let operator = (i -> string(i, b"===").map(|_| EqualityExpressionOperator::StrictEquality)) <|>
