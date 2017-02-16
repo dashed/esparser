@@ -2880,11 +2880,76 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
+// == 12.8 Additive Operators ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-additive-operators
+
+struct AdditiveExpression;
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-AdditiveExpression
+fn additive_expression<I: U8Input>(i: ESInput<I>,
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, AdditiveExpression> {
+
+    // validation
+    if !(params.is_empty() ||
+         params.contains(&Parameter::Yield)) {
+        panic!("misuse of additive_expression");
+    }
+
+    i.ret(AdditiveExpression)
+}
+
 // == 12.9 Bitwise Shift Operators ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-bitwise-shift-operators
 
-struct ShiftExpression;
+struct ShiftExpression(AdditiveExpression, Vec<ShiftExpressionRest>);
+
+impl ShiftExpression {
+    fn new(rhs_val: AdditiveExpression) -> Self {
+        ShiftExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: ShiftExpressionDelim,
+                rhs_val: AdditiveExpression)
+                -> Self {
+
+        let ShiftExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let ShiftExpressionDelim(delim_1, operator, delim_2) = operator_delim;
+
+        let rhs = ShiftExpressionRest(delim_1, operator, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        ShiftExpression(head, rest)
+    }
+}
+
+struct ShiftExpressionRest(Vec<CommonDelim>,
+                              ShiftExpressionOperator,
+                              Vec<CommonDelim>,
+                              AdditiveExpression);
+
+enum ShiftExpressionOperator {
+    // TODO: better semantic names
+    Left,        // <<
+    SignRight,   // >>
+    Right        // >>>
+}
+
+struct ShiftExpressionDelim(Vec<CommonDelim>, ShiftExpressionOperator, Vec<CommonDelim>);
+
+generate_list_parser!(
+    ShiftExpression;
+    ShiftExpressionRest;
+    ShiftExpressionState;
+    ShiftExpressionDelim;
+    AdditiveExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ShiftExpression
@@ -2898,7 +2963,55 @@ fn shift_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of shift_expression");
     }
 
-    i.ret(ShiftExpression)
+    type Accumulator = Rc<RefCell<ShiftExpressionState>>;
+
+    #[inline]
+    fn bitwise_operator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ShiftExpressionOperator> {
+        parse!{i;
+
+            let operator = (i -> string(i, b"<<").map(|_| ShiftExpressionOperator::Left)) <|>
+                (i -> string(i, b">>>").map(|_| ShiftExpressionOperator::Right)) <|>
+                (i -> string(i, b">>").map(|_| ShiftExpressionOperator::SignRight));
+
+            ret operator
+        }
+    }
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            let bitwise_operator = on_error(
+                bitwise_operator,
+                |i| {
+                    let loc = i.position();
+                    ErrorLocation::new(loc, "Expected one of these operators: <<, >>, or >>>.".to_string())
+                }
+            );
+            let delim_2 = common_delim();
+            ret {
+                let delim = ShiftExpressionDelim(delim_1, bitwise_operator, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = additive_expression(&params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 // == 12.10 Relational Operators ==
