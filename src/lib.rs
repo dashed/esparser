@@ -47,6 +47,7 @@ Bookmark:
 
 
 
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -2900,17 +2901,18 @@ struct MetaProperty(NewTarget);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-MetaProperty
-fn meta_property<I: U8Input>(i: ESInput<I>)
-                                 -> ESParseResult<I, MetaProperty> {
+fn meta_property<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, MetaProperty> {
     new_target(i).map(|x| MetaProperty(x))
 }
 
-struct NewTarget(/* new */ Vec<CommonDelim>, /* . (dot) */ Vec<CommonDelim> /* target */);
+struct NewTarget(/* new */
+                 Vec<CommonDelim>,
+                 /* . (dot) */
+                 Vec<CommonDelim> /* target */);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-NewTarget
-fn new_target<I: U8Input>(i: ESInput<I>)
-                                 -> ESParseResult<I, NewTarget> {
+fn new_target<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NewTarget> {
     parse!{i;
 
         (i -> string(i, b"new"));
@@ -2955,8 +2957,8 @@ struct LeftHandSideExpression;
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LeftHandSideExpression
 fn left_hand_side_expression<I: U8Input>(i: ESInput<I>,
-                                 params: &EnumSet<Parameter>)
-                                 -> ESParseResult<I, LeftHandSideExpression> {
+                                         params: &EnumSet<Parameter>)
+                                         -> ESParseResult<I, LeftHandSideExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -2972,10 +2974,18 @@ fn left_hand_side_expression<I: U8Input>(i: ESInput<I>,
 
 enum UpdateExpression {
     LeftHandSideExpression(LeftHandSideExpression),
-    PostIncrement(LeftHandSideExpression, /* ++ */ Vec<CommonDelim>),
-    PostDecrement(LeftHandSideExpression, /* -- */ Vec<CommonDelim>),
-    PreIncrement(Vec<CommonDelim>, /* ++ */ UnaryExpression),
-    PreDecrement(Vec<CommonDelim>, /* -- */ UnaryExpression),
+    PostIncrement(LeftHandSideExpression,
+                  /* ++ */
+                  Vec<CommonDelim>),
+    PostDecrement(LeftHandSideExpression,
+                  /* -- */
+                  Vec<CommonDelim>),
+    PreIncrement(Vec<CommonDelim>,
+                 /* ++ */
+                 UnaryExpression),
+    PreDecrement(Vec<CommonDelim>,
+                 /* -- */
+                 UnaryExpression),
 }
 
 // TODO: test
@@ -2991,18 +3001,18 @@ fn update_expression<I: U8Input>(i: ESInput<I>,
 
     enum PreOperator {
         PreIncrement,
-        PreDecrement
+        PreDecrement,
     }
 
     enum PostOperator {
         PostIncrement(Vec<CommonDelim>),
         PostDecrement(Vec<CommonDelim>),
-        None
+        None,
     }
 
     or(i,
-        |i| {
-            parse!{i;
+       |i| {
+        parse!{i;
 
                 let operator = (i -> string(i, b"++").map(|_| PreOperator::PreIncrement)) <|>
                     (i -> string(i, b"--").map(|_| PreOperator::PreDecrement));
@@ -3018,9 +3028,9 @@ fn update_expression<I: U8Input>(i: ESInput<I>,
                     }
                 }
             }
-        },
-        |i| {
-            parse!{i;
+    },
+       |i| {
+        parse!{i;
 
                 let lhs_expr = left_hand_side_expression(&params);
 
@@ -3050,7 +3060,7 @@ fn update_expression<I: U8Input>(i: ESInput<I>,
                     }
                 }
             }
-        })
+    })
 }
 
 // == 12.5 Unary Operator ==
