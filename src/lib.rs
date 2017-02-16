@@ -14,7 +14,7 @@ use std::cell::RefCell;
 // == 3rd-party imports ==
 
 use chomp::run_parser;
-use chomp::parsers::{SimpleResult, scan, take_till, string, satisfy, take_while1};
+use chomp::parsers::{SimpleResult, scan, take_till, satisfy, take_while1};
 use chomp::combinators::{option, look_ahead, many_till, many1, many, or, either};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
 use chomp::parse_only;
@@ -415,7 +415,7 @@ fn parse_single_quote_string<I: U8Input>(input: I) -> SimpleResult<I, String> {
         // string contents
         let line: Vec<u8> = parse_list(
             // delimiter
-            |i, _| string(i, br#"\'"#),
+            |i, _| chomp::parsers::string(i, br#"\'"#),
             // reducer
             parse_single_quote_string_reducer
 
@@ -440,7 +440,7 @@ fn parse_single_quote_string_reducer<I: U8Input>(input: I,
         let line: Vec<u8> = many_till(chomp::parsers::any, parse_single_quote_string_look_ahead);
 
         let has_quote = option(
-            |i| look_ahead(i, |i| string(i, br#"\'"#)).map(|_| true),
+            |i| look_ahead(i, |i| chomp::parsers::string(i, br#"\'"#)).map(|_| true),
             false
         );
 
@@ -465,7 +465,7 @@ fn parse_single_quote_string_look_ahead<I: U8Input>(input: I) -> SimpleResult<I,
     parse!{input;
         look_ahead(|i| or(i,
             // stop still single quote escape
-            |i| string(i, br#"\'"#).map(|_| ()),
+            |i| chomp::parsers::string(i, br#"\'"#).map(|_| ()),
             // or single quote
             |i| chomp::parsers::token(i, b'\'').map(|_| ())
         ));
@@ -653,7 +653,15 @@ fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 #[inline]
 fn token<I: U8Input>(i: ESInput<I>, tok: I::Token) -> ESParseResult<I, I::Token> {
     on_error(i, |i| chomp::parsers::token(i, tok), |i| {
-        let reason = format!("Expected {}", tok);
+        let reason = format!("Expected: {}", String::from_utf8_lossy(&[tok]));
+        ErrorLocation::new(i.position(), reason)
+    })
+}
+
+#[inline]
+fn string<I: U8Input>(i: ESInput<I>, str_match: &[u8]) -> ESParseResult<I, I::Buffer> {
+    on_error(i, |i| chomp::parsers::string(i, str_match), |i| {
+        let reason = format!("Expected: {}", String::from_utf8_lossy(str_match));
         ErrorLocation::new(i.position(), reason)
     })
 }
@@ -1457,7 +1465,7 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
                |i| string(i, b"true"),
                // right
                |i| string(i, b"false"))
-            .bind::<_, _, U8Error>(|i, result| {
+            .bind(|i, result| -> ESParseResult<I, Bool> {
                 match result {
                     Either::Left(_left) => {
                         let _left: I::Buffer = _left;
@@ -3389,7 +3397,7 @@ fn relational_expression<I: U8Input>(i: ESInput<I>,
                     if has_in {
                         string(i, b"in").map(|_| RelationalExpressionOperator::GreaterOrEqual)
                     } else {
-                        i.err(ChompError::new())
+                        i.err(ErrorChain::new(""))
                     }
                 }) <|>
                 (i -> string(i, b">").map(|_| RelationalExpressionOperator::Greater)) <|>
