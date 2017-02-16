@@ -550,8 +550,12 @@ fn parse_single_quote_string_test() {
 
 }
 
-// TODO: replace generate_list_parser macro
-macro_rules! generate_list_parser_foo {
+// Helper macro to generate the following:
+//
+// $root_name := $inner_parser $rest_name*
+// $rest_name := Delim <operator> Delim $inner_parser
+//
+macro_rules! generate_list_parser {
     ($root_name: ident; $rest_name: ident; $state_name: ident; $delim_name: ident; $inner_parser: ident) => {
 
         enum $state_name {
@@ -622,97 +626,6 @@ macro_rules! generate_list_parser_foo {
             }
         }
 
-    }
-}
-
-// Helper macro to generate the following:
-//
-// $root_name := $inner_parser $rest_name*
-// $rest_name := Delim <operator> Delim $inner_parser
-//
-macro_rules! generate_list_parser {
-    ($root_name: ident; $rest_name: ident; $state_name: ident; $inner_parser: ident) => {
-
-        struct $root_name($inner_parser, Vec<$rest_name>);
-
-        struct $rest_name(Vec<CommonDelim>,
-                                        /* some operator */
-                                        Vec<CommonDelim>,
-                                        $inner_parser);
-
-        enum $state_name {
-            Initial,
-            WellFormed($root_name),
-            // state after the delimiter; but before item is consumed
-            PostDelim($root_name, Vec<CommonDelim>, Vec<CommonDelim>),
-        }
-
-        impl Default for $state_name {
-            fn default() -> Self {
-                $state_name::Initial
-            }
-        }
-
-        impl $state_name {
-
-            // TODO: document this
-            fn unwrap(self) -> $root_name {
-                match self {
-                    $state_name::WellFormed(expr) => expr,
-                    _ => panic!("incorrect state"),
-                }
-            }
-
-            fn add_delim(&mut self, delim_1: Vec<CommonDelim>, delim_2: Vec<CommonDelim>) {
-
-                let prev_state = mem::replace(self, $state_name::Initial);
-
-                let next_state = match prev_state {
-                    $state_name::Initial => {
-                        panic!("incorrect state");
-                    }
-                    $state_name::WellFormed(expr) => {
-                        $state_name::PostDelim(expr, delim_1, delim_2)
-                    }
-                    $state_name::PostDelim(_, _, _) => {
-                        panic!("incorrect state");
-                    }
-                };
-
-                mem::replace(self, next_state);
-            }
-
-            fn add_item(&mut self, rhs_val: $inner_parser) {
-
-                let prev_state = mem::replace(self, $state_name::Initial);
-
-                let next_state = match prev_state {
-                    $state_name::Initial => {
-
-                        let expr = $root_name(rhs_val, vec![]);
-                        $state_name::WellFormed(expr)
-
-                    }
-                    $state_name::WellFormed(_) => {
-                        panic!("incorrect state");
-                    }
-                    $state_name::PostDelim(expr, delim_1, delim_2) => {
-
-                        let $root_name(head, rest) = expr;
-                        let mut rest = rest;
-
-                        let rhs = $rest_name(delim_1, delim_2, rhs_val);
-                        rest.push(rhs);
-
-                        let next_expr = $root_name(head, rest);
-
-                        $state_name::WellFormed(next_expr)
-                    }
-                };
-
-                mem::replace(self, next_state);
-            }
-        }
     }
 }
 
@@ -3020,7 +2933,7 @@ enum EqualityExpressionOperator {
 
 struct EqualityExpressionDelim(Vec<CommonDelim>, EqualityExpressionOperator, Vec<CommonDelim>);
 
-generate_list_parser_foo!(
+generate_list_parser!(
     EqualityExpression;
     EqualityExpressionRest;
     EqualityExpressionState;
@@ -3082,7 +2995,7 @@ struct BitwiseANDExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, EqualityExpr
 
 struct BitwiseANDExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
 
-generate_list_parser_foo!(
+generate_list_parser!(
     BitwiseANDExpression;
     BitwiseANDExpressionRest;
     BitwiseANDExpressionState;
@@ -3172,7 +3085,7 @@ struct BitwiseXORExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, BitwiseANDEx
 
 struct BitwiseXORExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
 
-generate_list_parser_foo!(
+generate_list_parser!(
     BitwiseXORExpression;
     BitwiseXORExpressionRest;
     BitwiseXORExpressionState;
@@ -3262,7 +3175,7 @@ struct BitwiseORExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, BitwiseXORExp
 
 struct BitwiseORExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
 
-generate_list_parser_foo!(
+generate_list_parser!(
     BitwiseORExpression;
     BitwiseORExpressionRest;
     BitwiseORExpressionState;
@@ -3354,7 +3267,7 @@ struct LogicalAndExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, BitwiseORExp
 
 struct LogicalAndExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
 
-generate_list_parser_foo!(
+generate_list_parser!(
     LogicalAndExpression;
     LogicalAndExpressionRest;
     LogicalAndExpressionState;
@@ -3442,7 +3355,7 @@ struct LogicOrExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, LogicalAndExpre
 
 struct LogicOrExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
 
-generate_list_parser_foo!(
+generate_list_parser!(
     LogicOrExpression;
     LogicOrExpressionRest;
     LogicOrExpressionState;
