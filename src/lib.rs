@@ -2978,8 +2978,23 @@ fn new_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
         })
 }
 
+struct CallExpression;
+
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-CallExpression
+// http://www.ecma-international.org/ecma-262/7.0/#prod-CallExpression
+fn call_expression<I: U8Input>(i: ESInput<I>,
+                                         params: &EnumSet<Parameter>)
+                                         -> ESParseResult<I, CallExpression> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of call_expression");
+    }
+
+    // TODO: complete
+
+    i.ret(CallExpression)
+}
 
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-SuperCall
@@ -2990,12 +3005,10 @@ fn new_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-ArgumentList
 
-// enum LeftHandSideExpression {
-//     NewExpression,
-//     CallExpression
-// }
-// TODO: todo-note
-struct LeftHandSideExpression;
+enum LeftHandSideExpression {
+    NewExpression(NewExpression),
+    CallExpression(CallExpression)
+}
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-LeftHandSideExpression
@@ -3008,7 +3021,9 @@ fn left_hand_side_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of left_hand_side_expression");
     }
 
-    i.ret(LeftHandSideExpression)
+    or(i,
+        |i| new_expression(i, &params).map(|x| LeftHandSideExpression::NewExpression(x)),
+        |i| call_expression(i, &params).map(|x| LeftHandSideExpression::CallExpression(x)))
 }
 
 // == 12.4 Update Expressions ==
