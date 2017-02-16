@@ -2880,11 +2880,56 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
+// == 12.4 Update Expressions ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-left-hand-side-expressions
+
+struct UpdateExpression;
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-UpdateExpression
+fn update_expression<I: U8Input>(i: ESInput<I>,
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, UpdateExpression> {
+
+    // validation
+    if !(params.is_empty() ||
+         params.contains(&Parameter::Yield)) {
+        panic!("misuse of update_expression");
+    }
+
+    i.ret(UpdateExpression)
+}
+
+// == 12.5 Unary Operator ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-unary-operators
+
+struct UnaryExpression;
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-UnaryExpression
+fn unary_expression<I: U8Input>(i: ESInput<I>,
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, UnaryExpression> {
+
+    // validation
+    if !(params.is_empty() ||
+         params.contains(&Parameter::Yield)) {
+        panic!("misuse of unary_expression");
+    }
+
+    i.ret(UnaryExpression)
+}
+
 // == 12.6 Exponentiation Operator ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-exp-operator
 
-struct ExponentiationExpression;
+enum ExponentiationExpression {
+    UnaryExpression(UnaryExpression),
+    UpdateExpression(UpdateExpression, Vec<CommonDelim>, Vec<CommonDelim>, Box<ExponentiationExpression>)
+}
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ExponentiationExpression
@@ -2898,7 +2943,25 @@ fn exponentiation_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of exponentiation_expression");
     }
 
-    i.ret(ExponentiationExpression)
+    or(i,
+        |i| unary_expression(i, &params).map(|x| ExponentiationExpression::UnaryExpression(x)),
+        |i| {
+            parse!{i;
+
+                let update_expr = update_expression(&params);
+
+                let delim_1 = common_delim();
+                let _exp_op = string(b"**");
+                let delim_2 = common_delim();
+
+                let exp_expr = exponentiation_expression(&params);
+
+                ret {
+                    ExponentiationExpression::UpdateExpression(update_expr, delim_1, delim_2, Box::new(exp_expr))
+                }
+            }
+        }
+    )
 }
 
 // == 12.7 Multiplicative Operators ==
