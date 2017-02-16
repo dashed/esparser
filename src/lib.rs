@@ -2880,11 +2880,75 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
+// == 12.7 Multiplicative Operators==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-multiplicative-operators
+
+struct MultiplicativeExpression;
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-MultiplicativeExpression
+fn multiplicative_expression<I: U8Input>(i: ESInput<I>,
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, MultiplicativeExpression> {
+
+    // validation
+    if !(params.is_empty() ||
+         params.contains(&Parameter::Yield)) {
+        panic!("misuse of multiplicative_expression");
+    }
+
+    i.ret(MultiplicativeExpression)
+}
+
+
 // == 12.8 Additive Operators ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-additive-operators
 
-struct AdditiveExpression;
+struct AdditiveExpression(MultiplicativeExpression, Vec<AdditiveExpressionRest>);
+
+impl AdditiveExpression {
+    fn new(rhs_val: MultiplicativeExpression) -> Self {
+        AdditiveExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: AdditiveExpressionDelim,
+                rhs_val: MultiplicativeExpression)
+                -> Self {
+
+        let AdditiveExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let AdditiveExpressionDelim(delim_1, operator, delim_2) = operator_delim;
+
+        let rhs = AdditiveExpressionRest(delim_1, operator, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        AdditiveExpression(head, rest)
+    }
+}
+
+struct AdditiveExpressionRest(Vec<CommonDelim>,
+                              AdditiveExpressionOperator,
+                              Vec<CommonDelim>,
+                              MultiplicativeExpression);
+
+enum AdditiveExpressionOperator {
+    Add,
+    Subtract
+}
+
+struct AdditiveExpressionDelim(Vec<CommonDelim>, AdditiveExpressionOperator, Vec<CommonDelim>);
+
+generate_list_parser!(
+    AdditiveExpression;
+    AdditiveExpressionRest;
+    AdditiveExpressionState;
+    AdditiveExpressionDelim;
+    MultiplicativeExpression);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-AdditiveExpression
@@ -2898,7 +2962,54 @@ fn additive_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of additive_expression");
     }
 
-    i.ret(AdditiveExpression)
+    type Accumulator = Rc<RefCell<AdditiveExpressionState>>;
+
+    #[inline]
+    fn additive_operator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, AdditiveExpressionOperator> {
+        parse!{i;
+
+            let operator = (i -> string(i, b"+").map(|_| AdditiveExpressionOperator::Add)) <|>
+                (i -> string(i, b"-").map(|_| AdditiveExpressionOperator::Subtract));
+
+            ret operator
+        }
+    }
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            let additive_operator = on_error(
+                additive_operator,
+                |i| {
+                    let loc = i.position();
+                    ErrorLocation::new(loc, "Expected one of these operators: +, or -.".to_string())
+                }
+            );
+            let delim_2 = common_delim();
+            ret {
+                let delim = AdditiveExpressionDelim(delim_1, additive_operator, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = multiplicative_expression(&params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 // == 12.9 Bitwise Shift Operators ==
