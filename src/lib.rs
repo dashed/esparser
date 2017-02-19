@@ -51,6 +51,7 @@ Bookmark:
 
 
 
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -559,7 +560,7 @@ fn parse_single_quote_string_test() {
 // Helper macro to generate the following:
 //
 // $root_name := $inner_parser $rest_name*
-// $rest_name := Delim <operator> Delim $inner_parser
+// $rest_name := $delim_name $inner_parser
 //
 macro_rules! generate_list_parser {
     ($root_name: ident; $rest_name: ident; $state_name: ident; $delim_name: ident; $inner_parser: ident) => {
@@ -584,6 +585,13 @@ macro_rules! generate_list_parser {
                 match self {
                     $state_name::WellFormed(expr) => expr,
                     _ => panic!("incorrect state"),
+                }
+            }
+
+            fn is_initial(&self) -> bool {
+                match *self {
+                    $state_name::Initial => true,
+                    _ => false
                 }
             }
 
@@ -2985,7 +2993,63 @@ fn new_expression<I: U8Input>(i: ESInput<I>,
        |i| member_expression(i, &params).map(|x| NewExpression::MemberExpression(x)))
 }
 
-struct CallExpression;
+enum CallExpressionHead {
+    FunctionCall(MemberExpression, Vec<CommonDelim>, Arguments),
+    SuperCall(SuperCall)
+}
+
+struct CallExpression(CallExpressionHead, Vec<CallExpressionRest>);
+
+impl CallExpression {
+    fn new(rhs_val: CallExpressionItem) -> Self {
+        match rhs_val {
+            CallExpressionItem::HeadItem(head) => CallExpression(head, vec![]),
+            CallExpressionItem::RestItem(_) => panic!("invariant violation"),
+        }
+    }
+
+    fn add_item(self, operator_delim: CallExpressionDelim, rhs_val: CallExpressionItem) -> Self {
+
+        let CallExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let CallExpressionDelim(delim) = operator_delim;
+
+        let rest_item = match rhs_val {
+            CallExpressionItem::HeadItem(_head) => panic!("invariant violation"),
+            CallExpressionItem::RestItem(rest_item) => rest_item,
+        };
+
+        let rhs = CallExpressionRest(delim, rest_item);
+
+        rest.push(rhs);
+
+        CallExpression(head, rest)
+    }
+}
+
+enum CallExpressionRestItem {
+    FunctionCall(Arguments),
+    PropertyAccessorBracket(Expression),
+    PropertyAccessorDot(IdentifierName),
+    TaggedTemplate(TemplateLiteral)
+}
+
+struct CallExpressionRest(Vec<CommonDelim>, CallExpressionRestItem);
+
+struct CallExpressionDelim(Vec<CommonDelim>);
+
+enum CallExpressionItem {
+    HeadItem(CallExpressionHead),
+    RestItem(CallExpressionRestItem),
+}
+
+generate_list_parser!(
+    CallExpression;
+    CallExpressionRest;
+    CallExpressionState;
+    CallExpressionDelim;
+    CallExpressionItem);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-CallExpression
@@ -2998,10 +3062,58 @@ fn call_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of call_expression");
     }
 
-    // TODO: complete
-    // TODO: this is not a list!
+    type Accumulator = Rc<RefCell<CallExpressionState>>;
 
-    i.ret(CallExpression)
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim = common_delim();
+
+            ret {
+                let delim = CallExpressionDelim(delim);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+
+        let mut expr_params = params.clone();
+        expr_params.insert(Parameter::In);
+
+        let is_initial = {
+            accumulator.borrow().is_initial();
+        };
+
+        if is_initial {
+            parse!{i;
+
+                // TODO: complete
+
+                ret {
+                    accumulator.borrow_mut().add_item(rhs);
+                    ()
+                }
+            }
+        } else {
+            parse!{i;
+
+                // TODO: complete
+
+                ret {
+                    accumulator.borrow_mut().add_item(rhs);
+                    ()
+                }
+            }
+        }
+
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 struct SuperCall(/* super */
