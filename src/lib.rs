@@ -48,6 +48,9 @@ Bookmark:
 
 
 
+
+
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -2895,7 +2898,9 @@ struct MemberExpression;
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-MemberExpression
-fn member_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, MemberExpression> {
+fn member_expression<I: U8Input>(i: ESInput<I>,
+                                 params: &EnumSet<Parameter>)
+                                 -> ESParseResult<I, MemberExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -2947,12 +2952,16 @@ fn new_target<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NewTarget> {
 
 enum NewExpression {
     MemberExpression(MemberExpression),
-    NewExpression(/* new */ Vec<CommonDelim>, Box<NewExpression>)
+    NewExpression(/* new */
+                  Vec<CommonDelim>,
+                  Box<NewExpression>),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-NewExpression
-fn new_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, NewExpression> {
+fn new_expression<I: U8Input>(i: ESInput<I>,
+                              params: &EnumSet<Parameter>)
+                              -> ESParseResult<I, NewExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -2960,8 +2969,8 @@ fn new_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
     }
 
     or(i,
-        |i| {
-            parse!{i;
+       |i| {
+        parse!{i;
                 (i -> string(i, b"new"));
 
                 let delim = common_delim();
@@ -2972,10 +2981,8 @@ fn new_expression<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESP
                     NewExpression::NewExpression(delim, Box::new(new_expr))
                 }
             }
-        },
-        |i| {
-            member_expression(i, &params).map(|x| NewExpression::MemberExpression(x))
-        })
+    },
+       |i| member_expression(i, &params).map(|x| NewExpression::MemberExpression(x)))
 }
 
 struct CallExpression;
@@ -2983,8 +2990,8 @@ struct CallExpression;
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-CallExpression
 fn call_expression<I: U8Input>(i: ESInput<I>,
-                                         params: &EnumSet<Parameter>)
-                                         -> ESParseResult<I, CallExpression> {
+                               params: &EnumSet<Parameter>)
+                               -> ESParseResult<I, CallExpression> {
 
     // validation
     if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -2992,22 +2999,197 @@ fn call_expression<I: U8Input>(i: ESInput<I>,
     }
 
     // TODO: complete
+    // TODO: this is not a list!
 
     i.ret(CallExpression)
 }
 
-// TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-SuperCall
+struct SuperCall(/* super */
+                 Vec<CommonDelim>,
+                 Arguments);
 
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-Arguments
+// http://www.ecma-international.org/ecma-262/7.0/#prod-SuperCall
+fn super_call<I: U8Input>(i: ESInput<I>,
+                          params: &EnumSet<Parameter>)
+                          -> ESParseResult<I, SuperCall> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of super_call");
+    }
+
+    parse!{i;
+
+        string(b"super");
+
+        let delim = common_delim();
+
+        let args = arguments(params);
+
+        ret SuperCall(delim, args)
+    }
+}
+
+enum Arguments {
+    NoArguments(Vec<CommonDelim>),
+    Arguments(Vec<CommonDelim>, ArgumentList, Vec<CommonDelim>),
+}
 
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-ArgumentList
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Arguments
+fn arguments<I: U8Input>(i: ESInput<I>,
+                         params: &EnumSet<Parameter>)
+                         -> ESParseResult<I, Arguments> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of arguments");
+    }
+
+    or(i,
+       |i| {
+        parse!{i;
+
+                string(b"(");
+                let delim = common_delim();
+                string(b")");
+
+                ret Arguments::NoArguments(delim)
+            }
+    },
+       |i| {
+        parse!{i;
+
+                string(b"(");
+                let delim_1 = common_delim();
+
+                let args_list = arguments_list(&params);
+
+                let delim_2 = common_delim();
+                string(b")");
+
+                ret Arguments::Arguments(delim_1, args_list, delim_2)
+            }
+    })
+}
+
+enum ArgumentListItem {
+    AssignmentExpression(AssignmentExpression),
+    RestAssignmentExpression(/* ... */
+                             Vec<CommonDelim>,
+                             AssignmentExpression),
+}
+
+struct ArgumentList(ArgumentListItem, Vec<ArgumentListRest>);
+
+impl ArgumentList {
+    fn new(rhs_val: ArgumentListItem) -> Self {
+        ArgumentList(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: ArgumentListDelim, rhs_val: ArgumentListItem) -> Self {
+
+        let ArgumentList(head, rest) = self;
+        let mut rest = rest;
+
+        let ArgumentListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = ArgumentListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        ArgumentList(head, rest)
+    }
+}
+
+struct ArgumentListRest(Vec<CommonDelim>,
+                        /* , (comma) */
+                        Vec<CommonDelim>,
+                        ArgumentListItem);
+
+struct ArgumentListDelim(Vec<CommonDelim>,
+                         /* , (comma) */
+                         Vec<CommonDelim>);
+
+generate_list_parser!(
+    ArgumentList;
+    ArgumentListRest;
+    ArgumentListState;
+    ArgumentListDelim;
+    ArgumentListItem);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ArgumentList
+fn arguments_list<I: U8Input>(i: ESInput<I>,
+                              params: &EnumSet<Parameter>)
+                              -> ESParseResult<I, ArgumentList> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of arguments_list");
+    }
+
+    type Accumulator = Rc<RefCell<ArgumentListState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            on_error(
+                |i| token(i, b','),
+                |i| {
+                    let loc = i.position();
+                    // TODO: proper err message?
+                    ErrorLocation::new(loc, "Expected , here.".to_string())
+                }
+            );
+
+            let delim_2 = common_delim();
+
+            ret {
+                let delim = ArgumentListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+
+        let mut params = params.clone();
+        params.insert(Parameter::In);
+
+        option(i,
+               |i| {
+                   string(i, b"...")
+                       .then(common_delim)
+                       .map(|x| Some(x))
+               },
+               None)
+            .bind(|i, delim| assignment_expression(i, &params).map(|x| (delim, x)))
+            .bind(|i, (rest_op, assignment_expression)| -> ESParseResult<I, ()> {
+                let rhs = if let Some(delim) = rest_op {
+                    ArgumentListItem::RestAssignmentExpression(delim, assignment_expression)
+                } else {
+                    ArgumentListItem::AssignmentExpression(assignment_expression)
+                };
+
+                accumulator.borrow_mut().add_item(rhs);
+                i.ret(())
+            })
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
 
 enum LeftHandSideExpression {
     NewExpression(NewExpression),
-    CallExpression(CallExpression)
+    CallExpression(CallExpression),
 }
 
 // TODO: test
@@ -3022,8 +3204,8 @@ fn left_hand_side_expression<I: U8Input>(i: ESInput<I>,
     }
 
     or(i,
-        |i| new_expression(i, &params).map(|x| LeftHandSideExpression::NewExpression(x)),
-        |i| call_expression(i, &params).map(|x| LeftHandSideExpression::CallExpression(x)))
+       |i| new_expression(i, &params).map(|x| LeftHandSideExpression::NewExpression(x)),
+       |i| call_expression(i, &params).map(|x| LeftHandSideExpression::CallExpression(x)))
 }
 
 // == 12.4 Update Expressions ==
@@ -4717,7 +4899,7 @@ fn statement_list_item<I: U8Input>(i: ESInput<I>,
 }
 
 
-// == Declarations and the Variable Statement ==
+// == 13.3 Declarations and the Variable Statement ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-declarations-and-the-variable-statement
 
@@ -5793,7 +5975,7 @@ fn if_statement<I: U8Input>(i: ESInput<I>,
 
 enum IterationStatement {
     DoWhile,
-    While, // TODO: for variants
+    While, // TODO: other iteration variants
 }
 
 // TODO: test
@@ -5846,6 +6028,24 @@ fn for_binding<I: U8Input>(i: ESInput<I>,
        |i| binding_identifier(i, &params).map(|x| ForBinding::BindingIdentifier(x)),
        |i| binding_pattern(i, &params).map(|x| ForBinding::BindingPattern(x)))
 }
+
+// == 13.8 The continue Statement ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-continue-statement
+
+// TODO: complete
+
+// == 13.9 The break Statement ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-break-statement
+
+// TODO: complete
+
+// == 13.10 The return Statement ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-return-statement
+
+// TODO: complete
 
 // == 14 ECMAScript Language: Functions and Classes ==
 //
@@ -6412,6 +6612,12 @@ fn function_statement_list<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// == 14.2 Arrow Function Definitions ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-arrow-function-definitions
+
+// TODO: complete
+
 // == 14.3 Method Definitions ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-method-definitions
@@ -6669,6 +6875,10 @@ fn generator_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, GeneratorBody> 
 }
 
 // TODO: YieldExpression
+
+// == 14.5 Class Definitions ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-class-definitions
 
 
 // ==== sandbox ===>
