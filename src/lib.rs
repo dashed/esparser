@@ -3030,9 +3030,10 @@ impl CallExpression {
 
 enum CallExpressionRestItem {
     FunctionCall(Arguments),
-    PropertyAccessorBracket(Expression),
-    PropertyAccessorDot(IdentifierName),
-    TaggedTemplate(TemplateLiteral)
+    PropertyAccessorBracket(/* [] */ Vec<CommonDelim>, ExpressionList, Vec<CommonDelim> /* ] */),
+    PropertyAccessorDot(/* . */ Vec<CommonDelim>, IdentifierName),
+    // TODO: complete
+    // TaggedTemplate(TemplateLiteral)
 }
 
 struct CallExpressionRest(Vec<CommonDelim>, CallExpressionRestItem);
@@ -3079,22 +3080,36 @@ fn call_expression<I: U8Input>(i: ESInput<I>,
         }
     }
 
+    let mut expr_params = params.clone();
+    expr_params.insert(Parameter::In);
+    let expr_params = expr_params;
+
     #[inline]
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
 
-        let mut expr_params = params.clone();
-        expr_params.insert(Parameter::In);
+
 
         let is_initial = {
-            accumulator.borrow().is_initial();
+            accumulator.borrow().is_initial()
         };
 
         if is_initial {
             parse!{i;
 
-                // TODO: complete
+                let head = or(
+                    |i| super_call(i, &params).map(|x| CallExpressionHead::SuperCall(x)),
+                    |i| {
+                        parse!{i;
+                            let member = member_expression(&params);
+                            let delim = common_delim();
+                            let args = arguments(&params);
+
+                            ret CallExpressionHead::FunctionCall(member, delim, args)
+                        }
+                    });
 
                 ret {
+                    let rhs = CallExpressionItem::HeadItem(head);
                     accumulator.borrow_mut().add_item(rhs);
                     ()
                 }
@@ -3102,9 +3117,38 @@ fn call_expression<I: U8Input>(i: ESInput<I>,
         } else {
             parse!{i;
 
-                // TODO: complete
+                let rest_item =
+                    (i -> {
+                        arguments(i, &params)
+                            .map(|x| CallExpressionRestItem::FunctionCall(x))
+                    }) <|>
+                    (i -> {
+                        parse!{i;
+
+                            string(b"[");
+                            let delim_left = common_delim();
+
+                            let expr = expression(&expr_params);
+
+                            let delim_right = common_delim();
+                            string(b"]");
+
+                            ret CallExpressionRestItem::PropertyAccessorBracket(delim_left, expr, delim_right)
+                        }
+                    }) <|>
+                    (i -> {
+                        parse!{i;
+                            string(b".");
+                            let delim_left = common_delim();
+                            let ident = identifier_name();
+
+                            ret CallExpressionRestItem::PropertyAccessorDot(delim_left, ident)
+                        }
+                    });
+                    // TODO: tagged template
 
                 ret {
+                    let rhs = CallExpressionItem::RestItem(rest_item);
                     accumulator.borrow_mut().add_item(rhs);
                     ()
                 }
