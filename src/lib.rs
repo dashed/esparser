@@ -958,7 +958,13 @@ impl CLike for Parameter {
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-SourceCharacter
 fn source_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
-    or(i, parse_utf16_surrogate_pairs, parse_utf8_char)
+    // (from spec)
+    // Regardless of the external source text encoding, a conforming ECMAScript implementation
+    // processes the source text as if it was an equivalent sequence of SourceCharacter values,
+    // each SourceCharacter being a Unicode code point.
+    //
+    // NOTE: For this implementation, enforce source text input to be UTF-8.
+    parse_utf8_char(i)
 }
 
 #[test]
@@ -1074,6 +1080,8 @@ fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
             // This byte determines the number of bytes expected in the UTF8 character.
             let first_byte = c;
 
+            internal_buf.push(first_byte);
+
             pattern = if 0xC2 <= first_byte && first_byte <= 0xDF {
                 Unicode::UTF8_2Bytes
             } else if 0xE0 <= first_byte && first_byte <= 0xEF {
@@ -1086,8 +1094,6 @@ fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
                 // break from consume_while
                 return false;
             };
-
-            internal_buf.push(c);
 
             // continue consume_while
             return true;
@@ -1163,9 +1169,15 @@ fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
 
     match result {
         None => {
+
+            // TODO: user configuration to allow invalid utf-8 characters to be coerced to replacement character;
+            // TODO: delegate this to a wrapping function
+            // i.ret('\u{FFFD}');
+
             let loc = i.position();
             let reason = "Expected utf8 character.".to_string();
             return i.err(ErrorLocation::new(loc, reason).into());
+
         }
         Some(c) => {
             return i.ret(c);
@@ -1202,7 +1214,7 @@ fn parse_utf8_char_test() {
         }
     }
 
-    // case: only sparkle heart is parsed
+    // case: only one sparkle heart is parsed
 
     let sparkle_heart_and_smile = vec![// http://graphemica.com/%F0%9F%92%96
                                        240,
