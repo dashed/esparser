@@ -712,8 +712,9 @@ fn parse_utf8_char_of_bytes<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParse
              })
 }
 
+// TODO: this is old; remove
 #[inline]
-fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
+fn ___parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
 
     let mut internal_buf = vec![];
     let mut valid_utf8 = false;
@@ -756,48 +757,9 @@ fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
 
 }
 
-#[test]
-fn parse_utf8_char_test() {
-
-    let sparkle_heart = vec![240, 159, 146, 150];
-
-    let i = InputPosition::new(sparkle_heart.as_slice(), CurrentPosition::new());
-    match parse_utf8_char(i).into_inner().1 {
-        Ok(result) => {
-            assert_eq!(result, '\u{1f496}');
-        }
-        Err(_) => {
-            assert!(false);
-        }
-    }
-
-    // case: only sparkle heart is parsed
-
-    let sparkle_heart_and_smile = vec![// http://graphemica.com/%F0%9F%92%96
-                                       240,
-                                       159,
-                                       146,
-                                       150,
-                                       // http://graphemica.com/%F0%9F%98%80
-                                       240,
-                                       159,
-                                       152,
-                                       128];
-
-    let i = InputPosition::new(sparkle_heart_and_smile.as_slice(), CurrentPosition::new());
-    match parse_utf8_char(i).into_inner().1 {
-        Ok(result) => {
-            assert_eq!(result, '\u{1f496}');
-        }
-        Err(_) => {
-            assert!(false);
-        }
-    }
-}
-
-// TODO: this is probably not necessary at all since source text is interpeted as u8; refactor this out
+// TODO: refactor this out; since source text is interpeted as u8; refactor this out
 #[inline]
-fn string_not_utf8<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I, I::Buffer> {
+fn __string_not_utf8<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I, I::Buffer> {
 
     let mark = i.mark();
     let mut current_needle = needle;
@@ -983,6 +945,399 @@ impl CLike for Parameter {
     unsafe fn from_u32(v: u32) -> Self {
         mem::transmute(v)
     }
+}
+
+// == 10 ECMAScript Language: Source Code ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-source-code
+
+// == 10.1 Source Text ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-source-text
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-SourceCharacter
+fn source_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+    or(i, parse_utf16_surrogate_pairs, parse_utf8_char)
+}
+
+#[test]
+fn source_character_test() {
+
+    let v: &[u8] = b"v";
+
+    let i = InputPosition::new(v, CurrentPosition::new());
+    match source_character(i).into_inner().1 {
+        Ok(result) => {
+            assert_eq!(result, 'v');
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    let v: &[u8] = b"var";
+
+    let i = InputPosition::new(v, CurrentPosition::new());
+    match source_character(i).into_inner().1 {
+        Ok(result) => {
+            assert_eq!(result, 'v');
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    {
+
+        let input: &[u8] = &[0xD8, 0x01, 0xDC, 0x37];
+
+        let expected = {
+            // http://graphemica.com/%F0%90%90%B7
+            let v = &[0xD801, 0xDC37];
+            let foo = String::from_utf16(v).unwrap().chars().collect::<Vec<_>>();
+            foo[0]
+        };
+
+        let i = InputPosition::new(input, CurrentPosition::new());
+        match source_character(i).into_inner().1 {
+            Ok(result) => {
+                assert_eq!(result, expected);
+            }
+            Err(_) => {
+                assert!(false);
+            }
+        }
+
+    };
+
+    {
+
+        // case: invalid surrogate pair
+
+        // high: 0xD800   [note: this would invalid utf8 character]
+        // low:  0x0000
+        let input: &[u8] = &[0xD8, 0x00];
+
+        let i = InputPosition::new(input, CurrentPosition::new());
+        match source_character(i).into_inner().1 {
+            Ok(_) => {
+                assert!(false);
+            }
+            Err(_) => {
+                assert!(true);
+            }
+        }
+    };
+
+
+}
+
+fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
+
+    // NOTE: rust `char` type represents a Unicode Scalar Value.
+    // see: http://www.unicode.org/glossary/#unicode_scalar_value
+    // contrast with: http://www.unicode.org/glossary/#code_point
+    //
+    // scalar value := 0x0 to 0xD7FF (inclusive), and 0xE000 to 0x10FFFF (inclusive)
+
+    // TODO: clean up refs
+    // ref: http://www.fileformat.info/info/unicode/utf8.htm
+    // ref: https://developer.apple.com/library/content/documentation/Swift/Conceptual/Swift_Programming_Language/StringsAndCharacters.html
+
+    enum Unicode {
+        UTF8_1Byte,
+        UTF8_2Bytes,
+        UTF8_3Bytes,
+        UTF8_4Bytes,
+    }
+
+    let mut pattern = Unicode::UTF8_1Byte;
+
+    let mut internal_buf = vec![];
+
+    let mut result: Option<char> = None;
+
+    let _buffer = i.consume_while(|c: u8| {
+
+        if internal_buf.len() <= 0 && c < 0x80 {
+            // first and only byte of a sequence
+
+            result = Some(c as char);
+
+            // break from consume_while
+            return false;
+        }
+
+        if internal_buf.len() <= 0 {
+            // c is the first byte of a potential unicode code point.
+            // This byte determines the number of bytes expected in the UTF8 character.
+            let first_byte = c;
+
+            pattern = if 0xC2 <= first_byte && first_byte <= 0xDF {
+                Unicode::UTF8_2Bytes
+            } else if 0xE0 <= first_byte && first_byte <= 0xEF {
+                Unicode::UTF8_3Bytes
+            } else if 0xF0 <= first_byte && first_byte <= 0xFF {
+                Unicode::UTF8_4Bytes
+            } else {
+                // invalid first byte
+                result = None;
+                // break from consume_while
+                return false;
+            };
+
+            internal_buf.push(c);
+
+            // continue consume_while
+            return true;
+        }
+
+        // invariant: internal_buf.len() >= 1
+        // invariant: pattern != Unicode::UTF8_1Byte
+
+        let next_byte = c;
+
+        if !(0x80 <= next_byte && next_byte <= 0xBF) {
+            // invalid continuing byte in a multi-byte sequence.
+            result = None;
+            // break from consume_while
+            return false;
+        }
+
+        internal_buf.push(next_byte);
+
+        // invariant: internal_buf.len() >= 2
+
+        match pattern {
+            Unicode::UTF8_1Byte => {
+                // invariant violation
+                result = None;
+                // break from consume_while
+                return false;
+            }
+            Unicode::UTF8_2Bytes => {
+                // no-op
+            }
+            Unicode::UTF8_3Bytes => {
+                if internal_buf.len() != 3 {
+                    // continue consume_while
+                    return true;
+                }
+            }
+            Unicode::UTF8_4Bytes => {
+                if internal_buf.len() != 4 {
+                    // continue consume_while
+                    return true;
+                }
+            }
+        }
+
+        // invariant: internal_buf contains at least 2 bytes and at most 4 bytes that compose a valid utf8 character
+
+        match std::str::from_utf8(&internal_buf) {
+            Err(_) => {
+                // not valid_utf8
+                result = None;
+                // break from consume_while
+                return false;
+            }
+            Ok(__result) => {
+                let __result = __result.chars().collect::<Vec<_>>();
+
+                if __result.len() == 1 {
+                    result = Some(__result[0]);
+                    // break from consume_while
+                    return false;
+                } else {
+                    result = None;
+                    // break from consume_while
+                    return false;
+                }
+            }
+        }
+
+        // TODO: unreachable
+
+        // continue consume_while
+        true
+
+    });
+
+    match result {
+        None => {
+            let loc = i.position();
+            let reason = "Expected utf8 character.".to_string();
+            return i.err(ErrorLocation::new(loc, reason).into());
+        }
+        Some(c) => {
+            return i.ret(c);
+        }
+    }
+
+}
+
+#[test]
+fn parse_utf8_char_test() {
+
+    let v: &[u8] = b"v";
+
+    let i = InputPosition::new(v, CurrentPosition::new());
+    match parse_utf8_char(i).into_inner().1 {
+        Ok(result) => {
+            assert_eq!(result, 'v');
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+
+    let sparkle_heart = vec![240, 159, 146, 150];
+
+    let i = InputPosition::new(sparkle_heart.as_slice(), CurrentPosition::new());
+    match parse_utf8_char(i).into_inner().1 {
+        Ok(result) => {
+            assert_eq!(result, '\u{1f496}');
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    // case: only sparkle heart is parsed
+
+    let sparkle_heart_and_smile = vec![// http://graphemica.com/%F0%9F%92%96
+                                       240,
+                                       159,
+                                       146,
+                                       150,
+                                       // http://graphemica.com/%F0%9F%98%80
+                                       240,
+                                       159,
+                                       152,
+                                       128];
+
+    let i = InputPosition::new(sparkle_heart_and_smile.as_slice(), CurrentPosition::new());
+    match parse_utf8_char(i).into_inner().1 {
+        Ok(result) => {
+            assert_eq!(result, '\u{1f496}');
+        }
+        Err(_) => {
+            assert!(false);
+        }
+    }
+
+    {
+
+        // case: invalid two byte sequence (2nd byte is invalid)
+
+        let input: &[u8] = &[0xD8, 0x00];
+
+        let i = InputPosition::new(input, CurrentPosition::new());
+        match parse_utf8_char(i).into_inner().1 {
+            Ok(_) => {
+                assert!(false);
+            }
+            Err(_) => {
+                assert!(true);
+            }
+        }
+    };
+
+    {
+
+        // case: invalid three byte sequence (2nd byte is invalid)
+
+        let input: &[u8] = &[0xE0, 0x00, 0x80];
+
+        let i = InputPosition::new(input, CurrentPosition::new());
+        match parse_utf8_char(i).into_inner().1 {
+            Ok(_) => {
+                assert!(false);
+            }
+            Err(_) => {
+                assert!(true);
+            }
+        }
+    };
+
+    {
+
+        // case: invalid three byte sequence (3rd byte is invalid)
+
+        let input: &[u8] = &[0xE0, 0x80, 0x00];
+
+        let i = InputPosition::new(input, CurrentPosition::new());
+        match parse_utf8_char(i).into_inner().1 {
+            Ok(_) => {
+                assert!(false);
+            }
+            Err(_) => {
+                assert!(true);
+            }
+        }
+    };
+
+    // TODO: cases of invalid four byte sequences
+}
+
+// TODO: test
+// parse surrogate pairs and covert to unicode scalar value (char type)
+fn parse_utf16_surrogate_pairs<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+
+    // TODO: big endian was assumed
+
+    #[inline]
+    fn parse_u16<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u16> {
+        let any = chomp::parsers::any;
+        parse!{i;
+            let first = any();
+            let second = any();
+
+            ret {
+                let first: u16 = (first as u16) << 8;
+                let second: u16 = second as u16;
+                let result: u16 = first | second;
+
+                result
+            }
+        }
+    }
+
+    parse_u16(i)
+        .bind(|i, high_surrogate| {
+            parse_u16(i)
+                .map(|low_surrogate| {
+                    (high_surrogate, low_surrogate)
+                })
+        })
+        .bind(|i, (high_surrogate, low_surrogate)| {
+
+        // high: 0xD800 to 0xDBFF (u16)
+        // low:  0xDC00 to 0xDFFF (u16)
+        if 0xD800 <= high_surrogate && high_surrogate <= 0xDBFF {
+            if 0xDC00 <= low_surrogate && low_surrogate <= 0xDFFF {
+
+                let v = &[high_surrogate, low_surrogate];
+
+                let result = match String::from_utf16(v) {
+                    Err(_) => {
+                        return i.err("Unable to convert utf-16 surrogate pair to a single character.".into());
+                    },
+                    Ok(result) => result.chars().collect::<Vec<_>>()
+                };
+
+                if result.len() == 1 {
+                    return i.ret(result[0]);
+                } else {
+                    return i.err("Unable to convert utf-16 surrogate pair to a single character.".into());
+                }
+            }
+        }
+
+        return i.err("Invalid utf-16 surrogate pair.".into());
+    })
 }
 
 // == 11.2 White Space ==
@@ -1342,6 +1697,7 @@ fn unicode_id_continue_test() {
 
 // TODO: enum Keyword type
 
+// TODO: review this
 // http://www.ecma-international.org/ecma-262/7.0/#sec-reserved-words
 fn reserved_word<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
 
@@ -1349,39 +1705,39 @@ fn reserved_word<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
         let keyword =
             // == 11.6.2.1 Keywords ==
             // http://www.ecma-international.org/ecma-262/7.0/#prod-Keyword
-            string_not_utf8(b"break") <|>
-            string_not_utf8(b"do") <|>
-            string_not_utf8(b"in") <|>
-            string_not_utf8(b"typeof") <|>
-            string_not_utf8(b"case") <|>
-            string_not_utf8(b"else") <|>
-            string_not_utf8(b"instanceof") <|>
-            string_not_utf8(b"var") <|>
-            string_not_utf8(b"catch") <|>
-            string_not_utf8(b"export") <|>
-            string_not_utf8(b"new") <|>
-            string_not_utf8(b"void") <|>
-            string_not_utf8(b"class") <|>
-            string_not_utf8(b"extends") <|>
-            string_not_utf8(b"return") <|>
-            string_not_utf8(b"while") <|>
-            string_not_utf8(b"const") <|>
-            string_not_utf8(b"finally") <|>
-            string_not_utf8(b"super") <|>
-            string_not_utf8(b"with") <|>
-            string_not_utf8(b"continue") <|>
-            string_not_utf8(b"for") <|>
-            string_not_utf8(b"switch") <|>
-            string_not_utf8(b"yield") <|>
-            string_not_utf8(b"debugger") <|>
-            string_not_utf8(b"function") <|>
-            string_not_utf8(b"this") <|>
-            string_not_utf8(b"default") <|>
-            string_not_utf8(b"if") <|>
-            string_not_utf8(b"throw") <|>
-            string_not_utf8(b"delete") <|>
-            string_not_utf8(b"import") <|>
-            string_not_utf8(b"try") <|>
+            string(b"break") <|>
+            string(b"do") <|>
+            string(b"in") <|>
+            string(b"typeof") <|>
+            string(b"case") <|>
+            string(b"else") <|>
+            string(b"instanceof") <|>
+            string(b"var") <|>
+            string(b"catch") <|>
+            string(b"export") <|>
+            string(b"new") <|>
+            string(b"void") <|>
+            string(b"class") <|>
+            string(b"extends") <|>
+            string(b"return") <|>
+            string(b"while") <|>
+            string(b"const") <|>
+            string(b"finally") <|>
+            string(b"super") <|>
+            string(b"with") <|>
+            string(b"continue") <|>
+            string(b"for") <|>
+            string(b"switch") <|>
+            string(b"yield") <|>
+            string(b"debugger") <|>
+            string(b"function") <|>
+            string(b"this") <|>
+            string(b"default") <|>
+            string(b"if") <|>
+            string(b"throw") <|>
+            string(b"delete") <|>
+            string(b"import") <|>
+            string(b"try") <|>
 
             // TODO: [edit] remove; replaced by syntax error
             // TODO: is this right?
@@ -1391,17 +1747,17 @@ fn reserved_word<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Buffer> {
 
             // == 11.6.2.2 Future Reserved Words ==
             // http://www.ecma-international.org/ecma-262/7.0/#sec-future-reserved-words
-            string_not_utf8(b"enum") <|>
-            string_not_utf8(b"await") <|>
+            string(b"enum") <|>
+            string(b"await") <|>
 
             // == 11.8.1 Null Literals ==
             // http://www.ecma-international.org/ecma-262/7.0/#prod-NullLiteral
-            string_not_utf8(b"null") <|>
+            string(b"null") <|>
 
             // == 11.8.2 Boolean Literals ==
             // http://www.ecma-international.org/ecma-262/7.0/#prod-BooleanLiteral
-            string_not_utf8(b"true") <|>
-            string_not_utf8(b"false");
+            string(b"true") <|>
+            string(b"false");
 
         ret keyword
     }
@@ -2941,15 +3297,15 @@ struct NewTarget(/* new */
 fn new_target<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NewTarget> {
     parse!{i;
 
-        (i -> string(i, b"new"));
+        string(b"new");
 
         let delim_1 = common_delim();
 
-        (i -> string(i, b"."));
+        string(b".");
 
         let delim_2 = common_delim();
 
-        (i -> string(i, b"target"));
+        string(b"target");
 
 
         ret {
@@ -5978,9 +6334,9 @@ fn expression_statement<I: U8Input>(i: ESInput<I>,
                 parse!{i;
 
                     let _ = (i -> token(i, b'{').map(|_| ())) <|>
-                    (i -> string_not_utf8(i, b"function").map(|_| ())) <|>
-                    (i -> string_not_utf8(i, b"class").map(|_| ())) <|>
-                    (i -> string_not_utf8(i, b"let").map(|_| ())) <|>
+                    (i -> string(i, b"function").map(|_| ())) <|>
+                    (i -> string(i, b"class").map(|_| ())) <|>
+                    (i -> string(i, b"let").map(|_| ())) <|>
                     (i -> token(i, b'[').map(|_| ()));
 
                     ret {()}
@@ -6073,7 +6429,7 @@ fn if_statement<I: U8Input>(i: ESInput<I>,
         parse!{i;
 
             let delim_1 = common_delim();
-            string_not_utf8(b"else");
+            string(b"else");
             let delim_2 = common_delim();
 
             let stmt = statement(&params);
@@ -6094,7 +6450,7 @@ fn if_statement<I: U8Input>(i: ESInput<I>,
 
     parse!{i;
 
-        string_not_utf8(b"if");
+        string(b"if");
 
         let delim_1 = common_delim();
         token(b'(');
@@ -6306,7 +6662,7 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
 
     let foo: ESParseResult<I, ReturnType> = parse!{i;
 
-        string_not_utf8(b"function");
+        string(b"function");
 
         let name = function_name(&params);
 
@@ -6427,7 +6783,7 @@ fn function_expression<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, FunctionEx
 
     let foo: ESParseResult<I, ReturnType> = parse!{i;
 
-        string_not_utf8(b"function");
+        string(b"function");
 
         let fn_name = option(|i| -> ESParseResult<I, Option<(Vec<CommonDelim>, BindingIdentifier)>> {
             parse!{i;
