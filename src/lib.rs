@@ -1157,10 +1157,7 @@ fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
             }
         }
 
-        // TODO: unreachable
-
-        // continue consume_while
-        true
+        unreachable!();
 
     });
 
