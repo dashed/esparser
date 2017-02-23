@@ -955,7 +955,6 @@ impl CLike for Parameter {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-source-text
 
-// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-SourceCharacter
 fn source_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
     // (from spec)
@@ -969,74 +968,7 @@ fn source_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
 
 #[test]
 fn source_character_test() {
-
-    let v: &[u8] = b"v";
-
-    let i = InputPosition::new(v, CurrentPosition::new());
-    match source_character(i).into_inner().1 {
-        Ok(result) => {
-            assert_eq!(result, 'v');
-        }
-        Err(_) => {
-            assert!(false);
-        }
-    }
-
-    let v: &[u8] = b"var";
-
-    let i = InputPosition::new(v, CurrentPosition::new());
-    match source_character(i).into_inner().1 {
-        Ok(result) => {
-            assert_eq!(result, 'v');
-        }
-        Err(_) => {
-            assert!(false);
-        }
-    }
-
-    {
-
-        let input: &[u8] = &[0xD8, 0x01, 0xDC, 0x37];
-
-        let expected = {
-            // http://graphemica.com/%F0%90%90%B7
-            let v = &[0xD801, 0xDC37];
-            let foo = String::from_utf16(v).unwrap().chars().collect::<Vec<_>>();
-            foo[0]
-        };
-
-        let i = InputPosition::new(input, CurrentPosition::new());
-        match source_character(i).into_inner().1 {
-            Ok(result) => {
-                assert_eq!(result, expected);
-            }
-            Err(_) => {
-                assert!(false);
-            }
-        }
-
-    };
-
-    {
-
-        // case: invalid surrogate pair
-
-        // high: 0xD800   [note: this would invalid utf8 character]
-        // low:  0x0000
-        let input: &[u8] = &[0xD8, 0x00];
-
-        let i = InputPosition::new(input, CurrentPosition::new());
-        match source_character(i).into_inner().1 {
-            Ok(_) => {
-                assert!(false);
-            }
-            Err(_) => {
-                assert!(true);
-            }
-        }
-    };
-
-
+    parse_utf8_char_test();
 }
 
 fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
@@ -1189,53 +1121,89 @@ fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
 #[test]
 fn parse_utf8_char_test() {
 
-    let v: &[u8] = b"v";
+    {
+        let v: &[u8] = b"v";
 
-    let i = InputPosition::new(v, CurrentPosition::new());
-    match parse_utf8_char(i).into_inner().1 {
-        Ok(result) => {
-            assert_eq!(result, 'v');
+        let i = InputPosition::new(v, CurrentPosition::new());
+        match parse_utf8_char(i).into_inner().1 {
+            Ok(result) => {
+                assert_eq!(result, 'v');
+            }
+            Err(_) => {
+                assert!(false);
+            }
         }
-        Err(_) => {
-            assert!(false);
+    };
+
+    {
+
+        // case: invalid first byte sequence
+
+        for first_byte in 0x80 .. 0xC1 {
+
+            // 0x80 to 0xBF are continuing byte markers
+            // 0xC0 and 0xC1 re used for an invalid "overlong encoding" of ASCII characters
+
+            let input: &[u8] = &[first_byte];
+
+            let i = InputPosition::new(input, CurrentPosition::new());
+            match parse_utf8_char(i).into_inner().1 {
+                Ok(_) => {
+                    assert!(false);
+                }
+                Err(_) => {
+                    assert!(true);
+                }
+            }
         }
-    }
 
 
-    let sparkle_heart = vec![240, 159, 146, 150];
+    };
 
-    let i = InputPosition::new(sparkle_heart.as_slice(), CurrentPosition::new());
-    match parse_utf8_char(i).into_inner().1 {
-        Ok(result) => {
-            assert_eq!(result, '\u{1f496}');
+    {
+
+        let sparkle_heart = vec![240, 159, 146, 150];
+
+        let i = InputPosition::new(sparkle_heart.as_slice(), CurrentPosition::new());
+        match parse_utf8_char(i).into_inner().1 {
+            Ok(result) => {
+                assert_eq!(result, '\u{1f496}');
+            }
+            Err(_) => {
+                assert!(false);
+            }
         }
-        Err(_) => {
-            assert!(false);
-        }
-    }
 
-    // case: only one sparkle heart is parsed
+        // case: only one sparkle heart is parsed
 
-    let sparkle_heart_and_smile = vec![// http://graphemica.com/%F0%9F%92%96
-                                       240,
-                                       159,
-                                       146,
-                                       150,
-                                       // http://graphemica.com/%F0%9F%98%80
-                                       240,
-                                       159,
-                                       152,
-                                       128];
+        let sparkle_heart_and_smile = vec![// http://graphemica.com/%F0%9F%92%96
+                                           240,
+                                           159,
+                                           146,
+                                           150,
+                                           // http://graphemica.com/%F0%9F%98%80
+                                           240,
+                                           159,
+                                           152,
+                                           128];
 
-    let i = InputPosition::new(sparkle_heart_and_smile.as_slice(), CurrentPosition::new());
-    match parse_utf8_char(i).into_inner().1 {
-        Ok(result) => {
-            assert_eq!(result, '\u{1f496}');
+        let i = InputPosition::new(sparkle_heart_and_smile.as_slice(), CurrentPosition::new());
+        match parse_utf8_char(i).into_inner().1 {
+            Ok(result) => {
+                assert_eq!(result, '\u{1f496}');
+            }
+            Err(_) => {
+                assert!(false);
+            }
         }
-        Err(_) => {
-            assert!(false);
-        }
-    }
+
+    };
+
+    {
+        // case: valid two byte sequence
+
+        // TODO: complete
+    };
 
     {
 
@@ -1252,6 +1220,12 @@ fn parse_utf8_char_test() {
                 assert!(true);
             }
         }
+    };
+
+    {
+        // case: valid three byte sequence
+
+        // TODO: complete
     };
 
     {
@@ -1286,6 +1260,12 @@ fn parse_utf8_char_test() {
                 assert!(true);
             }
         }
+    };
+
+    {
+        // case: valid four byte sequence
+
+        // TODO: complete
     };
 
     // TODO: cases of invalid four byte sequences
