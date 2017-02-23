@@ -1120,13 +1120,13 @@ fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
                 // no-op
             }
             Unicode::UTF8_3Bytes => {
-                if internal_buf.len() != 3 {
+                if internal_buf.len() < 3 {
                     // continue consume_while
                     return true;
                 }
             }
             Unicode::UTF8_4Bytes => {
-                if internal_buf.len() != 4 {
+                if internal_buf.len() < 4 {
                     // continue consume_while
                     return true;
                 }
