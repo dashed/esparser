@@ -2398,6 +2398,24 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
 }
 
 // TODO: test
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-SingleEscapeCharacter
+fn single_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Token> {
+    parse!{i;
+
+        let e = token(b'\'') <|>
+            token(b'"') <|>
+            token(b'\\') <|>
+            token(b'b') <|>
+            token(b'f') <|>
+            token(b'n') <|>
+            token(b'r') <|>
+            token(b't') <|>
+            token(b'v');
+
+        ret e
+    }
+}
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexEscapeSequence
 fn hex_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
     parse!{i;
