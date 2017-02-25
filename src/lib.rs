@@ -52,6 +52,8 @@ Bookmark:
 
 
 
+
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -285,6 +287,7 @@ impl Numbering for CurrentPosition {
         where B: Buffer<Token = Self::Token>
     {
         b.iterate(|c| {
+            // TODO: refactor from fn source_character
             if c == b'\n' {
                 self.0 += 1; // line num
                 self.1 = 0;  // col num
@@ -295,6 +298,7 @@ impl Numbering for CurrentPosition {
     }
 
     fn add(&mut self, t: Self::Token) {
+        // TODO: refactor from fn source_character
         if t == b'\n' {
             self.0 += 1; // line num
             self.1 = 0;  // col num
@@ -648,6 +652,7 @@ macro_rules! generate_list_parser {
 // TODO: better function? refactor this
 #[inline]
 fn string_to_unicode_char(s: &str) -> Option<char> {
+    // TODO: asset str len
     u32::from_str_radix(s, 16)
         .ok()
         .and_then(std::char::from_u32)
@@ -1139,7 +1144,7 @@ fn parse_utf8_char_test() {
 
         // case: invalid first byte sequence
 
-        for first_byte in 0x80 .. 0xC1 {
+        for first_byte in 0x80..0xC1 {
 
             // 0x80 to 0xBF are continuing byte markers
             // 0xC0 and 0xC1 re used for an invalid "overlong encoding" of ASCII characters
@@ -1556,7 +1561,7 @@ enum IdentifierStart {
     UnicodeIDStart(UnicodeIDStart),
     DollarSign,
     Underscore,
-    UnicodeEscapeSequence(UnicodeEscapeSequence)
+    UnicodeEscapeSequence(UnicodeEscapeSequence),
 }
 
 // TODO: test
@@ -1564,8 +1569,9 @@ enum IdentifierStart {
 fn identifier_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierStart> {
 
     #[inline]
-    fn escaped_unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeEscapeSequence> {
-        token(i, b'\\').then(unicode_escape_seq)
+    fn escaped_unicode_escape_seq<I: U8Input>(i: ESInput<I>)
+                                              -> ESParseResult<I, UnicodeEscapeSequence> {
+        token(i, b'\\').then(unicode_escape_sequence)
     }
 
     parse!{i;
@@ -1594,8 +1600,9 @@ enum IdentifierPart {
 fn identifier_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierPart> {
 
     #[inline]
-    fn escaped_unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeEscapeSequence> {
-        token(i, b'\\').then(unicode_escape_seq)
+    fn escaped_unicode_escape_seq<I: U8Input>(i: ESInput<I>)
+                                              -> ESParseResult<I, UnicodeEscapeSequence> {
+        token(i, b'\\').then(unicode_escape_sequence)
     }
 
     parse!{i;
@@ -2250,11 +2257,7 @@ impl MathematicalValue for HexDigits {
 fn hex_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexDigits> {
     on_error(i,
              |i| -> ESParseResult<I, HexDigits> {
-                 many1(i, hex_digit).bind(|i, buf: Vec<HexDigit>| {
-                    // TODO: remove
-                     // let contents = String::from_utf8_lossy(&buf).into_owned();
-                     i.ret(HexDigits(buf))
-                 })
+                 many1(i, hex_digit).bind(|i, buf: Vec<HexDigit>| i.ret(HexDigits(buf)))
              },
              |i| {
                  let loc = i.position();
@@ -2353,12 +2356,10 @@ fn hex_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexDigit> {
     }
 
     on_error(i, |i| satisfy(i, is_hex_digit), |i| {
-        let loc = i.position();
-        ErrorLocation::new(loc, "Expected hex digit (0 to F).".to_string())
-    })
-    .map(|x| {
-        HexDigit(x as char)
-    })
+            let loc = i.position();
+            ErrorLocation::new(loc, "Expected hex digit (0 to F).".to_string())
+        })
+        .map(|x| HexDigit(x as char))
 }
 
 // == 11.8.3.1 Static Semantics: MV ==
@@ -2387,6 +2388,7 @@ fn string_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, StringLiteral> 
     }
 }
 
+// TODO: this needs to be refactored
 // TODO: test
 #[inline]
 fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<I, String> {
@@ -2439,12 +2441,24 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
 enum EscapeSequence {
     CharacterEscapeSequence(CharacterEscapeSequence),
     Zero,
-    // TODO: fix
-    // HexEscapeSequence(HexEscapeSequence)
+    HexEscapeSequence(HexEscapeSequence),
+    UnicodeEscapeSequence(UnicodeEscapeSequence),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-EscapeSequence
+fn escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EscapeSequence> {
+    parse!{i;
+
+        let result =
+            (i -> character_escape_sequence(i).map(|x| EscapeSequence::CharacterEscapeSequence(x))) <|>
+            (i -> token(i, b'0').map(|_| EscapeSequence::Zero)) <|>
+            (i -> hex_escape_sequence(i).map(|x| EscapeSequence::HexEscapeSequence(x))) <|>
+            (i -> unicode_escape_sequence(i).map(|x| EscapeSequence::UnicodeEscapeSequence(x)));
+
+        ret result
+    }
+}
 
 enum CharacterEscapeSequence {
     SingleEscapeCharacter(SingleEscapeCharacter),
@@ -2453,14 +2467,14 @@ enum CharacterEscapeSequence {
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-CharacterEscapeSequence
-fn character_escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, CharacterEscapeSequence> {
-    or(i, |i| {
-        single_escape_character(i).map(|x| CharacterEscapeSequence::SingleEscapeCharacter(x))
-    }, |i| {
-        non_escape_character(i).map(|x| CharacterEscapeSequence::NonEscapeCharacter(x))
-    })
+fn character_escape_sequence<I: U8Input>(i: ESInput<I>)
+                                         -> ESParseResult<I, CharacterEscapeSequence> {
+    or(i,
+       |i| single_escape_character(i).map(|x| CharacterEscapeSequence::SingleEscapeCharacter(x)),
+       |i| non_escape_character(i).map(|x| CharacterEscapeSequence::NonEscapeCharacter(x)))
 }
 
+// TODO: enum SingleEscapeCharacterItem { ... }
 struct SingleEscapeCharacter(char);
 
 // TODO: test
@@ -2490,22 +2504,17 @@ struct NonEscapeCharacter(char);
 // http://www.ecma-international.org/ecma-262/7.0/#prod-NonEscapeCharacter
 fn non_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NonEscapeCharacter> {
     either(i,
-        |i| {
-            or(i, escape_character, |i| {
-                line_terminator(i).map(|_| ())
-            })
-        }, source_character)
-    .bind(|i, result| {
-        match result {
-            Either::Left(_left) => {
-                // TODO: fix error
-                i.err("Reason TBA.".into())
+           |i| or(i, escape_character, |i| line_terminator(i).map(|_| ())),
+           source_character)
+        .bind(|i, result| {
+            match result {
+                Either::Left(_left) => {
+                    // TODO: fix error
+                    i.err("Reason TBA.".into())
+                }
+                Either::Right(c) => i.ret(NonEscapeCharacter(c)),
             }
-            Either::Right(c) => {
-                i.ret(NonEscapeCharacter(c))
-            }
-        }
-    })
+        })
 }
 
 // TODO: test
@@ -2528,7 +2537,7 @@ struct HexEscapeSequence(HexDigit, HexDigit);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexEscapeSequence
-fn hex_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexEscapeSequence> {
+fn hex_escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexEscapeSequence> {
     parse!{i;
 
         token(b'x');
@@ -2569,7 +2578,7 @@ enum UnicodeEscapeSequence {
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeEscapeSequence
 // TODO: needs test
-fn unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeEscapeSequence> {
+fn unicode_escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeEscapeSequence> {
     either(i,
         |i| -> ESParseResult<I, HexDigits> {parse!{i;
             // e.g. u{9A9A}
@@ -2649,7 +2658,8 @@ fn hex_4_digits_test() {
     let i = InputPosition::new(&b"adad"[..], CurrentPosition::new());
     match hex_4_digits(i).into_inner().1 {
         Ok(result) => {
-            assert_eq!(result, Hex4Digits(HexDigit('a'), HexDigit('d'), HexDigit('a'), HexDigit('d')));
+            assert_eq!(result,
+                       Hex4Digits(HexDigit('a'), HexDigit('d'), HexDigit('a'), HexDigit('d')));
         }
         Err(_) => {
             assert!(false);
@@ -2792,9 +2802,7 @@ fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
                     let reason = format!("Reserved keyword may not be used as an identifier.");
                     i.err(ErrorLocation::new(loc, reason).into())
                 }
-                Either::Right(name) => {
-                    i.ret(Identifier(name))
-                }
+                Either::Right(name) => i.ret(Identifier(name)),
             }
         })
 }
@@ -3642,8 +3650,6 @@ fn call_expression<I: U8Input>(i: ESInput<I>,
 
     #[inline]
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
-
-
 
         let is_initial = {
             accumulator.borrow().is_initial()
