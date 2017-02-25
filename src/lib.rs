@@ -54,6 +54,7 @@ Bookmark:
 
 
 
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -960,8 +961,10 @@ impl CLike for Parameter {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-source-text
 
+struct SourceCharacter(char);
+
 // http://www.ecma-international.org/ecma-262/7.0/#prod-SourceCharacter
-fn source_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+fn source_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SourceCharacter> {
     // (from spec)
     // Regardless of the external source text encoding, a conforming ECMAScript implementation
     // processes the source text as if it was an equivalent sequence of SourceCharacter values,
@@ -969,6 +972,7 @@ fn source_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
     //
     // NOTE: For this implementation, enforce source text input to be UTF-8.
     parse_utf8_char(i)
+        .map(SourceCharacter)
 }
 
 #[test]
@@ -2436,7 +2440,50 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
     }
 }
 
+
+enum SingleStringCharacter {
+    SourceCharacter(SourceCharacter),
+    EscapeSequence(EscapeSequence),
+    LineContinuation(LineContinuation)
+}
+
 // TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-SingleStringCharacter
+fn single_string_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SingleStringCharacter> {
+
+    #[inline]
+    fn char_match<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SingleStringCharacter> {
+        either(i,
+            |i| {
+                parse!{i;
+                    (i -> token(i, b'"').map(|_| ())) <|>
+                    (i -> token(i, b'\\').map(|_| ())) <|>
+                    (i -> line_terminator(i).map(|_| ()));
+
+                    ret {()}
+                }
+            },
+            source_character)
+        .bind(|i, result| {
+            match result {
+                Either::Left(_) => {
+                    // TODO: err message
+                    i.err("Non-legal character.".into())
+                },
+                Either::Right(c) => i.ret(SingleStringCharacter::SourceCharacter(c))
+            }
+        })
+    }
+
+    parse!{i;
+        let result = char_match() <|>
+        (i -> token(i, b'\\').then(escape_sequence).map(SingleStringCharacter::EscapeSequence)) <|>
+        (i -> line_continuation(i).map(SingleStringCharacter::LineContinuation));
+
+        ret result
+    }
+}
+
 struct LineContinuation(LineTerminatorSequence);
 
 // TODO: test
@@ -2519,7 +2566,10 @@ fn non_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NonEscape
                     // TODO: fix error
                     i.err("Reason TBA.".into())
                 }
-                Either::Right(c) => i.ret(NonEscapeCharacter(c)),
+                Either::Right(c) => {
+                    let SourceCharacter(c) = c;
+                    i.ret(NonEscapeCharacter(c))
+                },
             }
         })
 }
