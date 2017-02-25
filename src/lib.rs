@@ -2400,10 +2400,10 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
 // TODO: test
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-SingleEscapeCharacter
-fn single_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Token> {
+fn single_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
     parse!{i;
 
-        let e = token(b'\'') <|>
+        token(b'\'') <|>
             token(b'"') <|>
             token(b'\\') <|>
             token(b'b') <|>
@@ -2413,13 +2413,58 @@ fn single_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, I::Tok
             token(b't') <|>
             token(b'v');
 
-        ret e
+        ret {
+            // NOTE: satisfied results are not used
+            ()
+        }
     }
 }
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-NonEscapeCharacter
+fn non_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+    either(i,
+        |i| {
+            or(i, escape_character, |i| {
+                line_terminator(i).map(|_| ())
+            })
+        }, source_character)
+    .bind(|i, result| {
+        match result {
+            Either::Left(_left) => {
+                // TODO: fix error
+                i.err("Reason TBA.".into())
+            }
+            Either::Right(c) => {
+                i.ret(c)
+            }
+        }
+    })
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-EscapeCharacter
+fn escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+    parse!{i;
+        single_escape_character() <|>
+        (i -> decimal_digit(i).map(|_| ())) <|>
+        (i -> token(i, b'x').map(|_| ())) <|>
+        (i -> token(i, b'u').map(|_| ()));
+
+        ret {
+            // NOTE: satisfied results are not used
+            ()
+        }
+    }
+}
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexEscapeSequence
 fn hex_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
     parse!{i;
+
         token(b'x');
+
         let digit_1 = hex_digit();
         let digit_2 = hex_digit();
 
@@ -2502,11 +2547,6 @@ fn unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeEsca
         }
     })
 }
-
-// TODO: remove
-// fn escaped_unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
-//     token(i, b'\\').then(unicode_escape_seq)
-// }
 
 #[derive(PartialEq, Debug)]
 struct Hex4Digits(char, char, char, char);
