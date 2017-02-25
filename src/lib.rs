@@ -57,6 +57,7 @@ Bookmark:
 
 
 
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -2187,12 +2188,18 @@ fn octal_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalInt
     }
 }
 
-struct OctalDigits(String);
+struct OctalDigits(Vec<OctalDigit>);
+
+impl OctalDigits {
+    fn as_string(&self) -> String {
+        self.0.clone().into_iter().map(|OctalDigit(c)| c).collect()
+    }
+}
 
 impl MathematicalValue for OctalDigits {
     // TODO: test
     fn mathematical_value(&self) -> i64 {
-        i64::from_str_radix(&self.0, 8).unwrap()
+        i64::from_str_radix(&self.as_string(), 8).unwrap()
     }
 }
 
@@ -2201,10 +2208,7 @@ impl MathematicalValue for OctalDigits {
 fn octal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalDigits> {
     on_error(i,
              |i| -> ESParseResult<I, OctalDigits> {
-                 many1(i, octal_digit).bind(|i, buf: Vec<u8>| {
-                     let contents = String::from_utf8_lossy(&buf).into_owned();
-                     i.ret(OctalDigits(contents))
-                 })
+                many1(i, octal_digit).bind(|i, buf: Vec<OctalDigit>| i.ret(OctalDigits(buf)))
              },
              |i| {
                  let loc = i.position();
@@ -2212,10 +2216,13 @@ fn octal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalDigits> {
              })
 }
 
+#[derive(Clone)]
+struct OctalDigit(char);
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-OctalDigit
 #[inline]
-fn octal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
+fn octal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalDigit> {
 
     #[inline]
     fn is_octal_digit(c: u8) -> bool {
@@ -2223,9 +2230,10 @@ fn octal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
     }
 
     on_error(i, |i| satisfy(i, is_octal_digit), |i| {
-        let loc = i.position();
-        ErrorLocation::new(loc, "Expected octal digit (0 to 7).".to_string())
-    })
+            let loc = i.position();
+            ErrorLocation::new(loc, "Expected octal digit (0 to 7).".to_string())
+        })
+        .map(|c| OctalDigit(c as char))
 
 }
 
@@ -2386,8 +2394,8 @@ enum StringLiteral {
 // http://www.ecma-international.org/ecma-262/7.0/#prod-StringLiteral
 fn string_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, StringLiteral> {
     or(i,
-        |i| {
-            parse!{i;
+       |i| {
+        parse!{i;
                 token(b'"');
 
                 let string = option(|i| double_string_characters(i).map(Some), None);
@@ -2396,9 +2404,9 @@ fn string_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, StringLiteral> 
 
                 ret StringLiteral::DoubleQuoted(string)
             }
-        },
-        |i| {
-            parse!{i;
+    },
+       |i| {
+        parse!{i;
                 token(b'\'');
 
                 let string = option(|i| single_string_characters(i).map(Some), None);
@@ -2407,7 +2415,7 @@ fn string_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, StringLiteral> 
 
                 ret StringLiteral::SingleQuoted(string)
             }
-        })
+    })
 }
 
 // NOTE: This isn't Vec<DoubleStringCharacter> since DoubleStringCharactersItem::String is better than
