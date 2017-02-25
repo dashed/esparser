@@ -58,6 +58,7 @@ Bookmark:
 
 
 
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -2133,12 +2134,18 @@ fn binary_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryI
     }
 }
 
-struct BinaryDigits(String);
+struct BinaryDigits(Vec<BinaryDigit>);
+
+impl BinaryDigits {
+    fn as_string(&self) -> String {
+        self.0.clone().into_iter().map(|BinaryDigit(c)| c).collect()
+    }
+}
 
 impl MathematicalValue for BinaryDigits {
     // TODO: test
     fn mathematical_value(&self) -> i64 {
-        i64::from_str_radix(&self.0, 2).unwrap()
+        i64::from_str_radix(&self.as_string(), 2).unwrap()
     }
 }
 
@@ -2147,10 +2154,7 @@ impl MathematicalValue for BinaryDigits {
 fn binary_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryDigits> {
     on_error(i,
              |i| -> ESParseResult<I, BinaryDigits> {
-                 many1(i, binary_digit).bind(|i, buf: Vec<u8>| {
-                     let contents = String::from_utf8_lossy(&buf).into_owned();
-                     i.ret(BinaryDigits(contents))
-                 })
+                 many1(i, binary_digit).bind(|i, buf: Vec<BinaryDigit>| i.ret(BinaryDigits(buf)))
              },
              |i| {
                  let loc = i.position();
@@ -2158,10 +2162,13 @@ fn binary_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryDigits> {
              })
 }
 
+#[derive(Clone)]
+struct BinaryDigit(char);
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BinaryDigit
 #[inline]
-fn binary_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
+fn binary_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryDigit> {
 
     #[inline]
     fn is_binary_digit(c: u8) -> bool {
@@ -2169,10 +2176,10 @@ fn binary_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
     }
 
     on_error(i, |i| satisfy(i, is_binary_digit), |i| {
-        let loc = i.position();
-        ErrorLocation::new(loc, "Expected binary digit (0 or 1).".to_string())
-    })
-
+            let loc = i.position();
+            ErrorLocation::new(loc, "Expected binary digit (0 or 1).".to_string())
+        })
+        .map(|c| BinaryDigit(c as char))
 }
 
 struct OctalIntegerLiteral(OctalDigits);
@@ -2208,7 +2215,7 @@ impl MathematicalValue for OctalDigits {
 fn octal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalDigits> {
     on_error(i,
              |i| -> ESParseResult<I, OctalDigits> {
-                many1(i, octal_digit).bind(|i, buf: Vec<OctalDigit>| i.ret(OctalDigits(buf)))
+                 many1(i, octal_digit).bind(|i, buf: Vec<OctalDigit>| i.ret(OctalDigits(buf)))
              },
              |i| {
                  let loc = i.position();
