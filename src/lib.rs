@@ -2440,6 +2440,48 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
     }
 }
 
+enum DoubleStringCharacter {
+    SourceCharacter(SourceCharacter),
+    EscapeSequence(EscapeSequence),
+    LineContinuation(LineContinuation)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-DoubleStringCharacter
+fn double_string_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DoubleStringCharacter> {
+
+    #[inline]
+    fn char_match<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DoubleStringCharacter> {
+        either(i,
+            |i| {
+                parse!{i;
+                    (i -> token(i, b'"').map(|_| ())) <|>
+                    (i -> token(i, b'\\').map(|_| ())) <|>
+                    (i -> line_terminator(i).map(|_| ()));
+
+                    ret {()}
+                }
+            },
+            source_character)
+        .bind(|i, result| {
+            match result {
+                Either::Left(_) => {
+                    // TODO: err message
+                    i.err("Non-legal character.".into())
+                },
+                Either::Right(c) => i.ret(DoubleStringCharacter::SourceCharacter(c))
+            }
+        })
+    }
+
+    parse!{i;
+        let result = char_match() <|>
+        (i -> token(i, b'\\').then(escape_sequence).map(DoubleStringCharacter::EscapeSequence)) <|>
+        (i -> line_continuation(i).map(DoubleStringCharacter::LineContinuation));
+
+        ret result
+    }
+}
 
 enum SingleStringCharacter {
     SourceCharacter(SourceCharacter),
