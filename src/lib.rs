@@ -2230,12 +2230,19 @@ fn hex_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexInteger
     }
 }
 
-struct HexDigits(String);
+#[derive(PartialEq, Debug)]
+struct HexDigits(Vec<HexDigit>);
+
+impl HexDigits {
+    fn as_string(&self) -> String {
+        self.0.clone().into_iter().map(|HexDigit(c)| c).collect()
+    }
+}
 
 impl MathematicalValue for HexDigits {
     // TODO: test
     fn mathematical_value(&self) -> i64 {
-        i64::from_str_radix(&self.0, 16).unwrap()
+        i64::from_str_radix(&self.as_string(), 16).unwrap()
     }
 }
 
@@ -2243,9 +2250,10 @@ impl MathematicalValue for HexDigits {
 fn hex_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexDigits> {
     on_error(i,
              |i| -> ESParseResult<I, HexDigits> {
-                 many1(i, hex_digit).bind(|i, buf: Vec<u8>| {
-                     let contents = String::from_utf8_lossy(&buf).into_owned();
-                     i.ret(HexDigits(contents))
+                 many1(i, hex_digit).bind(|i, buf: Vec<HexDigit>| {
+                    // TODO: remove
+                     // let contents = String::from_utf8_lossy(&buf).into_owned();
+                     i.ret(HexDigits(buf))
                  })
              },
              |i| {
@@ -2260,8 +2268,7 @@ fn hex_digits_test() {
     let i = InputPosition::new(&b"e"[..], CurrentPosition::new());
     match hex_digits(i).into_inner().1 {
         Ok(result) => {
-            let HexDigits(result) = result;
-            assert_eq!(&result, "e");
+            assert_eq!(result, HexDigits(vec![HexDigit('e')]));
         }
         Err(_) => {
             assert!(false);
@@ -2271,8 +2278,7 @@ fn hex_digits_test() {
     let i = InputPosition::new(&b"ad"[..], CurrentPosition::new());
     match hex_digits(i).into_inner().1 {
         Ok(result) => {
-            let HexDigits(result) = result;
-            assert_eq!(&result, "ad");
+            assert_eq!(result, HexDigits(vec![HexDigit('a'), HexDigit('d')]));
         }
         Err(_) => {
             assert!(false);
@@ -2334,9 +2340,12 @@ fn hex_digits_test() {
 //     }
 // }
 
+#[derive(PartialEq, Debug, Clone)]
+struct HexDigit(char);
+
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexDigit
 #[inline]
-fn hex_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
+fn hex_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexDigit> {
 
     #[inline]
     fn is_hex_digit(c: u8) -> bool {
@@ -2346,6 +2355,9 @@ fn hex_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
     on_error(i, |i| satisfy(i, is_hex_digit), |i| {
         let loc = i.position();
         ErrorLocation::new(loc, "Expected hex digit (0 to F).".to_string())
+    })
+    .map(|x| {
+        HexDigit(x as char)
     })
 }
 
@@ -2424,15 +2436,36 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
 
 // TODO: test
 
-// TODO: test
-// http://www.ecma-international.org/ecma-262/7.0/#prod-CharacterEscapeSequence
-fn character_escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
-    or(i, single_escape_character, non_escape_character)
+enum EscapeSequence {
+    CharacterEscapeSequence(CharacterEscapeSequence),
+    Zero,
+    // TODO: fix
+    // HexEscapeSequence(HexEscapeSequence)
 }
 
 // TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-EscapeSequence
+
+enum CharacterEscapeSequence {
+    SingleEscapeCharacter(SingleEscapeCharacter),
+    NonEscapeCharacter(NonEscapeCharacter),
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-CharacterEscapeSequence
+fn character_escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, CharacterEscapeSequence> {
+    or(i, |i| {
+        single_escape_character(i).map(|x| CharacterEscapeSequence::SingleEscapeCharacter(x))
+    }, |i| {
+        non_escape_character(i).map(|x| CharacterEscapeSequence::NonEscapeCharacter(x))
+    })
+}
+
+struct SingleEscapeCharacter(char);
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-SingleEscapeCharacter
-fn single_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+fn single_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SingleEscapeCharacter> {
     parse!{i;
 
         let t = token(b'\'') <|>
@@ -2446,14 +2479,16 @@ fn single_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> 
             token(b'v');
 
         ret {
-            t as char
+            SingleEscapeCharacter(t as char)
         }
     }
 }
 
+struct NonEscapeCharacter(char);
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-NonEscapeCharacter
-fn non_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+fn non_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NonEscapeCharacter> {
     either(i,
         |i| {
             or(i, escape_character, |i| {
@@ -2467,7 +2502,7 @@ fn non_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
                 i.err("Reason TBA.".into())
             }
             Either::Right(c) => {
-                i.ret(c)
+                i.ret(NonEscapeCharacter(c))
             }
         }
     })
@@ -2489,9 +2524,11 @@ fn escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
     }
 }
 
+struct HexEscapeSequence(HexDigit, HexDigit);
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-HexEscapeSequence
-fn hex_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+fn hex_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexEscapeSequence> {
     parse!{i;
 
         token(b'x');
@@ -2500,10 +2537,12 @@ fn hex_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
         let digit_2 = hex_digit();
 
         ret {
-            let mut result = String::with_capacity(2);
-            result.push(digit_1 as char);
-            result.push(digit_2 as char);
-            string_to_unicode_char(&result).unwrap()
+            HexEscapeSequence(digit_1, digit_2)
+            // TODO: remove
+            // let mut result = String::with_capacity(2);
+            // result.push(digit_1 as char);
+            // result.push(digit_2 as char);
+            // string_to_unicode_char(&result).unwrap()
         }
     }
 }
@@ -2513,19 +2552,20 @@ enum UnicodeEscapeSequence {
     Hex4Digits(Hex4Digits),
 }
 
-impl UnicodeEscapeSequence {
-    fn as_char(&self) -> char {
-        match *self {
-            UnicodeEscapeSequence::HexDigits(ref sequence) => {
-                let &HexDigits(ref sequence) = sequence;
-                string_to_unicode_char(sequence).unwrap()
-            }
-            UnicodeEscapeSequence::Hex4Digits(ref sequence) => {
-                string_to_unicode_char(&sequence.as_string()).unwrap()
-            }
-        }
-    }
-}
+// TODO: remove
+// impl UnicodeEscapeSequence {
+//     fn as_char(&self) -> char {
+//         match *self {
+//             UnicodeEscapeSequence::HexDigits(ref sequence) => {
+//                 let &HexDigits(ref sequence) = sequence;
+//                 string_to_unicode_char(sequence).unwrap()
+//             }
+//             UnicodeEscapeSequence::Hex4Digits(ref sequence) => {
+//                 string_to_unicode_char(&sequence.as_string()).unwrap()
+//             }
+//         }
+//     }
+// }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeEscapeSequence
 // TODO: needs test
@@ -2553,11 +2593,12 @@ fn unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeEsca
     .bind(|i, result| {
         match result {
             Either::Left(sequence) => {
+
                 // == 11.8.4.1 Static Semantics: Early Errors ==
                 //
                 // http://www.ecma-international.org/ecma-262/7.0/#sec-string-literals-static-semantics-early-errors
                 if (
-                        sequence.0.chars().next().unwrap() != '0' &&
+                        sequence.0[0] != HexDigit('0') &&
                         sequence.0.len() > 6) ||
                     sequence.mathematical_value() > 1114111 /* 10ffff */ {
 
@@ -2580,13 +2621,13 @@ fn unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeEsca
 }
 
 #[derive(PartialEq, Debug)]
-struct Hex4Digits(char, char, char, char);
+struct Hex4Digits(HexDigit, HexDigit, HexDigit, HexDigit);
 
-impl Hex4Digits {
-    fn as_string(&self) -> String {
-        format!("{}{}{}{}", self.0, self.1, self.2, self.3)
-    }
-}
+// impl Hex4Digits {
+//     fn as_string(&self) -> String {
+//         format!("{}{}{}{}", self.0, self.1, self.2, self.3)
+//     }
+// }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Hex4Digits
 fn hex_4_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Hex4Digits> {
@@ -2598,7 +2639,7 @@ fn hex_4_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Hex4Digits> {
         let digit_4 = hex_digit();
 
         ret {
-            Hex4Digits(digit_1 as char, digit_2 as char, digit_3 as char, digit_4 as char)
+            Hex4Digits(digit_1, digit_2, digit_3, digit_4)
         }
     }
 }
@@ -2608,7 +2649,7 @@ fn hex_4_digits_test() {
     let i = InputPosition::new(&b"adad"[..], CurrentPosition::new());
     match hex_4_digits(i).into_inner().1 {
         Ok(result) => {
-            assert_eq!(result, Hex4Digits('a', 'd', 'a', 'd'));
+            assert_eq!(result, Hex4Digits(HexDigit('a'), HexDigit('d'), HexDigit('a'), HexDigit('d')));
         }
         Err(_) => {
             assert!(false);
