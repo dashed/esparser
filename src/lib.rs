@@ -44,21 +44,6 @@ Bookmark:
 
  */
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -1980,47 +1965,41 @@ fn decimal_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalLiteral
     })
 }
 
-struct DecimalIntegerLiteral(DecimalDigits);
+enum DecimalIntegerLiteral {
+    Zero,
+    NonZero(NonZeroDigit, Option<DecimalDigits>),
+}
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalIntegerLiteral
 fn decimal_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalIntegerLiteral> {
-    either(i,
-           // left
-           |i| token(i, b'0'),
-           // right
-           |i| {
+    or(i,
+       |i| token(i, b'0').map(|_| DecimalIntegerLiteral::Zero),
+       |i| {
         parse!{i;
-            // TODO: optimize this
+
             let prefix = non_zero_digit();
-            let suffix = decimal_digits();
+            let suffix = option(|i| decimal_digits(i).map(Some), None);
+
             ret {
-                let DecimalDigits(suffix) = suffix;
-                let mut s = String::with_capacity(suffix.len() + 1);
-                s.push(prefix as char);
-                s.push_str(&suffix);
-                DecimalDigits(s)
+                DecimalIntegerLiteral::NonZero(prefix, suffix)
             }
         }
     })
-        .bind(|i, result| {
-            match result {
-                Either::Left(c) => {
-                    let mut s = String::with_capacity(1);
-                    s.push(c as char);
-                    i.ret(DecimalIntegerLiteral(DecimalDigits(s)))
-                }
-                Either::Right(dd) => i.ret(DecimalIntegerLiteral(dd)),
-            }
-        })
 }
 
-struct DecimalDigits(String);
+struct DecimalDigits(Vec<DecimalDigit>);
+
+impl DecimalDigits {
+    fn as_string(&self) -> String {
+        self.0.clone().into_iter().map(|DecimalDigit(c)| c).collect()
+    }
+}
 
 impl MathematicalValue for DecimalDigits {
     // TODO: test
     fn mathematical_value(&self) -> i64 {
-        i64::from_str_radix(&self.0, 10).unwrap()
+        i64::from_str_radix(&self.as_string(), 10).unwrap()
     }
 }
 
@@ -2029,10 +2008,7 @@ impl MathematicalValue for DecimalDigits {
 fn decimal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalDigits> {
     on_error(i,
              |i| -> ESParseResult<I, DecimalDigits> {
-                 many1(i, decimal_digit).bind(|i, buf: Vec<u8>| {
-                     let contents = String::from_utf8_lossy(&buf).into_owned();
-                     i.ret(DecimalDigits(contents))
-                 })
+                many1(i, decimal_digit).bind(|i, buf: Vec<DecimalDigit>| i.ret(DecimalDigits(buf)))
              },
              |i| {
                  let loc = i.position();
@@ -2040,9 +2016,12 @@ fn decimal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalDigits> 
              })
 }
 
+#[derive(Clone)]
+struct DecimalDigit(char);
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-DecimalDigit
-fn decimal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
+fn decimal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalDigit> {
 
     #[inline]
     fn is_decimal_digit(c: u8) -> bool {
@@ -2050,14 +2029,17 @@ fn decimal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
     }
 
     on_error(i, |i| satisfy(i, is_decimal_digit), |i| {
-        let loc = i.position();
-        ErrorLocation::new(loc, "Expected decimal digit (0 to 9).".to_string())
-    })
+            let loc = i.position();
+            ErrorLocation::new(loc, "Expected decimal digit (0 to 9).".to_string())
+        })
+        .map(|c| DecimalDigit(c as char))
 }
+
+struct NonZeroDigit(char);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-NonZeroDigit
-fn non_zero_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
+fn non_zero_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NonZeroDigit> {
 
     #[inline]
     fn is_non_zero_digit(c: u8) -> bool {
@@ -2065,9 +2047,10 @@ fn non_zero_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, u8> {
     }
 
     on_error(i, |i| satisfy(i, is_non_zero_digit), |i| {
-        let loc = i.position();
-        ErrorLocation::new(loc, "Expected non-zero digit (1 to 9).".to_string())
-    })
+            let loc = i.position();
+            ErrorLocation::new(loc, "Expected non-zero digit (1 to 9).".to_string())
+        })
+        .map(|c| NonZeroDigit(c as char))
 }
 
 struct ExponentPart(SignedInteger);
