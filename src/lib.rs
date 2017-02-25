@@ -1525,7 +1525,7 @@ fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Comment> {
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-names-and-keywords
 
-struct IdentifierName(String);
+struct IdentifierName(IdentifierStart, Vec<IdentifierStart>, Vec<IdentifierPart>);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierName
@@ -1535,15 +1535,12 @@ fn identifier_name<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierName
              |i| -> ESParseResult<I, IdentifierName> {
         parse!{i;
 
-                let start: Vec<char> = many1(identifier_start);
-                let rest: Vec<char> = many(identifier_part);
+                let start = identifier_start();
+                let more_start: Vec<IdentifierStart> = many(identifier_start);
+                let rest: Vec<IdentifierPart> = many(identifier_part);
 
                 ret {
-                    // TODO: room for optimization
-                    let mut start: String = start.into_iter().collect();
-                    let rest: String = rest.into_iter().collect();
-                    start.push_str(&rest);
-                    IdentifierName(start)
+                    IdentifierName(start, more_start, rest)
                 }
             }
     },
@@ -1555,59 +1552,80 @@ fn identifier_name<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierName
 
 }
 
+enum IdentifierStart {
+    UnicodeIDStart(UnicodeIDStart),
+    DollarSign,
+    Underscore,
+    UnicodeEscapeSequence(UnicodeEscapeSequence)
+}
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierStart
-fn identifier_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+fn identifier_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierStart> {
 
     #[inline]
-    fn escaped_unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+    fn escaped_unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeEscapeSequence> {
         token(i, b'\\').then(unicode_escape_seq)
-            .map(|x| x.as_char())
     }
 
     parse!{i;
 
-        let start = unicode_id_start() <|>
-        token_as_char(b'$') <|>
-        token_as_char(b'_') <|>
-        escaped_unicode_escape_seq();
+        let start =
+        (i -> unicode_id_start(i).map(|x| IdentifierStart::UnicodeIDStart(x))) <|>
+        (i -> token_as_char(i, b'$').map(|_| IdentifierStart::DollarSign)) <|>
+        (i -> token_as_char(i, b'_').map(|_| IdentifierStart::Underscore)) <|>
+        (i -> escaped_unicode_escape_seq(i).map(|x| IdentifierStart::UnicodeEscapeSequence(x)));
 
         ret start
     }
 }
 
+enum IdentifierPart {
+    UnicodeIDContinue(UnicodeIDContinue),
+    DollarSign,
+    Underscore,
+    UnicodeEscapeSequence(UnicodeEscapeSequence),
+    ZeroWidthNonJoiner, // ZWNJ
+    ZeroWidthJoiner, // ZWJ
+}
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-IdentifierPart
-fn identifier_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+fn identifier_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierPart> {
 
     #[inline]
-    fn escaped_unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+    fn escaped_unicode_escape_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeEscapeSequence> {
         token(i, b'\\').then(unicode_escape_seq)
-            .map(|x| x.as_char())
     }
 
     parse!{i;
 
-        let part = unicode_id_continue() <|>
-        token_as_char(b'$') <|>
-        token_as_char(b'_') <|>
-        escaped_unicode_escape_seq() <|>
-        parse_utf8_char_of_bytes(b"\x200C") <|> // <ZWNJ>
-        parse_utf8_char_of_bytes(b"\x200D"); // <ZWJ>
+        let part =
+        (i -> unicode_id_continue(i).map(|x| IdentifierPart::UnicodeIDContinue(x))) <|>
+        (i -> token_as_char(i, b'$').map(|_| IdentifierPart::DollarSign)) <|>
+        (i -> token_as_char(i, b'_').map(|_| IdentifierPart::Underscore)) <|>
+        (i -> escaped_unicode_escape_seq(i).map(|x| IdentifierPart::UnicodeEscapeSequence(x))) <|>
+        // <ZWNJ> (i.e. Zero-width non-joiner)
+        (i -> parse_utf8_char_of_bytes(i, b"\x200C").map(|x| IdentifierPart::ZeroWidthNonJoiner)) <|>
+        // <ZWJ> (i.e. Zero-width joiner)
+        (i -> parse_utf8_char_of_bytes(i, b"\x200D").map(|x| IdentifierPart::ZeroWidthJoiner));
 
         ret part
     }
 }
 
+#[derive(Debug, PartialEq)]
+struct UnicodeIDStart(char);
+
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDStart
-fn unicode_id_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+fn unicode_id_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeIDStart> {
 
     // any Unicode code point with the Unicode property "ID_Start"
 
     parse_utf8_char(i).bind(|i, c: char| {
         // TODO: https://github.com/rust-lang/rust/issues/4928
         if c.is_xid_start() {
-            i.ret(c)
+            i.ret(UnicodeIDStart(c))
         } else {
             // TODO: better error
             let loc = i.position();
@@ -1623,7 +1641,10 @@ fn unicode_id_start_test() {
     let i = InputPosition::new("a".as_bytes(), CurrentPosition::new());
     match unicode_id_start(i).into_inner().1 {
         Ok(result) => {
-            assert_eq!(result, 'a');
+            let c = 'a';
+            assert!(c.is_xid_start());
+
+            assert_eq!(result, UnicodeIDStart(c));
         }
         Err(_) => {
             assert!(false);
@@ -1645,12 +1666,15 @@ fn unicode_id_start_test() {
     }
 }
 
+#[derive(Debug, PartialEq)]
+struct UnicodeIDContinue(char);
+
 // http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeIDContinue
-fn unicode_id_continue<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+fn unicode_id_continue<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeIDContinue> {
     parse_utf8_char(i).bind(|i, c: char| {
 
         if c.is_xid_continue() {
-            i.ret(c)
+            i.ret(UnicodeIDContinue(c))
         } else {
             // TODO: better error
             let loc = i.position();
@@ -1670,7 +1694,8 @@ fn unicode_id_continue_test() {
         let i = InputPosition::new(input.as_bytes(), CurrentPosition::new());
         match unicode_id_continue(i).into_inner().1 {
             Ok(result) => {
-                assert_eq!(result, input.chars().next().unwrap());
+                let x = input.chars().next().unwrap();
+                assert_eq!(result, UnicodeIDContinue(x));
             }
             Err(_) => {
                 assert!(false);
@@ -2711,7 +2736,7 @@ fn label_identifier<I: U8Input>(i: ESInput<I>,
 
 }
 
-struct Identifier(String);
+struct Identifier(IdentifierName);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Identifier
@@ -2727,7 +2752,6 @@ fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
                     i.err(ErrorLocation::new(loc, reason).into())
                 }
                 Either::Right(name) => {
-                    let IdentifierName(name) = name;
                     i.ret(Identifier(name))
                 }
             }
