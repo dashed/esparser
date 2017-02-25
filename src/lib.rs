@@ -2059,11 +2059,16 @@ struct ExponentPart(SignedInteger);
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ExponentPart
 fn exponent_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ExponentPart> {
     parse!{i;
-        // http://www.ecma-international.org/ecma-262/7.0/#prod-ExponentIndicator
-        token(b'e') <|> token(b'E');
+        exponent_indicator();
         let result = signed_integer();
         ret ExponentPart(result)
     }
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ExponentIndicator
+fn exponent_indicator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+    or(i, |i| token(i, b'e'), |i| token(i, b'E')).map(|_| ())
 }
 
 enum SignedInteger {
