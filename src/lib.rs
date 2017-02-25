@@ -2398,12 +2398,19 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
 }
 
 // TODO: test
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-CharacterEscapeSequence
+fn character_escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+    or(i, single_escape_character, non_escape_character)
+}
+
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-SingleEscapeCharacter
-fn single_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+fn single_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
     parse!{i;
 
-        token(b'\'') <|>
+        let t = token(b'\'') <|>
             token(b'"') <|>
             token(b'\\') <|>
             token(b'b') <|>
@@ -2414,8 +2421,7 @@ fn single_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
             token(b'v');
 
         ret {
-            // NOTE: satisfied results are not used
-            ()
+            t as char
         }
     }
 }
@@ -2446,7 +2452,7 @@ fn non_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
 // http://www.ecma-international.org/ecma-262/7.0/#prod-EscapeCharacter
 fn escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
     parse!{i;
-        single_escape_character() <|>
+        (i -> single_escape_character(i).map(|_| ())) <|>
         (i -> decimal_digit(i).map(|_| ())) <|>
         (i -> token(i, b'x').map(|_| ())) <|>
         (i -> token(i, b'u').map(|_| ()));
