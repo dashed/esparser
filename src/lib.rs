@@ -1851,29 +1851,16 @@ enum Bool {
     False,
 }
 
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BooleanLiteral
 #[inline]
 fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
     on_error(i,
              |i| {
-        either(i,
-               // left
-               |i| string(i, b"true"),
-               // right
-               |i| string(i, b"false"))
-            .bind(|i, result| -> ESParseResult<I, Bool> {
-                match result {
-                    Either::Left(_left) => {
-                        let _left: I::Buffer = _left;
-                        i.ret(Bool::True)
-                    }
-                    Either::Right(_left) => {
-                        let _left: I::Buffer = _left;
-                        i.ret(Bool::False)
-                    }
-                }
-            })
-    },
+                 or(i,
+                    |i| string(i, b"true").map(|_| Bool::True),
+                    |i| string(i, b"false").map(|_| Bool::False))
+             },
              |i| {
                  let loc = i.position();
                  ErrorLocation::new(loc, "Expected boolean literal.".to_string())
@@ -2008,7 +1995,7 @@ impl MathematicalValue for DecimalDigits {
 fn decimal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalDigits> {
     on_error(i,
              |i| -> ESParseResult<I, DecimalDigits> {
-                many1(i, decimal_digit).bind(|i, buf: Vec<DecimalDigit>| i.ret(DecimalDigits(buf)))
+                 many1(i, decimal_digit).bind(|i, buf: Vec<DecimalDigit>| i.ret(DecimalDigits(buf)))
              },
              |i| {
                  let loc = i.position();
