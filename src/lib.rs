@@ -2378,67 +2378,36 @@ trait MathematicalValue {
 // == 11.8.4 String Literals ==
 
 enum StringLiteral {
-    SingleQuoted(String),
-    DoubleQuoted(String),
+    SingleQuoted(Option<SingleStringCharacters>),
+    DoubleQuoted(Option<DoubleStringCharacters>),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-StringLiteral
 fn string_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, StringLiteral> {
-    parse!{i;
-        let quoted_string =
-        (i -> __string_literal(i, b'\'').map(|s| StringLiteral::SingleQuoted(s))) <|>
-        (i -> __string_literal(i, b'\"').map(|s| StringLiteral::DoubleQuoted(s)));
-        ret quoted_string
-    }
-}
-
-// TODO: this needs to be refactored
-// TODO: test
-#[inline]
-fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<I, String> {
-
-    #[inline]
-    fn string_char<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<I, String> {
-        either(i,
-               |i| {
+    or(i,
+        |i| {
             parse!{i;
-                token(b'\\');
-                token(quote_type);
-                ret {
-                    (quote_type as char).to_string()
-                }
+                token(b'"');
+
+                let string = option(|i| double_string_characters(i).map(Some), None);
+
+                token(b'"');
+
+                ret StringLiteral::DoubleQuoted(string)
             }
         },
-               parse_utf8_char)
-            .bind(|i, result| {
-                match result {
-                    Either::Left(escaped) => i.ret(escaped),
-                    Either::Right(c) => {
-                        if c == (quote_type as char) {
-                            i.err("End of string".into())
-                        } else {
-                            i.ret(c.to_string())
-                        }
-                    }
-                }
-            })
-    }
+        |i| {
+            parse!{i;
+                token(b'\'');
 
-    parse!{i;
-        token(quote_type);
-        let s: Vec<String> = many(|i| string_char(i, quote_type));
-        token(quote_type);
+                let string = option(|i| single_string_characters(i).map(Some), None);
 
-        ret {
-            s
-            .iter()
-            .fold(String::new(), |mut acc, s| {
-                acc.push_str(&s);
-                acc
-            })
-        }
-    }
+                token(b'\'');
+
+                ret StringLiteral::SingleQuoted(string)
+            }
+        })
 }
 
 struct DoubleStringCharacters(Vec<DoubleStringCharactersItem>);
