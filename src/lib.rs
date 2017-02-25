@@ -2437,6 +2437,13 @@ fn __string_literal<I: U8Input>(i: ESInput<I>, quote_type: u8) -> ESParseResult<
 }
 
 // TODO: test
+struct LineContinuation(LineTerminatorSequence);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LineContinuation
+fn line_continuation<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineContinuation> {
+    token(i, b'\\').then(line_terminator_seq).map(|x| LineContinuation(x))
+}
 
 enum EscapeSequence {
     CharacterEscapeSequence(CharacterEscapeSequence),
