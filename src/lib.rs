@@ -2410,6 +2410,8 @@ fn string_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, StringLiteral> 
         })
 }
 
+// NOTE: This isn't Vec<DoubleStringCharacter> since DoubleStringCharactersItem::String is better than
+//       DoubleStringCharacter::SourceCharacter
 struct DoubleStringCharacters(Vec<DoubleStringCharactersItem>);
 
 enum DoubleStringCharactersItem {
