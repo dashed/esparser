@@ -1046,6 +1046,10 @@ fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
 
         match pattern {
             Unicode::UTF8_1Byte => {
+
+                // TODO:
+                // unreachable!();
+
                 // invariant violation
                 result = None;
                 // break from consume_while
