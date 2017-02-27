@@ -2405,7 +2405,7 @@ fn string_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, StringLiteral> 
 struct DoubleStringCharacters(Vec<DoubleStringCharactersItem>);
 
 enum DoubleStringCharactersItem {
-    // many SingleStringCharacter::SourceCharacter merged together
+    // many DoubleStringCharacter::SourceCharacter merged together
     String(String),
     EscapeSequence(EscapeSequence),
     LineContinuation(LineContinuation),
@@ -2415,76 +2415,50 @@ enum DoubleStringCharactersItem {
 // http://www.ecma-international.org/ecma-262/7.0/#prod-DoubleStringCharacters
 fn double_string_characters<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DoubleStringCharacters> {
 
-    let mut chars: Vec<DoubleStringCharactersItem> = vec![];
-    let mut string_buf: Vec<SourceCharacter> = vec![];
+    many1(i, double_string_character)
+        .bind(|i, chars: Vec<DoubleStringCharacter>| {
 
-    let mut should_continue = true;
+            let mut result: Vec<DoubleStringCharactersItem> = vec![];
 
-    let mut parse_result: ESParseResult<I, ()> = double_string_character(i)
-        .bind(|i, c| {
-            match c {
-                DoubleStringCharacter::SourceCharacter(c) => string_buf.push(c),
-                DoubleStringCharacter::EscapeSequence(e) => {
-                    chars.push(DoubleStringCharactersItem::EscapeSequence(e))
-                }
-                DoubleStringCharacter::LineContinuation(l) => {
-                    chars.push(DoubleStringCharactersItem::LineContinuation(l))
-                }
-            }
-            i.ret(())
-        })
-        .map_err(|e| {
-            should_continue = false;
-            e
-        });
+            let mut string_buf = String::new();
 
+            for c in chars.into_iter() {
 
-    while should_continue {
-        parse_result = parse_result.then(double_string_character)
-            .bind(|i, c| {
-                let should_flush_string_buf = match *(&c) {
-                    DoubleStringCharacter::SourceCharacter(SourceCharacter(c)) => {
-                        string_buf.push(SourceCharacter(c));
-                        false
+                match c {
+                    DoubleStringCharacter::SourceCharacter(c) => {
+                        let SourceCharacter(c) = c;
+                        string_buf.push(c);
+                        continue;
+                    },
+                    _ => {
+                        string_buf.shrink_to_fit();
+                        if string_buf.len() >= 1 {
+                            let moved_string_buf = mem::replace(&mut string_buf, String::new());
+                            result.push(DoubleStringCharactersItem::String(moved_string_buf));
+                        }
                     }
-                    _ => true,
-                };
-
-                if should_flush_string_buf {
-
-                    if string_buf.len() >= 1 {
-
-                        let moved_string_buf = mem::replace(&mut string_buf, vec![]);
-
-                        let cured_string: String = moved_string_buf.into_iter()
-                            .map(|SourceCharacter(c)| {
-                                let c: char = c;
-                                c
-                            })
-                            .collect();
-
-                        chars.push(DoubleStringCharactersItem::String(cured_string));
-                    }
-
                 }
 
                 match c {
                     DoubleStringCharacter::SourceCharacter(_) => {
-                        // no-op
-                    }
+                        unreachable!();
+                    },
                     DoubleStringCharacter::EscapeSequence(e) => {
-                        chars.push(DoubleStringCharactersItem::EscapeSequence(e))
+                        result.push(DoubleStringCharactersItem::EscapeSequence(e))
                     }
                     DoubleStringCharacter::LineContinuation(l) => {
-                        chars.push(DoubleStringCharactersItem::LineContinuation(l))
+                        result.push(DoubleStringCharactersItem::LineContinuation(l))
                     }
                 }
+            }
 
-                i.ret(())
-            })
-    }
+            string_buf.shrink_to_fit();
+            if string_buf.len() >= 1 {
+                result.push(DoubleStringCharactersItem::String(string_buf));
+            }
 
-    parse_result.then(|i| i.ret(DoubleStringCharacters(chars)))
+            i.ret(DoubleStringCharacters(result))
+        })
 }
 
 // NOTE: This isn't Vec<SingleStringCharacter> since SingleStringCharactersItem::String is better than
@@ -2555,6 +2529,7 @@ enum DoubleStringCharacter {
     LineContinuation(LineContinuation),
 }
 
+// TODO: test case: empty input
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-DoubleStringCharacter
 fn double_string_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DoubleStringCharacter> {
