@@ -2848,6 +2848,19 @@ fn hex_4_digits_test() {
     }
 
 
+enum TemplateSubstitutionTail {
+    TemplateMiddle(TemplateMiddle),
+    TemplateTail(TemplateTail)
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateSubstitutionTail
+fn template_substitution_tail<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, TemplateSubstitutionTail> {
+    or(i,
+        |i| template_middle(i).map(|x| TemplateSubstitutionTail::TemplateMiddle),
+        |i| template_tail(i).map(|x| TemplateSubstitutionTail::TemplateTail))
+}
+
 struct TemplateMiddle(/* } */
                       Option<TemplateCharacters> /* ${ */);
 
