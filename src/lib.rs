@@ -2847,6 +2847,23 @@ fn hex_4_digits_test() {
         }
     }
 
+struct TemplateTail(/* } */
+                    Option<TemplateCharacters> /* ` */);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateTail
+fn template_tail<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, TemplateTail> {
+    parse!{i;
+        token(b'{');
+
+        let template_chars = option(|i| template_characters(i).map(Some), None);
+
+        token(b'`');
+
+        ret TemplateTail(template_chars)
+    }
+}
+
 struct TemplateCharacters(Vec<TemplateCharactersItem>);
 
 enum TemplateCharactersItem {
