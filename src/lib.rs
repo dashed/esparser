@@ -2846,6 +2846,131 @@ fn hex_4_digits_test() {
             assert!(false);
         }
     }
+
+struct TemplateCharacters(Vec<TemplateCharactersItem>);
+
+enum TemplateCharactersItem {
+    // many TemplateCharacter::SourceCharacter merged together
+    String(String),
+    DollarSign,
+    EscapeSequence(EscapeSequence),
+    LineContinuation(LineContinuation),
+    LineTerminatorSequence(LineTerminatorSequence),
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateCharacters
+fn template_characters<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, TemplateCharacters> {
+
+    many1(i, template_character).bind(|i, chars: Vec<TemplateCharacter>| {
+
+        let mut result: Vec<TemplateCharactersItem> = vec![];
+
+        let mut string_buf = String::new();
+
+        for c in chars.into_iter() {
+
+            match c {
+                TemplateCharacter::SourceCharacter(c) => {
+                    let SourceCharacter(c) = c;
+                    string_buf.push(c);
+                    continue;
+                }
+                _ => {
+                    string_buf.shrink_to_fit();
+                    if string_buf.len() >= 1 {
+                        let moved_string_buf = mem::replace(&mut string_buf, String::new());
+                        result.push(TemplateCharactersItem::String(moved_string_buf));
+                    }
+                }
+            }
+
+            match c {
+                TemplateCharacter::SourceCharacter(_) => {
+                    unreachable!();
+                }
+                TemplateCharacter::DollarSign => result.push(TemplateCharactersItem::DollarSign),
+                TemplateCharacter::EscapeSequence(e) => {
+                    result.push(TemplateCharactersItem::EscapeSequence(e))
+                }
+                TemplateCharacter::LineContinuation(l) => {
+                    result.push(TemplateCharactersItem::LineContinuation(l))
+                }
+                TemplateCharacter::LineTerminatorSequence(l) => {
+                    result.push(TemplateCharactersItem::LineTerminatorSequence(l))
+                }
+            }
+        }
+
+        string_buf.shrink_to_fit();
+        if string_buf.len() >= 1 {
+            result.push(TemplateCharactersItem::String(string_buf));
+        }
+
+        i.ret(TemplateCharacters(result))
+    })
+}
+
+enum TemplateCharacter {
+    SourceCharacter(SourceCharacter),
+    DollarSign,
+    EscapeSequence(EscapeSequence),
+    LineContinuation(LineContinuation),
+    LineTerminatorSequence(LineTerminatorSequence),
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateCharacter
+fn template_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, TemplateCharacter> {
+
+    #[inline]
+    fn dollar_sign<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, TemplateCharacter> {
+        either(i,
+               |i| token(i, b'$').then(|i| token(i, b'{')),
+               |i| token(i, b'$'))
+            .bind(|i, result| {
+                match result {
+                    // TODO: err message
+                    Either::Left(_) => i.err("Found ${ which is not legal.".into()),
+                    Either::Right(_) => i.ret(TemplateCharacter::DollarSign),
+                }
+            })
+    }
+
+    #[inline]
+    fn source_char_match<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, TemplateCharacter> {
+        either(i,
+               |i| {
+            parse!{i;
+                    (i -> token(i, b'`').map(|_| ())) <|>
+                    (i -> token(i, b'\\').map(|_| ())) <|>
+                    (i -> line_terminator(i).map(|_| ()));
+
+                    ret {()}
+                }
+        },
+               source_character)
+            .bind(|i, result| {
+                match result {
+                    Either::Left(_) => {
+                        // TODO: err message
+                        i.err("Non-legal character.".into())
+                    }
+                    Either::Right(c) => i.ret(TemplateCharacter::SourceCharacter(c)),
+                }
+            })
+    }
+
+    parse!{i;
+
+        let result = dollar_sign() <|>
+            (i -> token(i, b'\\').then(escape_sequence).map(TemplateCharacter::EscapeSequence)) <|>
+            (i -> line_continuation(i).map(TemplateCharacter::LineContinuation)) <|>
+            (i -> line_terminator_seq(i).map(TemplateCharacter::LineTerminatorSequence)) <|>
+            source_char_match();
+
+        ret result
+    }
 }
 
 // == 12.1 Identifiers ==
@@ -3740,7 +3865,7 @@ fn new_expression<I: U8Input>(i: ESInput<I>,
 
 enum CallExpressionHead {
     FunctionCall(MemberExpression, Vec<CommonDelim>, Arguments),
-    SuperCall(SuperCall)
+    SuperCall(SuperCall),
 }
 
 struct CallExpression(CallExpressionHead, Vec<CallExpressionRest>);
