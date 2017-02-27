@@ -3871,16 +3871,58 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 
 // == 12.2.9 Template Literals ==
 //
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#sec-template-literals
+// http://www.ecma-international.org/ecma-262/7.0/#sec-template-literals
 
+enum TemplateLiteral {
+    NoSubstitutionTemplate(NoSubstitutionTemplate),
+    SubstitutionTemplate(TemplateHead,
+                         Vec<CommonDelim>,
+                         ExpressionList,
+                         Vec<CommonDelim>,
+                         TemplateSpans),
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateLiteral
+fn template_literal<I: U8Input>(i: ESInput<I>,
+                                params: &EnumSet<Parameter>)
+                                -> ESParseResult<I, TemplateLiteral> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of template_literal");
+    }
+
+    or(i,
+       |i| no_substitution_template(i).map(TemplateLiteral::NoSubstitutionTemplate),
+       |i| {
+
+        let mut expr_params = params.clone();
+        expr_params.insert(Parameter::In);
+        let expr_params = expr_params;
+
+        parse!{i;
+
+                let head = template_head();
+
+                let delim_left = common_delim();
+                let expr = expression(&expr_params);
+                let delim_right = common_delim();
+
+                let spans = template_spans(&params);
+
+                ret TemplateLiteral::SubstitutionTemplate(head, delim_left, expr, delim_right, spans)
+            }
+    })
+}
 
 enum TemplateSpans {
-    TemplateTail(Vec<CommonDelim>, TemplateTail),
+    TemplateTail(TemplateTail),
     TemplateMiddleList(TemplateMiddleList, Vec<CommonDelim>, TemplateTail),
 }
 
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateSpans
+// http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateSpans
 fn template_spans<I: U8Input>(i: ESInput<I>,
                               params: &EnumSet<Parameter>)
                               -> ESParseResult<I, TemplateSpans> {
@@ -3891,15 +3933,17 @@ fn template_spans<I: U8Input>(i: ESInput<I>,
     }
 
     option(i, |i| template_middle_list(i, params).map(Some), None).bind(|i, result| {
-        common_delim(i)
-            .bind(|i, delim| template_tail(i).map(|tail| (delim, tail)))
-            .bind(move |i, (delim, tail)| {
-                let result = match result {
-                    Some(middle) => TemplateSpans::TemplateMiddleList(middle, delim, tail),
-                    None => TemplateSpans::TemplateTail(delim, tail),
-                };
-                i.ret(result)
-            })
+
+        match result {
+            Some(middle) => {
+                common_delim(i)
+                    .bind(|i, delim| template_tail(i).map(|tail| (delim, tail)))
+                    .bind(|i, (delim, tail)| {
+                        i.ret(TemplateSpans::TemplateMiddleList(middle, delim, tail))
+                    })
+            }
+            None => template_tail(i).map(TemplateSpans::TemplateTail),
+        }
     })
 }
 
@@ -3938,7 +3982,7 @@ generate_list_parser!(
     TemplateMiddleListItem);
 
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateMiddleList
+// http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateMiddleList
 fn template_middle_list<I: U8Input>(i: ESInput<I>,
                                     params: &EnumSet<Parameter>)
                                     -> ESParseResult<I, TemplateMiddleList> {
