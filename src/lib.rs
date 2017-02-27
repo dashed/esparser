@@ -2848,17 +2848,35 @@ fn hex_4_digits_test() {
     }
 
 
+struct TemplateHead(/* ` */
+                    Option<TemplateCharacters> /* ${ */);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateHead
+fn template_head<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, TemplateHead> {
+    parse!{i;
+        token(b'`');
+
+        let template_chars = option(|i| template_characters(i).map(Some), None);
+
+        string(b"${");
+
+        ret TemplateHead(template_chars)
+    }
+}
+
 enum TemplateSubstitutionTail {
     TemplateMiddle(TemplateMiddle),
-    TemplateTail(TemplateTail)
+    TemplateTail(TemplateTail),
 }
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateSubstitutionTail
-fn template_substitution_tail<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, TemplateSubstitutionTail> {
+fn template_substitution_tail<I: U8Input>(i: ESInput<I>)
+                                          -> ESParseResult<I, TemplateSubstitutionTail> {
     or(i,
-        |i| template_middle(i).map(|x| TemplateSubstitutionTail::TemplateMiddle),
-        |i| template_tail(i).map(|x| TemplateSubstitutionTail::TemplateTail))
+       |i| template_middle(i).map(|x| TemplateSubstitutionTail::TemplateMiddle(x)),
+       |i| template_tail(i).map(|x| TemplateSubstitutionTail::TemplateTail(x)))
 }
 
 struct TemplateMiddle(/* } */
