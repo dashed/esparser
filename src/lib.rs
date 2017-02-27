@@ -4570,8 +4570,8 @@ fn left_hand_side_expression<I: U8Input>(i: ESInput<I>,
     }
 
     or(i,
-       |i| new_expression(i, &params).map(|x| LeftHandSideExpression::NewExpression(x)),
-       |i| call_expression(i, &params).map(|x| LeftHandSideExpression::CallExpression(x)))
+       |i| new_expression(i, &params).map(LeftHandSideExpression::NewExpression),
+       |i| call_expression(i, &params).map(LeftHandSideExpression::CallExpression))
 }
 
 // == 12.4 Update Expressions ==
