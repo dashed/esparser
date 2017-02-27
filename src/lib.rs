@@ -2847,6 +2847,24 @@ fn hex_4_digits_test() {
         }
     }
 
+
+struct TemplateMiddle(/* } */
+                      Option<TemplateCharacters> /* ${ */);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateMiddle
+fn template_middle<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, TemplateMiddle> {
+    parse!{i;
+        token(b'}');
+
+        let template_chars = option(|i| template_characters(i).map(Some), None);
+
+        string(b"${");
+
+        ret TemplateMiddle(template_chars)
+    }
+}
+
 struct TemplateTail(/* } */
                     Option<TemplateCharacters> /* ` */);
 
