@@ -2415,50 +2415,49 @@ enum DoubleStringCharactersItem {
 // http://www.ecma-international.org/ecma-262/7.0/#prod-DoubleStringCharacters
 fn double_string_characters<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DoubleStringCharacters> {
 
-    many1(i, double_string_character)
-        .bind(|i, chars: Vec<DoubleStringCharacter>| {
+    many1(i, double_string_character).bind(|i, chars: Vec<DoubleStringCharacter>| {
 
-            let mut result: Vec<DoubleStringCharactersItem> = vec![];
+        let mut result: Vec<DoubleStringCharactersItem> = vec![];
 
-            let mut string_buf = String::new();
+        let mut string_buf = String::new();
 
-            for c in chars.into_iter() {
+        for c in chars.into_iter() {
 
-                match c {
-                    DoubleStringCharacter::SourceCharacter(c) => {
-                        let SourceCharacter(c) = c;
-                        string_buf.push(c);
-                        continue;
-                    },
-                    _ => {
-                        string_buf.shrink_to_fit();
-                        if string_buf.len() >= 1 {
-                            let moved_string_buf = mem::replace(&mut string_buf, String::new());
-                            result.push(DoubleStringCharactersItem::String(moved_string_buf));
-                        }
-                    }
+            match c {
+                DoubleStringCharacter::SourceCharacter(c) => {
+                    let SourceCharacter(c) = c;
+                    string_buf.push(c);
+                    continue;
                 }
-
-                match c {
-                    DoubleStringCharacter::SourceCharacter(_) => {
-                        unreachable!();
-                    },
-                    DoubleStringCharacter::EscapeSequence(e) => {
-                        result.push(DoubleStringCharactersItem::EscapeSequence(e))
-                    }
-                    DoubleStringCharacter::LineContinuation(l) => {
-                        result.push(DoubleStringCharactersItem::LineContinuation(l))
+                _ => {
+                    string_buf.shrink_to_fit();
+                    if string_buf.len() >= 1 {
+                        let moved_string_buf = mem::replace(&mut string_buf, String::new());
+                        result.push(DoubleStringCharactersItem::String(moved_string_buf));
                     }
                 }
             }
 
-            string_buf.shrink_to_fit();
-            if string_buf.len() >= 1 {
-                result.push(DoubleStringCharactersItem::String(string_buf));
+            match c {
+                DoubleStringCharacter::SourceCharacter(_) => {
+                    unreachable!();
+                }
+                DoubleStringCharacter::EscapeSequence(e) => {
+                    result.push(DoubleStringCharactersItem::EscapeSequence(e))
+                }
+                DoubleStringCharacter::LineContinuation(l) => {
+                    result.push(DoubleStringCharactersItem::LineContinuation(l))
+                }
             }
+        }
 
-            i.ret(DoubleStringCharacters(result))
-        })
+        string_buf.shrink_to_fit();
+        if string_buf.len() >= 1 {
+            result.push(DoubleStringCharactersItem::String(string_buf));
+        }
+
+        i.ret(DoubleStringCharacters(result))
+    })
 }
 
 // NOTE: This isn't Vec<SingleStringCharacter> since SingleStringCharactersItem::String is better than
@@ -2477,50 +2476,49 @@ enum SingleStringCharactersItem {
 // http://www.ecma-international.org/ecma-262/7.0/#prod-SingleStringCharacters
 fn single_string_characters<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SingleStringCharacters> {
 
-    many1(i, single_string_character)
-        .bind(|i, chars: Vec<SingleStringCharacter>| {
+    many1(i, single_string_character).bind(|i, chars: Vec<SingleStringCharacter>| {
 
-            let mut result: Vec<SingleStringCharactersItem> = vec![];
+        let mut result: Vec<SingleStringCharactersItem> = vec![];
 
-            let mut string_buf = String::new();
+        let mut string_buf = String::new();
 
-            for c in chars.into_iter() {
+        for c in chars.into_iter() {
 
-                match c {
-                    SingleStringCharacter::SourceCharacter(c) => {
-                        let SourceCharacter(c) = c;
-                        string_buf.push(c);
-                        continue;
-                    },
-                    _ => {
-                        string_buf.shrink_to_fit();
-                        if string_buf.len() >= 1 {
-                            let moved_string_buf = mem::replace(&mut string_buf, String::new());
-                            result.push(SingleStringCharactersItem::String(moved_string_buf));
-                        }
-                    }
+            match c {
+                SingleStringCharacter::SourceCharacter(c) => {
+                    let SourceCharacter(c) = c;
+                    string_buf.push(c);
+                    continue;
                 }
-
-                match c {
-                    SingleStringCharacter::SourceCharacter(_) => {
-                        unreachable!();
-                    },
-                    SingleStringCharacter::EscapeSequence(e) => {
-                        result.push(SingleStringCharactersItem::EscapeSequence(e))
-                    }
-                    SingleStringCharacter::LineContinuation(l) => {
-                        result.push(SingleStringCharactersItem::LineContinuation(l))
+                _ => {
+                    string_buf.shrink_to_fit();
+                    if string_buf.len() >= 1 {
+                        let moved_string_buf = mem::replace(&mut string_buf, String::new());
+                        result.push(SingleStringCharactersItem::String(moved_string_buf));
                     }
                 }
             }
 
-            string_buf.shrink_to_fit();
-            if string_buf.len() >= 1 {
-                result.push(SingleStringCharactersItem::String(string_buf));
+            match c {
+                SingleStringCharacter::SourceCharacter(_) => {
+                    unreachable!();
+                }
+                SingleStringCharacter::EscapeSequence(e) => {
+                    result.push(SingleStringCharactersItem::EscapeSequence(e))
+                }
+                SingleStringCharacter::LineContinuation(l) => {
+                    result.push(SingleStringCharactersItem::LineContinuation(l))
+                }
             }
+        }
 
-            i.ret(SingleStringCharacters(result))
-        })
+        string_buf.shrink_to_fit();
+        if string_buf.len() >= 1 {
+            result.push(SingleStringCharactersItem::String(string_buf));
+        }
+
+        i.ret(SingleStringCharacters(result))
+    })
 }
 
 enum DoubleStringCharacter {
