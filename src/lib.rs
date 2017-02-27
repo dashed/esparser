@@ -2847,6 +2847,23 @@ fn hex_4_digits_test() {
         }
     }
 
+// == 11.8.6 Template Literal Lexical Components ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-template-literal-lexical-components
+
+enum Template {
+    NoSubstitutionTemplate(NoSubstitutionTemplate),
+    TemplateHead(TemplateHead),
+}
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Template
+fn template<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Template> {
+    or(i,
+       |i| no_substitution_template(i).map(Template::NoSubstitutionTemplate),
+       |i| template_head(i).map(Template::TemplateHead))
+}
+
 struct NoSubstitutionTemplate(/* ` */
                               Option<TemplateCharacters> /* ` */);
 
@@ -2892,8 +2909,8 @@ enum TemplateSubstitutionTail {
 fn template_substitution_tail<I: U8Input>(i: ESInput<I>)
                                           -> ESParseResult<I, TemplateSubstitutionTail> {
     or(i,
-       |i| template_middle(i).map(|x| TemplateSubstitutionTail::TemplateMiddle(x)),
-       |i| template_tail(i).map(|x| TemplateSubstitutionTail::TemplateTail(x)))
+       |i| template_middle(i).map(TemplateSubstitutionTail::TemplateMiddle),
+       |i| template_tail(i).map(TemplateSubstitutionTail::TemplateTail))
 }
 
 struct TemplateMiddle(/* } */
