@@ -2847,6 +2847,23 @@ fn hex_4_digits_test() {
         }
     }
 
+struct NoSubstitutionTemplate(/* ` */
+                              Option<TemplateCharacters> /* ` */);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-NoSubstitutionTemplate
+fn no_substitution_template<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NoSubstitutionTemplate> {
+    parse!{i;
+
+        string(b"`");
+
+        let template_chars = option(|i| template_characters(i).map(Some), None);
+
+        string(b"`");
+
+        ret NoSubstitutionTemplate(template_chars)
+    }
+}
 
 struct TemplateHead(/* ` */
                     Option<TemplateCharacters> /* ${ */);
