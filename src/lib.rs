@@ -2498,80 +2498,55 @@ enum SingleStringCharactersItem {
     LineContinuation(LineContinuation),
 }
 
+// TODO: test case: empty input
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-SingleStringCharacters
 fn single_string_characters<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SingleStringCharacters> {
 
-    let mut chars: Vec<SingleStringCharactersItem> = vec![];
-    let mut string_buf: Vec<SourceCharacter> = vec![];
+    many1(i, single_string_character)
+        .bind(|i, chars: Vec<SingleStringCharacter>| {
 
-    let mut should_continue = true;
+            let mut result: Vec<SingleStringCharactersItem> = vec![];
 
-    let mut parse_result: ESParseResult<I, ()> = single_string_character(i)
-        .bind(|i, c| {
-            match c {
-                SingleStringCharacter::SourceCharacter(c) => string_buf.push(c),
-                SingleStringCharacter::EscapeSequence(e) => {
-                    chars.push(SingleStringCharactersItem::EscapeSequence(e))
-                }
-                SingleStringCharacter::LineContinuation(l) => {
-                    chars.push(SingleStringCharactersItem::LineContinuation(l))
-                }
-            }
-            i.ret(())
-        })
-        .map_err(|e| {
-            should_continue = false;
-            e
-        });
+            let mut string_buf = String::new();
 
+            for c in chars.into_iter() {
 
-    while should_continue {
-        parse_result = parse_result.then(single_string_character)
-            .bind(|i, c| {
-                let should_flush_string_buf = match *(&c) {
-                    SingleStringCharacter::SourceCharacter(SourceCharacter(c)) => {
-                        string_buf.push(SourceCharacter(c));
-                        false
+                match c {
+                    SingleStringCharacter::SourceCharacter(c) => {
+                        let SourceCharacter(c) = c;
+                        string_buf.push(c);
+                        continue;
+                    },
+                    _ => {
+                        string_buf.shrink_to_fit();
+                        if string_buf.len() >= 1 {
+                            let moved_string_buf = mem::replace(&mut string_buf, String::new());
+                            result.push(SingleStringCharactersItem::String(moved_string_buf));
+                        }
                     }
-                    _ => true,
-                };
-
-                if should_flush_string_buf {
-
-                    if string_buf.len() >= 1 {
-
-                        let moved_string_buf = mem::replace(&mut string_buf, vec![]);
-
-                        let cured_string: String = moved_string_buf.into_iter()
-                            .map(|SourceCharacter(c)| {
-                                let c: char = c;
-                                c
-                            })
-                            .collect();
-
-                        chars.push(SingleStringCharactersItem::String(cured_string));
-                    }
-
                 }
 
                 match c {
                     SingleStringCharacter::SourceCharacter(_) => {
-                        // no-op
-                    }
+                        unreachable!();
+                    },
                     SingleStringCharacter::EscapeSequence(e) => {
-                        chars.push(SingleStringCharactersItem::EscapeSequence(e))
+                        result.push(SingleStringCharactersItem::EscapeSequence(e))
                     }
                     SingleStringCharacter::LineContinuation(l) => {
-                        chars.push(SingleStringCharactersItem::LineContinuation(l))
+                        result.push(SingleStringCharactersItem::LineContinuation(l))
                     }
                 }
+            }
 
-                i.ret(())
-            })
-    }
+            string_buf.shrink_to_fit();
+            if string_buf.len() >= 1 {
+                result.push(SingleStringCharactersItem::String(string_buf));
+            }
 
-    parse_result.then(|i| i.ret(SingleStringCharacters(chars)))
+            i.ret(SingleStringCharacters(result))
+        })
 }
 
 enum DoubleStringCharacter {
