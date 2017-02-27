@@ -3872,6 +3872,93 @@ fn initializer<I: U8Input>(i: ESInput<I>,
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#sec-template-literals
 
+
+struct TemplateMiddleListItem(TemplateMiddle,
+                              /* ${ */
+                              Vec<CommonDelim>,
+                              ExpressionList);
+
+struct TemplateMiddleList(TemplateMiddleListItem, Vec<TemplateMiddleListItem>);
+
+impl TemplateMiddleList {
+    fn new(rhs_val: TemplateMiddleListItem) -> Self {
+        TemplateMiddleList(rhs_val, vec![])
+    }
+
+    fn add_item(self, delim: TemplateMiddleListDelim, rhs_val: TemplateMiddleListItem) -> Self {
+
+        let TemplateMiddleList(head, rest) = self;
+
+        let mut rest = rest;
+
+        rest.push(rhs_val);
+
+        TemplateMiddleList(head, rest)
+    }
+}
+
+struct TemplateMiddleListDelim;
+
+generate_list_parser!(
+    TemplateMiddleList;
+    TemplateMiddleListItem; /* rest */
+    TemplateMiddleListState;
+    TemplateMiddleListDelim;
+    TemplateMiddleListItem);
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateMiddleList
+fn template_middle_list<I: U8Input>(i: ESInput<I>,
+                                    params: &EnumSet<Parameter>)
+                                    -> ESParseResult<I, TemplateMiddleList> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of template_middle_list");
+    }
+
+    type Accumulator = Rc<RefCell<TemplateMiddleListState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            // no-op
+
+            ret {
+                accumulator.borrow_mut().add_delim(TemplateMiddleListDelim);
+                ()
+            }
+        }
+    }
+
+    let mut expr_params = params.clone();
+    expr_params.insert(Parameter::In);
+    let expr_params = expr_params;
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+
+        parse!{i;
+
+            let middle = template_middle();
+
+            let delim = common_delim();
+
+            let expr = expression(&expr_params);
+
+            ret {
+                let rhs = TemplateMiddleListItem(middle, delim, expr);
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
+
 // == 12.3 Left-Hand-Side Expressions ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-left-hand-side-expressions
