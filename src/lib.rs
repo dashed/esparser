@@ -4121,7 +4121,7 @@ fn new_expression<I: U8Input>(i: ESInput<I>,
     or(i,
        |i| {
         parse!{i;
-                (i -> string(i, b"new"));
+                string(b"new");
 
                 let delim = common_delim();
 
@@ -4132,7 +4132,7 @@ fn new_expression<I: U8Input>(i: ESInput<I>,
                 }
             }
     },
-       |i| member_expression(i, &params).map(|x| NewExpression::MemberExpression(x)))
+       |i| member_expression(i, &params).map(NewExpression::MemberExpression))
 }
 
 enum CallExpressionHead {
