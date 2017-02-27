@@ -3227,7 +3227,11 @@ enum PrimaryExpression {
     Literal(Literal),
     ArrayLiteral(ArrayLiteral),
     ObjectLiteral(ObjectLiteral),
-    FunctionExpression(FunctionExpression), // TODO: other types
+    FunctionExpression(FunctionExpression),
+    // TODO: ClassExpression(ClassExpression),
+    // TODO: GeneratorExpression(GeneratorExpression),
+    // TODO: RegularExpressionLiteral(RegularExpressionLiteral),
+    TemplateLiteral(TemplateLiteral), /* TODO: CoverParenthesizedExpressionAndArrowParameterList(CoverParenthesizedExpressionAndArrowParameterList), */
 }
 
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PrimaryExpression
@@ -3254,16 +3258,18 @@ fn primary_expression<I: U8Input>(i: ESInput<I>,
             <|>
 
             (i -> identifier_reference(i, &params)
-                .map(|ident_ref| PrimaryExpression::IdentifierReference(ident_ref)))
+                .map(PrimaryExpression::IdentifierReference))
 
             <|>
-            (i -> literal(i).map(|literal| PrimaryExpression::Literal(literal)))
+            (i -> literal(i).map(PrimaryExpression::Literal))
             <|>
-            (i -> array_literal(i, &params).map(|arr_literal| PrimaryExpression::ArrayLiteral(arr_literal)))
+            (i -> array_literal(i, &params).map(PrimaryExpression::ArrayLiteral))
             <|>
-            (i -> object_literal(i, &params).map(|obj_literal| PrimaryExpression::ObjectLiteral(obj_literal)))
+            (i -> object_literal(i, &params).map(PrimaryExpression::ObjectLiteral))
             <|>
-            (i -> function_expression(i).map(|fn_expr| PrimaryExpression::FunctionExpression(fn_expr)));
+            (i -> function_expression(i).map(PrimaryExpression::FunctionExpression))
+            <|>
+            (i -> template_literal(i, &params).map(PrimaryExpression::TemplateLiteral));
 
         ret result
     }
