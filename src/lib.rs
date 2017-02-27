@@ -3442,10 +3442,10 @@ fn element_list<I: U8Input>(i: ESInput<I>,
             let item = either(
                 |i| {
 
-                    let mut params = params.clone();
-                    params.insert(Parameter::In);
+                    let mut assign_expr = params.clone();
+                    assign_expr.insert(Parameter::In);
 
-                    assignment_expression(i, &params)
+                    assignment_expression(i, &assign_expr)
                 },
                 |i| {
                     spread_element(i, &params)
@@ -4062,8 +4062,71 @@ fn member_expression<I: U8Input>(i: ESInput<I>,
     i.ret(MemberExpression)
 }
 
+enum SuperProperty {
+    PropertyAccessorBracket(/* super */
+                            Vec<CommonDelim>,
+                            /* [ */
+                            Vec<CommonDelim>,
+                            ExpressionList,
+                            Vec<CommonDelim> /* ] */),
+    PropertyAccessorDot(/* super */
+                        Vec<CommonDelim>,
+                        /* . */
+                        Vec<CommonDelim>,
+                        IdentifierName),
+}
+
 // TODO: test
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-SuperProperty
+// http://www.ecma-international.org/ecma-262/7.0/#prod-SuperProperty
+fn super_property<I: U8Input>(i: ESInput<I>,
+                              params: &EnumSet<Parameter>)
+                              -> ESParseResult<I, SuperProperty> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of super_property");
+    }
+
+    string(i, b"super")
+        .then(|i| {
+            or(i,
+                |i| {
+                    let mut params_expr = params.clone();
+                    params_expr.insert(Parameter::In);
+
+                    parse!{i;
+
+                        let delim = common_delim();
+
+                        token(b'[');
+                        let delim_left = common_delim();
+
+                        let expr = expression(&params_expr);
+
+                        let delim_right = common_delim();
+                        token(b']');
+
+                        ret {
+                            SuperProperty::PropertyAccessorBracket(delim, delim_left, expr, delim_right)
+                        }
+                    }
+                },
+                |i| {
+                    parse!{i;
+
+                        let delim = common_delim();
+
+                        token(b'.');
+                        let delim_left = common_delim();
+                        let name = identifier_name();
+
+                            ret {
+                                SuperProperty::PropertyAccessorDot(delim, delim_left, name)
+                            }
+                    }
+                })
+        })
+}
 
 struct MetaProperty(NewTarget);
 
@@ -4172,7 +4235,7 @@ impl CallExpression {
 
 enum CallExpressionRestItem {
     FunctionCall(Arguments),
-    PropertyAccessorBracket(/* [] */
+    PropertyAccessorBracket(/* [ */
                             Vec<CommonDelim>,
                             ExpressionList,
                             Vec<CommonDelim> /* ] */),
