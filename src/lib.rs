@@ -3869,8 +3869,39 @@ fn initializer<I: U8Input>(i: ESInput<I>,
     }
 }
 
-// TODO: test
+// == 12.2.9 Template Literals ==
+//
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#sec-template-literals
+
+
+enum TemplateSpans {
+    TemplateTail(Vec<CommonDelim>, TemplateTail),
+    TemplateMiddleList(TemplateMiddleList, Vec<CommonDelim>, TemplateTail),
+}
+
+// TODO: test
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateSpans
+fn template_spans<I: U8Input>(i: ESInput<I>,
+                              params: &EnumSet<Parameter>)
+                              -> ESParseResult<I, TemplateSpans> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of template_spans");
+    }
+
+    option(i, |i| template_middle_list(i, params).map(Some), None).bind(|i, result| {
+        common_delim(i)
+            .bind(|i, delim| template_tail(i).map(|tail| (delim, tail)))
+            .bind(move |i, (delim, tail)| {
+                let result = match result {
+                    Some(middle) => TemplateSpans::TemplateMiddleList(middle, delim, tail),
+                    None => TemplateSpans::TemplateTail(delim, tail),
+                };
+                i.ret(result)
+            })
+    })
+}
 
 
 struct TemplateMiddleListItem(TemplateMiddle,
