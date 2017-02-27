@@ -4172,10 +4172,14 @@ impl CallExpression {
 
 enum CallExpressionRestItem {
     FunctionCall(Arguments),
-    PropertyAccessorBracket(/* [] */ Vec<CommonDelim>, ExpressionList, Vec<CommonDelim> /* ] */),
-    PropertyAccessorDot(/* . */ Vec<CommonDelim>, IdentifierName),
-    // TODO: complete
-    // TaggedTemplate(TemplateLiteral)
+    PropertyAccessorBracket(/* [] */
+                            Vec<CommonDelim>,
+                            ExpressionList,
+                            Vec<CommonDelim> /* ] */),
+    PropertyAccessorDot(/* . */
+                        Vec<CommonDelim>,
+                        IdentifierName),
+    TaggedTemplate(TemplateLiteral),
 }
 
 struct CallExpressionRest(Vec<CommonDelim>, CallExpressionRestItem);
@@ -4237,7 +4241,7 @@ fn call_expression<I: U8Input>(i: ESInput<I>,
             parse!{i;
 
                 let head = or(
-                    |i| super_call(i, &params).map(|x| CallExpressionHead::SuperCall(x)),
+                    |i| super_call(i, &params).map(CallExpressionHead::SuperCall),
                     |i| {
                         parse!{i;
                             let member = member_expression(&params);
@@ -4260,7 +4264,7 @@ fn call_expression<I: U8Input>(i: ESInput<I>,
                 let rest_item =
                     (i -> {
                         arguments(i, &params)
-                            .map(|x| CallExpressionRestItem::FunctionCall(x))
+                            .map(CallExpressionRestItem::FunctionCall)
                     }) <|>
                     (i -> {
                         parse!{i;
@@ -4284,8 +4288,11 @@ fn call_expression<I: U8Input>(i: ESInput<I>,
 
                             ret CallExpressionRestItem::PropertyAccessorDot(delim_left, ident)
                         }
+                    }) <|>
+                    (i -> {
+                        template_literal(i, &params)
+                            .map(CallExpressionRestItem::TaggedTemplate)
                     });
-                    // TODO: tagged template
 
                 ret {
                     let rhs = CallExpressionItem::RestItem(rest_item);
