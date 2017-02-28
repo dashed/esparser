@@ -7588,12 +7588,108 @@ fn if_statement<I: U8Input>(i: ESInput<I>,
 // http://www.ecma-international.org/ecma-262/7.0/#sec-iteration-statements
 
 enum IterationStatement {
-    DoWhile,
-    While, // TODO: other iteration variants
+    DoWhile(/* do */
+            Vec<CommonDelim>,
+            Statement,
+            Vec<CommonDelim>,
+            /* while */
+            Vec<CommonDelim>,
+            /* ( */
+            Vec<CommonDelim>,
+            Expression,
+            Vec<CommonDelim>,
+            /* ) */
+            Vec<CommonDelim> /* ; */),
+    While,
+
+    ForLoop,
+    ForVarLoop,
+    ForDeclarationLoop,
+
+    ForIn,
+    ForVarIn,
+    ForDeclarationIn,
+
+    ForOf,
+    ForVarOf,
+    ForDeclarationOf,
 }
 
 // TODO: test
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-IterationStatement
+fn iteration_statement<I: U8Input>(i: ESInput<I>,
+                                   params: &EnumSet<Parameter>)
+                                   -> ESParseResult<I, IterationStatement> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::Return)) {
+        panic!("misuse of iteration_statement");
+    }
+
+    struct DoWhile(/* do */
+                   Vec<CommonDelim>,
+                   Statement,
+                   Vec<CommonDelim>,
+                   /* while */
+                   Vec<CommonDelim>,
+                   /* ( */
+                   Vec<CommonDelim>,
+                   Expression,
+                   Vec<CommonDelim>,
+                   /* ) */
+                   Vec<CommonDelim> /* ; */);
+    fn do_while<I: U8Input>(i: ESInput<I>,
+                            params: &EnumSet<Parameter>)
+                            -> ESParseResult<I, DoWhile> {
+
+        let body_params = {
+            let mut params = EnumSet::new();
+            if params.contains(&Parameter::Yield) {
+                params.insert(Parameter::Yield);
+            }
+            params.insert(Parameter::In);
+            params
+        };
+        parse!{i;
+
+            string(b"do");
+            let delim_1 = common_delim();
+
+            let stmt = statement(&params);
+
+            let delim_2 = common_delim();
+            string(b"while");
+            let delim_3 = common_delim();
+
+            token(b'(');
+            let delim_4 = common_delim();
+
+            let expr = expression(&body_params);
+
+            let delim_5 = common_delim();
+            token(b')');
+
+            let delim_6 = common_delim();
+
+            semicolon();
+
+            ret DoWhile(delim_1, stmt, delim_2, delim_3, delim_4, expr, delim_5, delim_6)
+        }
+    }
+
+    parse!{i;
+
+        let iteration = (i -> do_while(i, &params).map(|do_while| {
+            let DoWhile(delim_1, stmt, delim_2, delim_3, delim_4, expr, delim_5, delim_6) = do_while;
+
+            IterationStatement::DoWhile(delim_1, stmt, delim_2, delim_3, delim_4, expr, delim_5, delim_6)
+        }));
+
+        ret iteration
+    }
+}
+
 
 struct ForDeclaration(LetOrConst, Vec<CommonDelim>, ForBinding);
 
