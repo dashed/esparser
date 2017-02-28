@@ -722,11 +722,6 @@ fn string_till<I: U8Input, F>(input: ESInput<I>, mut stop_at: F) -> ESParseResul
         .bind(|i, line: Vec<char>| i.ret(line.into_iter().collect()))
 }
 
-#[inline]
-fn token_as_char<I: U8Input>(i: ESInput<I>, c: u8) -> ESParseResult<I, char> {
-    token(i, c).bind(|i, c| i.ret(c as char))
-}
-
 // TODO: test
 #[inline]
 fn parse_utf8_char_of_bytes<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I, char> {
@@ -1607,8 +1602,8 @@ fn identifier_start<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierSta
 
         let start =
         (i -> unicode_id_start(i).map(|x| IdentifierStart::UnicodeIDStart(x))) <|>
-        (i -> token_as_char(i, b'$').map(|_| IdentifierStart::DollarSign)) <|>
-        (i -> token_as_char(i, b'_').map(|_| IdentifierStart::Underscore)) <|>
+        (i -> token(i, b'$').map(|_| IdentifierStart::DollarSign)) <|>
+        (i -> token(i, b'_').map(|_| IdentifierStart::Underscore)) <|>
         (i -> escaped_unicode_escape_seq(i).map(|x| IdentifierStart::UnicodeEscapeSequence(x)));
 
         ret start
@@ -1638,8 +1633,8 @@ fn identifier_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, IdentifierPart
 
         let part =
         (i -> unicode_id_continue(i).map(|x| IdentifierPart::UnicodeIDContinue(x))) <|>
-        (i -> token_as_char(i, b'$').map(|_| IdentifierPart::DollarSign)) <|>
-        (i -> token_as_char(i, b'_').map(|_| IdentifierPart::Underscore)) <|>
+        (i -> token(i, b'$').map(|_| IdentifierPart::DollarSign)) <|>
+        (i -> token(i, b'_').map(|_| IdentifierPart::Underscore)) <|>
         (i -> escaped_unicode_escape_seq(i).map(|x| IdentifierPart::UnicodeEscapeSequence(x))) <|>
         // <ZWNJ> (i.e. Zero-width non-joiner)
         (i -> parse_utf8_char_of_bytes(i, b"\x200C").map(|x| IdentifierPart::ZeroWidthNonJoiner)) <|>
