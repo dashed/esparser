@@ -46,6 +46,24 @@ Bookmark:
 
 
 
+
+
+
+
+// traits
+
+// TODO: put this somewhere
+trait StaticSemantics {}
+
+struct SyntaxError(String);
+
+trait EarlyErrors: StaticSemantics {
+    fn check_early_error(&self) -> Option<SyntaxError> {
+        None
+    }
+}
+
+
 // ref: https://github.com/rust-lang/cargo/pull/1444
 macro_rules! is_debug_mode {
     () => {
@@ -2766,6 +2784,27 @@ enum UnicodeEscapeSequence {
     Hex4Digits(Hex4Digits),
 }
 
+impl StaticSemantics for UnicodeEscapeSequence {}
+
+// http://www.ecma-international.org/ecma-262/7.0/#sec-string-literals-static-semantics-early-errors
+impl EarlyErrors for UnicodeEscapeSequence {
+    fn check_early_error(&self) -> Option<SyntaxError> {
+        match *self {
+            UnicodeEscapeSequence::HexDigits(ref seq) => {
+                if seq.mathematical_value() > 1114111 {
+                    // TODO: better reason
+                    Some(SyntaxError("Invalid unicode escape sequence. Expect to be less or \
+                                      equal to 10ffff."
+                        .into()))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
 // TODO: remove
 // impl UnicodeEscapeSequence {
 //     fn as_char(&self) -> char {
@@ -2808,24 +2847,27 @@ fn unicode_escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Unicod
         match result {
             Either::Left(sequence) => {
 
-                // == 11.8.4.1 Static Semantics: Early Errors ==
-                //
-                // http://www.ecma-international.org/ecma-262/7.0/#sec-string-literals-static-semantics-early-errors
-                if (
-                        sequence.0[0] != HexDigit('0') &&
-                        sequence.0.len() > 6) ||
-                    sequence.mathematical_value() > 1114111 /* 10ffff */ {
+                i.ret(UnicodeEscapeSequence::HexDigits(sequence))
 
-                    let err_val = ErrorLocation::new(i.position(),
-                        "Invalid unicode escape sequence. Expect to be less or equal to 10ffff.".to_string());
+                // TODO: moved to traits; remove
+                // // == 11.8.4.1 Static Semantics: Early Errors ==
+                // //
+                // // http://www.ecma-international.org/ecma-262/7.0/#sec-string-literals-static-semantics-early-errors
+                // if (
+                //         sequence.0[0] != HexDigit('0') &&
+                //         sequence.0.len() > 6) ||
+                //     sequence.mathematical_value() > 1114111 /* 10ffff */ {
 
-                    i.err(err_val.into())
-                } else {
-                    // TODO: remove
-                    // let HexDigits(sequence) = sequence;
-                    // let c = string_to_unicode_char(&sequence).unwrap();
-                    i.ret(UnicodeEscapeSequence::HexDigits(sequence))
-                }
+                //     let err_val = ErrorLocation::new(i.position(),
+                //         "Invalid unicode escape sequence. Expect to be less or equal to 10ffff.".to_string());
+
+                //     i.err(err_val.into())
+                // } else {
+                //     // TODO: remove
+                //     // let HexDigits(sequence) = sequence;
+                //     // let c = string_to_unicode_char(&sequence).unwrap();
+                //     i.ret(UnicodeEscapeSequence::HexDigits(sequence))
+                // }
             },
             Either::Right(c) => {
                 i.ret(c)
