@@ -6803,7 +6803,7 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>,
     }
 
     let binding_params = {
-        let binding_params = params.clone();
+        let mut binding_params = params.clone();
         binding_params.remove(&Parameter::In);
         binding_params
     };
