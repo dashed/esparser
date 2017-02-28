@@ -6573,14 +6573,47 @@ fn variable_statement<I: U8Input>(i: ESInput<I>,
     }
 }
 
-struct VariableDeclarationList(Vec<VariableDeclarationListItem>);
+struct VariableDeclarationList(VariableDeclaration, Vec<VariableDeclarationListRest>);
 
-enum VariableDeclarationListItem {
-    Delim(Vec<CommonDelim>,
-          /* , (comma) */
-          Vec<CommonDelim>),
-    VariableDeclaration(VariableDeclaration),
+impl VariableDeclarationList {
+    fn new(rhs_val: VariableDeclaration) -> Self {
+        VariableDeclarationList(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: VariableDeclarationListDelim,
+                rhs_val: VariableDeclaration)
+                -> Self {
+
+        let VariableDeclarationList(head, rest) = self;
+        let mut rest = rest;
+
+        let VariableDeclarationListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = VariableDeclarationListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        VariableDeclarationList(head, rest)
+    }
 }
+
+struct VariableDeclarationListRest(Vec<CommonDelim>,
+                                   /* , (comma) */
+                                   Vec<CommonDelim>,
+                                   VariableDeclaration);
+
+struct VariableDeclarationListDelim(Vec<CommonDelim>,
+                                    /* , (comma) */
+                                    Vec<CommonDelim>);
+
+generate_list_parser!(
+    VariableDeclarationList;
+    VariableDeclarationListRest;
+    VariableDeclarationListState;
+    VariableDeclarationListDelim;
+    VariableDeclaration);
+
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableDeclarationList
@@ -6594,7 +6627,7 @@ fn variable_declaration_list<I: U8Input>(i: ESInput<I>,
         panic!("misuse of variable_declaration_list");
     }
 
-    type Accumulator = Rc<RefCell<Vec<VariableDeclarationListItem>>>;
+    type Accumulator = Rc<RefCell<VariableDeclarationListState>>;
 
     #[inline]
     fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
@@ -6614,33 +6647,23 @@ fn variable_declaration_list<I: U8Input>(i: ESInput<I>,
             let delim_2 = common_delim();
 
             ret {
-                accumulator.borrow_mut().push(VariableDeclarationListItem::Delim(delim_1, delim_2));
+                let delim = VariableDeclarationListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
                 ()
             }
         }
     }
 
+    #[inline]
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
-        parse!{i;
-
-            let item = variable_declaration(&params);
-
-            ret {
-                accumulator.borrow_mut().push(VariableDeclarationListItem::VariableDeclaration(item));
-                ()
-            }
-        }
+        variable_declaration(i, &params).bind(|i, rhs| {
+            accumulator.borrow_mut().add_item(rhs);
+            i.ret(())
+        })
     };
 
-    parse!{i;
-
-        let list = parse_list(
-            delimiter,
-            reducer
-        );
-
-        ret VariableDeclarationList(list)
-    }
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 enum VariableDeclaration {
