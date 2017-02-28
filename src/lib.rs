@@ -7895,17 +7895,7 @@ fn formal_parameters<I: U8Input>(i: ESInput<I>,
     }
 
     option(i,
-           |i| {
-        parse!{i;
-
-        let list = formal_parameter_list(params);
-
-        ret {
-            FormalParameters::FormalParameterList(list)
-        }
-
-    }
-    },
+           |i| formal_parameter_list(i, params).map(FormalParameters::FormalParameterList),
            FormalParameters::Empty)
 }
 
