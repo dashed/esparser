@@ -6303,13 +6303,13 @@ fn block_statement<I: U8Input>(i: ESInput<I>,
         panic!("misuse of block_statement");
     }
 
-    block(i, params).map(|x| BlockStatement(x))
+    block(i, params).map(BlockStatement)
 }
 
-struct Block(Vec<CommonDelim>, Option<Box<StatementList>>, Vec<CommonDelim>);
+struct Block(/* { */ Vec<CommonDelim>, Option<Box<StatementList>>, Vec<CommonDelim> /* } */);
 
 // TODO: test
-// http://www.ecma-international.org/ecma-262/7.0/#sec-block
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Block
 fn block<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, Block> {
 
     if !(params.is_empty() || params.contains(&Parameter::Yield) ||
