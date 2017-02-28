@@ -6210,7 +6210,7 @@ fn block_statement<I: U8Input>(i: ESInput<I>,
     block(i, params).map(|x| BlockStatement(x))
 }
 
-struct Block(Vec<CommonDelim>, Option<StatementList>, Vec<CommonDelim>);
+struct Block(Vec<CommonDelim>, Option<Box<StatementList>>, Vec<CommonDelim>);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#sec-block
@@ -6226,7 +6226,7 @@ fn block<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResul
         token(b'{');
         let delim_left = common_delim();
 
-        let contents = option(|i| statement_list(i, params).map(|x| Some(x)), None);
+        let contents = option(|i| statement_list(i, params).map(|x| Some(Box::new(x))), None);
 
         let delim_right = common_delim();
         token(b'}');
@@ -6235,14 +6235,32 @@ fn block<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResul
     }
 }
 
-struct StatementList(Vec<StatementListItemWrap>);
+struct StatementList(StatementListItem, Vec<StatementListItem>);
 
-enum StatementListItemWrap {
-    Delim(Vec<CommonDelim>,
-          /* , (comma) */
-          Vec<CommonDelim>),
-    StatementListItem(StatementListItem),
+impl StatementList {
+    fn new(rhs_val: StatementListItem) -> Self {
+        StatementList(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: StatementListDelim, rhs_val: StatementListItem) -> Self {
+
+        let StatementList(head, rest) = self;
+        let mut rest = rest;
+
+        rest.push(rhs_val);
+
+        StatementList(head, rest)
+    }
 }
+
+struct StatementListDelim;
+
+generate_list_parser!(
+    StatementList;
+    StatementListItem; /* rest */
+    StatementListState;
+    StatementListDelim;
+    StatementListItem);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-StatementList
@@ -6255,53 +6273,22 @@ fn statement_list<I: U8Input>(i: ESInput<I>,
         panic!("misuse of statement_list");
     }
 
-    type Accumulator = Rc<RefCell<Vec<StatementListItemWrap>>>;
+    type Accumulator = Rc<RefCell<StatementListState>>;
 
     #[inline]
     fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
-        parse!{i;
-
-            let delim_1 = common_delim();
-
-            on_error(
-                |i| token(i, b','),
-                |i| {
-                    let loc = i.position();
-                    // TODO: proper err message?
-                    ErrorLocation::new(loc, "Expected , here.".to_string())
-                }
-            );
-
-            let delim_2 = common_delim();
-
-            ret {
-                accumulator.borrow_mut().push(StatementListItemWrap::Delim(delim_1, delim_2));
-                ()
-            }
-        }
+        accumulator.borrow_mut().add_delim(StatementListDelim);
+        i.ret(())
     }
 
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
-        parse!{i;
-
-            let item = statement_list_item(&params);
-
-            ret {
-                accumulator.borrow_mut().push(StatementListItemWrap::StatementListItem(item));
-                ()
-            }
-        }
+        statement_list_item(i, &params).bind(|i, rhs| {
+            accumulator.borrow_mut().add_item(rhs);
+            i.ret(())
+        })
     };
 
-    parse!{i;
-
-        let list = parse_list(
-            delimiter,
-            reducer
-        );
-
-        ret StatementList(list)
-    }
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 enum StatementListItem {
