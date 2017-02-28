@@ -4089,7 +4089,28 @@ fn template_middle_list<I: U8Input>(i: ESInput<I>,
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-left-hand-side-expressions
 
-struct MemberExpression;
+enum MemberExpression {
+    PrimaryExpression(PrimaryExpression),
+    PropertyAccessorBracket(Box<MemberExpression>,
+                            Vec<CommonDelim>,
+                            /* [ */
+                            Vec<CommonDelim>,
+                            Expression,
+                            Vec<CommonDelim> /* ] */),
+    PropertyAccessorDot(Box<MemberExpression>,
+                        Vec<CommonDelim>,
+                        /* . */
+                        Vec<CommonDelim>,
+                        IdentifierName),
+    TaggedTemplate(Box<MemberExpression>, Vec<CommonDelim>, TemplateLiteral),
+    SuperProperty(SuperProperty),
+    MetaProperty(MetaProperty),
+    FunctionCall(/* new */
+                 Vec<CommonDelim>,
+                 Box<MemberExpression>,
+                 Vec<CommonDelim>,
+                 Arguments),
+}
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-MemberExpression
@@ -4102,9 +4123,84 @@ fn member_expression<I: U8Input>(i: ESInput<I>,
         panic!("misuse of member_expression");
     }
 
-    // TODO: complete
+    let mut expr_params = params.clone();
+    expr_params.insert(Parameter::In);
+    let expr_params = expr_params;
 
-    i.ret(MemberExpression)
+    parse!{i;
+
+        let expr =
+            (i -> primary_expression(i, &params).map(MemberExpression::PrimaryExpression))
+            <|>
+            (i -> super_property(i, &params).map(MemberExpression::SuperProperty))
+            <|>
+            (i -> meta_property(i).map(MemberExpression::MetaProperty))
+            <|>
+            (i -> {
+                parse!{i;
+
+                    let member_expr = member_expression(&params);
+
+                    let delim_1 = common_delim();
+                    token(b'[');
+                    let delim_2 = common_delim();
+
+                    let expr = expression(&expr_params);
+
+                    let delim_3 = common_delim();
+                    token(b']');
+
+                    ret MemberExpression::PropertyAccessorBracket(Box::new(member_expr), delim_1, delim_2, expr, delim_3)
+                }
+            })
+            <|>
+            (i -> {
+                parse!{i;
+
+                    let member_expr = member_expression(&params);
+
+                    let delim_1 = common_delim();
+                    token(b'.');
+                    let delim_2 = common_delim();
+
+                    let name = identifier_name();
+
+                    ret MemberExpression::PropertyAccessorDot(Box::new(member_expr), delim_1, delim_2, name)
+                }
+            })
+            <|>
+            (i -> {
+                parse!{i;
+
+                    let member_expr = member_expression(&params);
+
+                    let delim = common_delim();
+
+                    let template = template_literal(&params);
+
+                    ret MemberExpression::TaggedTemplate(Box::new(member_expr), delim, template)
+                }
+            })
+            <|>
+            (i -> {
+                parse!{i;
+
+                    string(b"new");
+
+                    let delim_1 = common_delim();
+
+                    let member_expr = member_expression(&params);
+
+                    let delim_2 = common_delim();
+
+                    let args = arguments(&params);
+
+                    ret MemberExpression::FunctionCall(delim_1, Box::new(member_expr), delim_2, args)
+                }
+            });
+
+        ret expr
+    }
 }
 
 enum SuperProperty {
@@ -4178,7 +4274,7 @@ struct MetaProperty(NewTarget);
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-MetaProperty
 fn meta_property<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, MetaProperty> {
-    new_target(i).map(|x| MetaProperty(x))
+    new_target(i).map(MetaProperty)
 }
 
 struct NewTarget(/* new */
@@ -5869,15 +5965,15 @@ fn logical_or_expression<I: U8Input>(i: ESInput<I>,
 fn logical_or_expression_test() {
 
     // TODO: fix with actual test case
-    let i = InputPosition::new(&b"a||a ||    a"[..], CurrentPosition::new());
-    match logical_or_expression(i, &EnumSet::new()).into_inner().1 {
-        Ok(result) => {
-            assert!(true);
-        }
-        Err(_) => {
-            assert!(true);
-        }
-    }
+    // let i = InputPosition::new(&b"a||a ||    a"[..], CurrentPosition::new());
+    // match logical_or_expression(i, &EnumSet::new()).into_inner().1 {
+    //     Ok(result) => {
+    //         assert!(true);
+    //     }
+    //     Err(_) => {
+    //         assert!(true);
+    //     }
+    // }
 }
 
 // == 12.14 Conditional Operator ( ? : ) ==
