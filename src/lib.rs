@@ -718,13 +718,8 @@ fn string<I: U8Input>(i: ESInput<I>, str_match: &[u8]) -> ESParseResult<I, I::Bu
 fn string_till<I: U8Input, F>(input: ESInput<I>, mut stop_at: F) -> ESParseResult<I, String>
     where F: Fn(ESInput<I>) -> ESParseResult<I, ()>
 {
-    parse!{input;
-        let line: Vec<char> = many_till(parse_utf8_char, |i| look_ahead(i, &mut stop_at));
-
-        ret {
-            line.into_iter().collect()
-        }
-    }
+    many_till(input, parse_utf8_char, |i| look_ahead(i, &mut stop_at))
+        .bind(|i, line: Vec<char>| i.ret(line.into_iter().collect()))
 }
 
 #[inline]
