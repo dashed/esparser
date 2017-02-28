@@ -648,15 +648,26 @@ fn string_to_unicode_char(s: &str) -> Option<char> {
         .and_then(std::char::from_u32)
 }
 
-// TODO: fix this
-// TODO: test for ASI behaviour
+#[must_use]
+enum SemiColon {
+    HasSemiColon(Vec<CommonDelim> /* ; */),
+    NoSemiColon,
+}
+
+// This parser is used in grammar that expects a semi-colon.
 #[inline]
-fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
-    parse!{i;
-        // TODO: ASI rule
-        token(b';');
-        ret {()}
-    }
+fn semicolon<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SemiColon> {
+    option(i,
+           |i| {
+        parse!{i;
+            let delim = common_delim();
+            token(b';');
+
+            ret SemiColon::HasSemiColon(delim)
+        }
+    },
+           // A semi-colon was expected, but none was encountered.
+           SemiColon::NoSemiColon)
 }
 
 #[inline]
@@ -6432,8 +6443,8 @@ fn statement_list_item<I: U8Input>(i: ESInput<I>,
 // http://www.ecma-international.org/ecma-262/7.0/#sec-let-and-const-declarations
 
 enum LexicalDeclaration {
-    Let(Vec<CommonDelim>, BindingList, Vec<CommonDelim>),
-    Const(Vec<CommonDelim>, BindingList, Vec<CommonDelim>),
+    Let(Vec<CommonDelim>, BindingList, SemiColon),
+    Const(Vec<CommonDelim>, BindingList, SemiColon),
 }
 
 // TODO: test
@@ -6452,15 +6463,14 @@ fn lexical_declaration<I: U8Input>(i: ESInput<I>,
         parse!{i;
             let delim_1 = common_delim_required();
             let list = binding_list(&params);
-            let delim_2 = common_delim();
-            semicolon();
+            let semi_colon = semicolon();
             ret {
                 match result {
                     LetOrConst::Let => {
-                        LexicalDeclaration::Let(delim_1, list, delim_2)
+                        LexicalDeclaration::Let(delim_1, list, semi_colon)
                     },
                     LetOrConst::Const => {
-                        LexicalDeclaration::Const(delim_1, list, delim_2)
+                        LexicalDeclaration::Const(delim_1, list, semi_colon)
                     }
                 }
             }
@@ -6637,7 +6647,7 @@ fn lexical_binding<I: U8Input>(i: ESInput<I>,
 struct VariableStatement(/* var */
                          Vec<CommonDelim>,
                          VariableDeclarationList,
-                         Vec<CommonDelim> /* ; */);
+                         SemiColon);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableStatement
@@ -6666,12 +6676,9 @@ fn variable_statement<I: U8Input>(i: ESInput<I>,
 
         let delim_1 = common_delim_required();
         let list = variable_declaration_list(&params);
-        let delim_2 = common_delim();
+        let semi_colon = semicolon();
 
-        // TODO: ASI rule
-        semicolon();
-
-        ret VariableStatement(delim_1, list, delim_2)
+        ret VariableStatement(delim_1, list, semi_colon)
     }
 }
 
@@ -7401,20 +7408,19 @@ fn binding_rest_element<I: U8Input>(i: ESInput<I>,
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-empty-statement
 
-// TODO: common delim?
-struct EmptyStatement;
+struct EmptyStatement(SemiColon);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-EmptyStatement
 fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement> {
-    semicolon(i).map(|_| EmptyStatement)
+    semicolon(i).map(EmptyStatement)
 }
 
 // == 13.5 Expression Statement ==
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-expression-statement
 
-struct ExpressionStatement(Expression, Vec<CommonDelim>);
+struct ExpressionStatement(Expression, SemiColon);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ExpressionStatement
@@ -7464,13 +7470,10 @@ fn expression_statement<I: U8Input>(i: ESInput<I>,
         look_ahead_guard();
 
         let expr = expression(&in_params);
-        let delim = common_delim();
-
-        // TODO: semicolon insertion rule
-        semicolon();
+        let semi_colon = semicolon();
 
         ret {
-            ExpressionStatement(expr, delim)
+            ExpressionStatement(expr, semi_colon)
         }
     }
 }
@@ -7599,7 +7602,7 @@ enum IterationStatement {
             Expression,
             Vec<CommonDelim>,
             /* ) */
-            Vec<CommonDelim> /* ; */),
+            SemiColon),
     While,
 
     ForLoop,
@@ -7638,7 +7641,7 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
                    Expression,
                    Vec<CommonDelim>,
                    /* ) */
-                   Vec<CommonDelim> /* ; */);
+                   SemiColon);
     fn do_while<I: U8Input>(i: ESInput<I>,
                             params: &EnumSet<Parameter>)
                             -> ESParseResult<I, DoWhile> {
@@ -7670,11 +7673,9 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
             let delim_5 = common_delim();
             token(b')');
 
-            let delim_6 = common_delim();
+            let semi_colon = semicolon();
 
-            semicolon();
-
-            ret DoWhile(delim_1, stmt, delim_2, delim_3, delim_4, expr, delim_5, delim_6)
+            ret DoWhile(delim_1, stmt, delim_2, delim_3, delim_4, expr, delim_5, semi_colon)
         }
     }
 
