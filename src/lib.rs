@@ -6784,7 +6784,7 @@ fn variable_declaration_list<I: U8Input>(i: ESInput<I>,
 }
 
 enum VariableDeclaration {
-    BindingIdentifier(BindingIdentifier, Vec<CommonDelim>, Option<Initializer>),
+    BindingIdentifier(BindingIdentifier, Option<(Vec<CommonDelim>, Initializer)>),
     BindingPattern(BindingPattern, Vec<CommonDelim>, Initializer),
 }
 
@@ -6804,9 +6804,8 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>,
 
     let mut __binding_params;
     let binding_params = if is_debug_mode!() {
-        let mut params = params.clone();
-        params.remove(&Parameter::In);
-        __binding_params = Box::new(params);
+        __binding_params = params.clone();
+        __binding_params.remove(&Parameter::In);
         &__binding_params
     } else {
         params
@@ -6818,14 +6817,20 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>,
         .bind(|i, result| {
             match result {
                 Either::Left(binding_identifier) => {
-                    parse!{i;
+                    option(i,
+                           |i| {
+                        parse!{i;
+                            let delim = common_delim();
+                            let init = initializer(&params);
 
-                    // TODO: tie this to be optional with initializer (below)?
-                    let delim = common_delim();
-
-                    let init = option(|i| initializer(i, &params).map(|x| Some(x)), None);
-                    ret VariableDeclaration::BindingIdentifier(binding_identifier, delim, init)
-                }
+                            ret Some((delim, init))
+                        }
+                    },
+                           None)
+                        .map(|delim_and_init| {
+                            VariableDeclaration::BindingIdentifier(binding_identifier,
+                                                                   delim_and_init)
+                        })
                 }
                 Either::Right(binding_pattern) => {
                     parse!{i;
