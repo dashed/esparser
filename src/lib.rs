@@ -3387,15 +3387,48 @@ fn array_literal<I: U8Input>(i: ESInput<I>,
     }
 }
 
-struct ElementList(Vec<ElementListItem>);
-
 enum ElementListItem {
-    Delim(Vec<CommonDelim>,
-          /* , (comma) */
-          Vec<CommonDelim>),
     ItemExpression(Option<Elision>, AssignmentExpression),
     ItemSpread(Option<Elision>, SpreadElement),
 }
+
+struct ElementList(ElementListItem, Vec<ElementListRest>);
+
+impl ElementList {
+    fn new(rhs_val: ElementListItem) -> Self {
+        ElementList(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: ElementListDelim, rhs_val: ElementListItem) -> Self {
+
+        let ElementList(head, rest) = self;
+        let mut rest = rest;
+
+        let ElementListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = ElementListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        ElementList(head, rest)
+    }
+}
+
+struct ElementListRest(Vec<CommonDelim>,
+                       /* , (comma) */
+                       Vec<CommonDelim>,
+                       ElementListItem);
+
+struct ElementListDelim(Vec<CommonDelim>,
+                        /* , (comma) */
+                        Vec<CommonDelim>);
+
+generate_list_parser!(
+    ElementList;
+    ElementListRest;
+    ElementListState;
+    ElementListDelim;
+    ElementListItem);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ElementList
@@ -3408,7 +3441,7 @@ fn element_list<I: U8Input>(i: ESInput<I>,
         panic!("misuse of element_list");
     }
 
-    type Accumulator = Rc<RefCell<Vec<ElementListItem>>>;
+    type Accumulator = Rc<RefCell<ElementListState>>;
 
     #[inline]
     fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
@@ -3421,18 +3454,23 @@ fn element_list<I: U8Input>(i: ESInput<I>,
                 |i| {
                     let loc = i.position();
                     // TODO: proper err message?
-                    ErrorLocation::new(loc, "Expected , delimeter for array.".to_string())
+                    ErrorLocation::new(loc, "Expected , here.".to_string())
                 }
             );
 
             let delim_2 = common_delim();
 
             ret {
-                accumulator.borrow_mut().push(ElementListItem::Delim(delim_1, delim_2));
+                let delim = ElementListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
                 ()
             }
         }
     }
+
+    let mut assign_expr = params.clone();
+    assign_expr.insert(Parameter::In);
 
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
         parse!{i;
@@ -3441,10 +3479,6 @@ fn element_list<I: U8Input>(i: ESInput<I>,
 
             let item = either(
                 |i| {
-
-                    let mut assign_expr = params.clone();
-                    assign_expr.insert(Parameter::In);
-
                     assignment_expression(i, &assign_expr)
                 },
                 |i| {
@@ -3453,8 +3487,7 @@ fn element_list<I: U8Input>(i: ESInput<I>,
             );
 
             ret {
-
-                let item = match item {
+                let rhs = match item {
                     Either::Left(x) => {
                         ElementListItem::ItemExpression(elision_prefix, x)
                     }
@@ -3463,22 +3496,13 @@ fn element_list<I: U8Input>(i: ESInput<I>,
                     }
                 };
 
-                accumulator.borrow_mut().push(item);
+                accumulator.borrow_mut().add_item(rhs);
                 ()
             }
         }
     };
 
-    parse!{i;
-
-        let list = parse_list(
-            delimiter,
-            reducer
-        );
-
-        ret ElementList(list)
-    }
-
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 struct Elision(Vec<ElisionItem>);
@@ -4524,11 +4548,12 @@ fn arguments_list<I: U8Input>(i: ESInput<I>,
         }
     }
 
+
+    let mut expr_params = params.clone();
+    expr_params.insert(Parameter::In);
+
     #[inline]
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
-
-        let mut params = params.clone();
-        params.insert(Parameter::In);
 
         option(i,
                |i| {
@@ -4537,7 +4562,7 @@ fn arguments_list<I: U8Input>(i: ESInput<I>,
                        .map(|x| Some(x))
                },
                None)
-            .bind(|i, delim| assignment_expression(i, &params).map(|x| (delim, x)))
+            .bind(|i, delim| assignment_expression(i, &expr_params).map(|x| (delim, x)))
             .bind(|i, (rest_op, assignment_expression)| -> ESParseResult<I, ()> {
                 let rhs = if let Some(delim) = rest_op {
                     ArgumentListItem::RestAssignmentExpression(delim, assignment_expression)
