@@ -3628,14 +3628,46 @@ fn object_literal<I: U8Input>(i: ESInput<I>,
     }
 }
 
-struct PropertyDefinitionList(Vec<PropertyDefinitionListItem>);
+struct PropertyDefinitionList(PropertyDefinition, Vec<PropertyDefinitionListRest>);
 
-enum PropertyDefinitionListItem {
-    Delim(Vec<CommonDelim>,
-          /* , (comma) */
-          Vec<CommonDelim>),
-    PropertyDefinition(PropertyDefinition),
+impl PropertyDefinitionList {
+    fn new(rhs_val: PropertyDefinition) -> Self {
+        PropertyDefinitionList(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: PropertyDefinitionListDelim,
+                rhs_val: PropertyDefinition)
+                -> Self {
+
+        let PropertyDefinitionList(head, rest) = self;
+        let mut rest = rest;
+
+        let PropertyDefinitionListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = PropertyDefinitionListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        PropertyDefinitionList(head, rest)
+    }
 }
+
+struct PropertyDefinitionListRest(Vec<CommonDelim>,
+                                  /* , (comma) */
+                                  Vec<CommonDelim>,
+                                  PropertyDefinition);
+
+struct PropertyDefinitionListDelim(Vec<CommonDelim>,
+                                   /* , (comma) */
+                                   Vec<CommonDelim>);
+
+generate_list_parser!(
+    PropertyDefinitionList;
+    PropertyDefinitionListRest;
+    PropertyDefinitionListState;
+    PropertyDefinitionListDelim;
+    PropertyDefinition);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-PropertyDefinitionList
@@ -3648,7 +3680,7 @@ fn property_definition_list<I: U8Input>(i: ESInput<I>,
         panic!("misuse of property_definition_list");
     }
 
-    type Accumulator = Rc<RefCell<Vec<PropertyDefinitionListItem>>>;
+    type Accumulator = Rc<RefCell<PropertyDefinitionListState>>;
 
     #[inline]
     fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
@@ -3668,33 +3700,22 @@ fn property_definition_list<I: U8Input>(i: ESInput<I>,
             let delim_2 = common_delim();
 
             ret {
-                accumulator.borrow_mut().push(PropertyDefinitionListItem::Delim(delim_1, delim_2));
+                let delim = PropertyDefinitionListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
                 ()
             }
         }
     }
 
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
-        parse!{i;
-
-            let item = property_definition(&params);
-
-            ret {
-                accumulator.borrow_mut().push(PropertyDefinitionListItem::PropertyDefinition(item));
-                ()
-            }
-        }
+        property_definition(i, &params).bind(|i, prop_def| {
+            accumulator.borrow_mut().add_item(prop_def);
+            i.ret(())
+        })
     };
 
-    parse!{i;
-
-        let list = parse_list(
-            delimiter,
-            reducer
-        );
-
-        ret PropertyDefinitionList(list)
-    }
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 
