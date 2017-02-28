@@ -6388,14 +6388,43 @@ fn let_or_const<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LetOrConst> {
              })
 }
 
-struct BindingList(Vec<BindingListItem>);
+struct BindingList(LexicalBinding, Vec<BindingListRest>);
 
-enum BindingListItem {
-    Delim(Vec<CommonDelim>,
-          /* , (comma) */
-          Vec<CommonDelim>),
-    LexicalBinding(LexicalBinding),
+impl BindingList {
+    fn new(rhs_val: LexicalBinding) -> Self {
+        BindingList(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: BindingListDelim, rhs_val: LexicalBinding) -> Self {
+
+        let BindingList(head, rest) = self;
+        let mut rest = rest;
+
+        let BindingListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = BindingListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        BindingList(head, rest)
+    }
 }
+
+struct BindingListRest(Vec<CommonDelim>,
+                       /* , (comma) */
+                       Vec<CommonDelim>,
+                       LexicalBinding);
+
+struct BindingListDelim(Vec<CommonDelim>,
+                        /* , (comma) */
+                        Vec<CommonDelim>);
+
+generate_list_parser!(
+    BindingList;
+    BindingListRest;
+    BindingListState;
+    BindingListDelim;
+    LexicalBinding);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingList
@@ -6409,7 +6438,7 @@ fn binding_list<I: U8Input>(i: ESInput<I>,
         panic!("misuse of binding_list");
     }
 
-    type Accumulator = Rc<RefCell<Vec<BindingListItem>>>;
+    type Accumulator = Rc<RefCell<BindingListState>>;
 
     #[inline]
     fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
@@ -6429,7 +6458,9 @@ fn binding_list<I: U8Input>(i: ESInput<I>,
             let delim_2 = common_delim();
 
             ret {
-                accumulator.borrow_mut().push(BindingListItem::Delim(delim_1, delim_2));
+                let delim = BindingListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
                 ()
             }
         }
@@ -6438,24 +6469,16 @@ fn binding_list<I: U8Input>(i: ESInput<I>,
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
         parse!{i;
 
-            let item = lexical_binding(&params);
+            let rhs = lexical_binding(&params);
 
             ret {
-                accumulator.borrow_mut().push(BindingListItem::LexicalBinding(item));
+                accumulator.borrow_mut().add_item(rhs);
                 ()
             }
         }
     };
 
-    parse!{i;
-
-        let list = parse_list(
-            delimiter,
-            reducer
-        );
-
-        ret BindingList(list)
-    }
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 enum LexicalBinding {
