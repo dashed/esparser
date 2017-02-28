@@ -6614,7 +6614,6 @@ generate_list_parser!(
     VariableDeclarationListDelim;
     VariableDeclaration);
 
-
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableDeclarationList
 fn variable_declaration_list<I: U8Input>(i: ESInput<I>,
@@ -6718,7 +6717,7 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>,
 // http://www.ecma-international.org/ecma-262/7.0/#sec-destructuring-binding-patterns
 
 enum BindingPattern {
-    ObjectBindingPattern(ObjectBindingPattern),
+    ObjectBindingPattern(Box<ObjectBindingPattern>),
     ArrayBindingPattern(Box<ArrayBindingPattern>),
 }
 
@@ -6734,7 +6733,10 @@ fn binding_pattern<I: U8Input>(i: ESInput<I>,
     }
 
     or(i,
-       |i| object_binding_pattern(i, &params).map(|x| BindingPattern::ObjectBindingPattern(x)),
+       |i| {
+           object_binding_pattern(i, &params)
+               .map(|x| BindingPattern::ObjectBindingPattern(Box::new(x)))
+       },
        |i| {
            array_binding_pattern(i, &params)
                .map(|x| BindingPattern::ArrayBindingPattern(Box::new(x)))
@@ -6913,14 +6915,43 @@ fn array_binding_pattern<I: U8Input>(i: ESInput<I>,
     }
 }
 
-struct BindingPropertyList(Vec<BindingPropertyListItem>);
+struct BindingPropertyList(BindingProperty, Vec<BindingPropertyListRest>);
 
-enum BindingPropertyListItem {
-    Delim(Vec<CommonDelim>,
-          /* , (comma) */
-          Vec<CommonDelim>),
-    BindingProperty(BindingProperty),
+impl BindingPropertyList {
+    fn new(rhs_val: BindingProperty) -> Self {
+        BindingPropertyList(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: BindingPropertyListDelim, rhs_val: BindingProperty) -> Self {
+
+        let BindingPropertyList(head, rest) = self;
+        let mut rest = rest;
+
+        let BindingPropertyListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = BindingPropertyListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        BindingPropertyList(head, rest)
+    }
 }
+
+struct BindingPropertyListRest(Vec<CommonDelim>,
+                               /* , (comma) */
+                               Vec<CommonDelim>,
+                               BindingProperty);
+
+struct BindingPropertyListDelim(Vec<CommonDelim>,
+                                /* , (comma) */
+                                Vec<CommonDelim>);
+
+generate_list_parser!(
+    BindingPropertyList;
+    BindingPropertyListRest;
+    BindingPropertyListState;
+    BindingPropertyListDelim;
+    BindingProperty);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-BindingPropertyList
@@ -6933,7 +6964,7 @@ fn binding_property_list<I: U8Input>(i: ESInput<I>,
         panic!("misuse of binding_property_list");
     }
 
-    type Accumulator = Rc<RefCell<Vec<BindingPropertyListItem>>>;
+    type Accumulator = Rc<RefCell<BindingPropertyListState>>;
 
     #[inline]
     fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
@@ -6953,33 +6984,23 @@ fn binding_property_list<I: U8Input>(i: ESInput<I>,
             let delim_2 = common_delim();
 
             ret {
-                accumulator.borrow_mut().push(BindingPropertyListItem::Delim(delim_1, delim_2));
+                let delim = BindingPropertyListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
                 ()
             }
         }
     }
 
+    #[inline]
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
-        parse!{i;
-
-            let item = binding_property(&params);
-
-            ret {
-                accumulator.borrow_mut().push(BindingPropertyListItem::BindingProperty(item));
-                ()
-            }
-        }
+        binding_property(i, &params).bind(|i, rhs| {
+            accumulator.borrow_mut().add_item(rhs);
+            i.ret(())
+        })
     };
 
-    parse!{i;
-
-        let list = parse_list(
-            delimiter,
-            reducer
-        );
-
-        ret BindingPropertyList(list)
-    }
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 struct BindingElementList(Vec<BindingElementListItem>);
