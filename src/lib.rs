@@ -3928,7 +3928,7 @@ enum TemplateLiteral {
     NoSubstitutionTemplate(NoSubstitutionTemplate),
     SubstitutionTemplate(TemplateHead,
                          Vec<CommonDelim>,
-                         ExpressionList,
+                         Expression,
                          Vec<CommonDelim>,
                          TemplateSpans),
 }
@@ -4002,7 +4002,7 @@ fn template_spans<I: U8Input>(i: ESInput<I>,
 struct TemplateMiddleListItem(TemplateMiddle,
                               /* ${ */
                               Vec<CommonDelim>,
-                              ExpressionList);
+                              Expression);
 
 struct TemplateMiddleList(TemplateMiddleListItem, Vec<TemplateMiddleListItem>);
 
@@ -4112,7 +4112,7 @@ enum SuperProperty {
                             Vec<CommonDelim>,
                             /* [ */
                             Vec<CommonDelim>,
-                            ExpressionList,
+                            Expression,
                             Vec<CommonDelim> /* ] */),
     PropertyAccessorDot(/* super */
                         Vec<CommonDelim>,
@@ -4282,7 +4282,7 @@ enum CallExpressionRestItem {
     FunctionCall(Arguments),
     PropertyAccessorBracket(/* [ */
                             Vec<CommonDelim>,
-                            ExpressionList,
+                            Expression,
                             Vec<CommonDelim> /* ] */),
     PropertyAccessorDot(/* . */
                         Vec<CommonDelim>,
@@ -5999,26 +5999,56 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>,
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-comma-operator
 
-struct ExpressionList(Vec<ExpressionListItem>);
+struct Expression(AssignmentExpression, Vec<ExpressionRest>);
 
-enum ExpressionListItem {
-    Delim(Vec<CommonDelim>,
-          /* , (comma) */
-          Vec<CommonDelim>),
-    AssignmentExpression(AssignmentExpression),
+impl Expression {
+    fn new(rhs_val: AssignmentExpression) -> Self {
+        Expression(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: ExpressionDelim, rhs_val: AssignmentExpression) -> Self {
+
+        let Expression(head, rest) = self;
+        let mut rest = rest;
+
+        let ExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = ExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        Expression(head, rest)
+    }
 }
 
+struct ExpressionRest(Vec<CommonDelim>,
+                      /* , (comma) */
+                      Vec<CommonDelim>,
+                      AssignmentExpression);
+
+struct ExpressionDelim(Vec<CommonDelim>,
+                       /* , (comma) */
+                       Vec<CommonDelim>);
+
+generate_list_parser!(
+    Expression;
+    ExpressionRest;
+    ExpressionState;
+    ExpressionDelim;
+    AssignmentExpression);
+
+// TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Expression
 fn expression<I: U8Input>(i: ESInput<I>,
                           params: &EnumSet<Parameter>)
-                          -> ESParseResult<I, ExpressionList> {
+                          -> ESParseResult<I, Expression> {
 
     if !(params.is_empty() || params.contains(&Parameter::Yield) ||
          params.contains(&Parameter::In)) {
         panic!("misuse of expression");
     }
 
-    type Accumulator = Rc<RefCell<Vec<ExpressionListItem>>>;
+    type Accumulator = Rc<RefCell<ExpressionState>>;
 
     #[inline]
     fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
@@ -6038,7 +6068,9 @@ fn expression<I: U8Input>(i: ESInput<I>,
             let delim_2 = common_delim();
 
             ret {
-                accumulator.borrow_mut().push(ExpressionListItem::Delim(delim_1, delim_2));
+                let delim = ExpressionDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
                 ()
             }
         }
@@ -6050,22 +6082,13 @@ fn expression<I: U8Input>(i: ESInput<I>,
             let item = assignment_expression(&params);
 
             ret {
-                accumulator.borrow_mut().push(ExpressionListItem::AssignmentExpression(item));
+                accumulator.borrow_mut().add_item(item);
                 ()
             }
         }
     };
 
-    parse!{i;
-
-        let list = parse_list(
-            delimiter,
-            reducer
-        );
-
-        ret ExpressionList(list)
-    }
-
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 // == 13 ECMAScript Language: Statements and Declarations ==
@@ -7212,7 +7235,7 @@ fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-expression-statement
 
-struct ExpressionStatement(ExpressionList, Vec<CommonDelim>);
+struct ExpressionStatement(Expression, Vec<CommonDelim>);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-ExpressionStatement
@@ -7282,7 +7305,7 @@ enum IfStatement {
               Vec<CommonDelim>,
               /* ( */
               Vec<CommonDelim>,
-              ExpressionList,
+              Expression,
               Vec<CommonDelim>,
               /* ) */
               Vec<CommonDelim>,
@@ -7291,7 +7314,7 @@ enum IfStatement {
               Vec<CommonDelim>,
               /* ( */
               Vec<CommonDelim>,
-              ExpressionList,
+              Expression,
               Vec<CommonDelim>,
               /* ) */
               Vec<CommonDelim>,
