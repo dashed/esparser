@@ -6802,13 +6802,10 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>,
         }
     }
 
-    let mut __binding_params;
-    let binding_params = if is_debug_mode!() {
-        __binding_params = params.clone();
-        __binding_params.remove(&Parameter::In);
-        &__binding_params
-    } else {
-        params
+    let binding_params = {
+        let binding_params = params.clone();
+        binding_params.remove(&Parameter::In);
+        binding_params
     };
 
     either(i,
