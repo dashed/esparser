@@ -44,6 +44,15 @@ Bookmark:
 
  */
 
+
+
+// ref: https://github.com/rust-lang/cargo/pull/1444
+macro_rules! is_debug_mode {
+    () => {
+        cfg!(debug_assertions)
+    }
+}
+
 type ESInput<I> = InputPosition<I, CurrentPosition>;
 type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ErrorChain>;
 
@@ -6785,15 +6794,23 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>,
                                     params: &EnumSet<Parameter>)
                                     -> ESParseResult<I, VariableDeclaration> {
 
-    // validation
-    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
-         params.contains(&Parameter::In)) {
-        panic!("misuse of variable_declaration");
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+             params.contains(&Parameter::In)) {
+            panic!("misuse of variable_declaration");
+        }
     }
 
-    let mut binding_params = params.clone();
-    binding_params.remove(&Parameter::In);
-    let binding_params = binding_params;
+    let mut __binding_params;
+    let binding_params = if is_debug_mode!() {
+        let mut params = params.clone();
+        params.remove(&Parameter::In);
+        __binding_params = Box::new(params);
+        &__binding_params
+    } else {
+        params
+    };
 
     either(i,
            |i| binding_identifier(i, &binding_params), // left
