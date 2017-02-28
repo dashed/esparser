@@ -6197,6 +6197,7 @@ enum Statement {
     EmptyStatement(EmptyStatement),
     ExpressionStatement(ExpressionStatement),
     IfStatement(Box<IfStatement>),
+    BreakableStatement(BreakableStatement), // TODO: more stuff
 }
 
 // TODO: test
@@ -6217,15 +6218,17 @@ fn statement<I: U8Input>(i: ESInput<I>,
     parse!{i;
 
         let x =
-        (i -> block_statement(i, &params).map(|x| Statement::BlockStatement(x)))
+        (i -> block_statement(i, &params).map(Statement::BlockStatement))
         <|>
-        (i -> variable_statement(i, &yield_params).map(|x| Statement::VariableStatement(x)))
+        (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement))
         <|>
-        (i -> empty_statement(i).map(|x| Statement::EmptyStatement(x)))
+        (i -> empty_statement(i).map(Statement::EmptyStatement))
         <|>
-        (i -> expression_statement(i, &params).map(|x| Statement::ExpressionStatement(x)))
+        (i -> expression_statement(i, &params).map(Statement::ExpressionStatement))
         <|>
-        (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))));
+        (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))))
+        <|>
+        (i -> breakable_statement(i, &params).map(Statement::BreakableStatement));
 
         // TODO: more statements
 
@@ -6306,7 +6309,10 @@ fn block_statement<I: U8Input>(i: ESInput<I>,
     block(i, params).map(BlockStatement)
 }
 
-struct Block(/* { */ Vec<CommonDelim>, Option<Box<StatementList>>, Vec<CommonDelim> /* } */);
+struct Block(/* { */
+             Vec<CommonDelim>,
+             Option<Box<StatementList>>,
+             Vec<CommonDelim> /* } */);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Block
@@ -6631,7 +6637,7 @@ fn lexical_binding<I: U8Input>(i: ESInput<I>,
 struct VariableStatement(/* var */
                          Vec<CommonDelim>,
                          VariableDeclarationList,
-                         Vec<CommonDelim>);
+                         Vec<CommonDelim> /* ; */);
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-VariableStatement
@@ -7395,6 +7401,7 @@ fn binding_rest_element<I: U8Input>(i: ESInput<I>,
 //
 // http://www.ecma-international.org/ecma-262/7.0/#sec-empty-statement
 
+// TODO: common delim?
 struct EmptyStatement;
 
 // TODO: test
