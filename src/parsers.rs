@@ -5,7 +5,6 @@ use std::cell::RefCell;
 
 // 3rd-party imports
 
-use chomp::combinators::or;
 use chomp::parsers::Error as ChompError;
 use chomp::types::numbering::{InputPosition, LineNumber, Numbering};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
@@ -18,8 +17,7 @@ use chomp::prelude::Either;
 // TODO: document reason why?
 macro_rules! __parse_internal_or {
     ($input:expr, $lhs:expr, $rhs:expr) => {
-        println!("rofl");
-        or($input, $lhs, $rhs)
+        $crate::parsers::or($input, $lhs, $rhs)
     };
 }
 
@@ -442,6 +440,25 @@ pub fn either<I, T, U, E, F, G>(i: I, f: F, g: G) -> ParseResult<I, Either<T, U>
         (b, Err(err)) => {
             match err.into_parse_error() {
                 ParseError::Failure => g(b.restore(m)).map(Either::Right),
+                ParseError::Error => b.err(err),
+            }
+        }
+    }
+}
+
+#[inline]
+pub fn or<I: Input, T, E, F, G>(i: I, f: F, g: G) -> ParseResult<I, T, E>
+    where F: FnOnce(I) -> ParseResult<I, T, E>,
+          G: FnOnce(I) -> ParseResult<I, T, E>,
+          E: IntoParseError
+{
+    let m = i.mark();
+
+    match f(i).into_inner() {
+        (b, Ok(d)) => b.ret(d),
+        (b, Err(err)) => {
+            match err.into_parse_error() {
+                ParseError::Failure => g(b.restore(m)),
                 ParseError::Error => b.err(err),
             }
         }

@@ -1,7 +1,3 @@
-// 15 ECMAScript Language: Scripts and Modules
-//
-// Reference: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-scripts-and-modules
-
 // 3rd-party imports
 
 use chomp::types::{U8Input, Input};
@@ -10,6 +6,10 @@ use chomp::types::{U8Input, Input};
 
 use super::types::Parameters;
 use parsers::{ESInput, ESParseResult, option};
+
+// 15 ECMAScript Language: Scripts and Modules
+//
+// Reference: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-scripts-and-modules
 
 // 15.1 Scripts
 

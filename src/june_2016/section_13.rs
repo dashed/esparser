@@ -1,7 +1,3 @@
-// 13 ECMAScript Language: Statements and Declarations
-//
-// Reference: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-statements-and-declarations
-
 // rust imports
 
 use std::rc::Rc;
@@ -15,6 +11,57 @@ use chomp::types::{U8Input, Input};
 
 use super::types::{Parameters, Parameter};
 use parsers::{ESInput, ESParseResult, parse_list};
+
+// 13 ECMAScript Language: Statements and Declarations
+//
+// Reference: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-statements-and-declarations
+
+struct Statement;
+// enum Statement {
+//     BlockStatement(BlockStatement),
+//     VariableStatement(VariableStatement),
+//     EmptyStatement(EmptyStatement),
+//     ExpressionStatement(ExpressionStatement),
+//     IfStatement(Box<IfStatement>),
+//     BreakableStatement(BreakableStatement), // TODO: more stuff
+// }
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Statement
+fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Statement> {
+
+    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+         params.contains(&Parameter::Return)) {
+        panic!("misuse of statement");
+    }
+
+    let mut yield_params = params.clone();
+    yield_params.remove(&Parameter::Yield);
+    let yield_params = yield_params;
+
+    i.ret(Statement)
+
+    // TODO: fix
+    // parse!{i;
+
+    //     let x =
+    //     (i -> block_statement(i, &params).map(Statement::BlockStatement))
+    //     <|>
+    //     (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement))
+    //     <|>
+    //     (i -> empty_statement(i).map(Statement::EmptyStatement))
+    //     <|>
+    //     (i -> expression_statement(i, &params).map(Statement::ExpressionStatement))
+    //     <|>
+    //     (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))))
+    //     <|>
+    //     (i -> breakable_statement(i, &params).map(Statement::BreakableStatement));
+
+    //     // TODO: more statements
+
+    //     ret x
+    // }
+}
 
 // 13.2 Block
 
@@ -81,33 +128,52 @@ fn statement_list<I: U8Input>(i: ESInput<I>,
 // StatementListItem
 
 // TODO: fix
-struct StatementListItem;
-// enum StatementListItem {
-//     Statement(Statement),
-//     Declaration(Declaration),
-// }
+enum StatementListItem {
+    Statement(Statement), //     Declaration(Declaration),
+}
 
 // TODO: test
 fn statement_list_item<I: U8Input>(i: ESInput<I>,
                                    params: &Parameters)
                                    -> ESParseResult<I, StatementListItem> {
 
-    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
-         params.contains(&Parameter::Return)) {
-        panic!("misuse of statement_list_item");
+    if is_debug_mode!() {
+        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+             params.contains(&Parameter::Return)) {
+            panic!("misuse of statement_list_item");
+        }
     }
 
-    i.ret(StatementListItem)
+    let mut yield_params = params.clone();
+    yield_params.remove(&Parameter::Yield);
+    let yield_params = yield_params;
 
-    // let mut yield_params = params.clone();
-    // yield_params.remove(&Parameter::Yield);
-    // let yield_params = yield_params;
+    parse!{i;
 
-    // parse!{i;
+        let item = (i -> statement(i, &params).map(StatementListItem::Statement)) <|>
+        (i -> statement(i, &params).map(StatementListItem::Statement));
+        // (i -> declaration(i, &yield_params).map(|x| StatementListItem::Declaration(x)));
 
-    //     let item = (i -> statement(i, &params).map(|x| StatementListItem::Statement(x))) <|>
-    //     (i -> declaration(i, &yield_params).map(|x| StatementListItem::Declaration(x)));
+        ret item
+    }
+}
 
-    //     ret item
+#[test]
+fn foo() {
+
+    use chomp::types::numbering::InputPosition;
+    use parsers::CurrentPosition;
+    use chomp::primitives::IntoInner;
+
+    let i = InputPosition::new("var".as_bytes(), CurrentPosition::new());
+    let params = Parameters::new();
+
+    // match statement_list_item(i, &params).into_inner().1 {
+    //     Ok(_) => {
+    //         assert!(false);
+    //     }
+    //     Err(_) => {
+    //         assert!(false);
+    //     }
     // }
 }
