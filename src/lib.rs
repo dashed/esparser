@@ -36,6 +36,7 @@ pub use june_2016 as es_2016;
 pub use june_2016 as es7;
 
 // TODO: implement
-// Next ECMAScript in development (8 Edition)
-// pub mod edge;
-// pub mod edge as es8;
+// TODO: ideally tracking https://github.com/tc39/ecma262
+// ECMAScript draft (8 Edition)
+// pub mod draft;
+// pub mod draft as es8;
