@@ -9,6 +9,7 @@ use chomp::types::{Buffer, Input, ParseResult, U8Input};
 // macros
 
 /// Override the or-combinator used by parse! macro in chomp
+// TODO: document reason why?
 macro_rules! __parse_internal_or {
     ($input:expr, $lhs:expr, $rhs:expr) => {
         println!("rofl");
@@ -26,16 +27,6 @@ type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ESParseError>;
 
 // error types
 
-// TODO: inner is 'Reason' string.
-struct SyntaxError(String);
-
-enum ESError {
-    SyntaxError(SyntaxError)
-}
-
-// TODO: fix
-struct ErrorChain;
-
 // Mimic the Failure and Error semantics as detailed here:
 // http://www.scala-lang.org/files/archive/api/current/scala-parser-combinators/scala/util/parsing/combinator/Parsers.html
 enum ESParseError {
@@ -45,6 +36,88 @@ enum ESParseError {
 
     // No backtracking is done.
     Error(ESError)
+}
+
+enum ESError {
+    SyntaxError(SyntaxError)
+}
+
+// TODO: inner is 'Reason' string.
+struct SyntaxError(String);
+
+// ErrorChain
+
+#[derive(Debug)]
+struct ErrorChain {
+    current: Box<::std::error::Error>,
+    next: Option<Box<ErrorChain>>,
+}
+
+impl ErrorChain {
+    fn new<T>(err_to_wrap: T) -> Self
+        where ErrorChain: ::std::convert::From<T>
+    {
+
+        let error_to_chain = ErrorChain::from(err_to_wrap);
+
+        ErrorChain {
+            current: error_to_chain.current,
+            next: None,
+        }
+    }
+
+    fn chain_err<T>(self, error_to_chain: T) -> Self
+        where ErrorChain: ::std::convert::From<T>
+    {
+
+        let error_to_chain = ErrorChain::from(error_to_chain);
+
+        ErrorChain {
+            current: error_to_chain.current,
+            next: Some(Box::new(self)),
+        }
+    }
+
+    fn iter(&self) -> ErrorChainIter {
+        ErrorChainIter(Some(self))
+    }
+}
+
+impl ::std::error::Error for ErrorChain {
+    fn description(&self) -> &str {
+        self.current.description()
+    }
+
+    fn cause(&self) -> Option<&::std::error::Error> {
+        match self.next {
+            Some(ref c) => Some(&**c),
+            None => self.current.cause(),
+        }
+    }
+}
+
+impl ::std::fmt::Display for ErrorChain {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
+        self.current.fmt(f)
+    }
+}
+
+// ErrorChainIter
+
+struct ErrorChainIter<'a>(pub Option<&'a ::std::error::Error>);
+
+impl<'a> Iterator for ErrorChainIter<'a> {
+    type Item = &'a ::std::error::Error;
+
+    fn next<'b>(&'b mut self) -> Option<&'a ::std::error::Error> {
+        match self.0.take() {
+            Some(e) => {
+                self.0 = e.cause();
+                Some(e)
+            }
+            None => None,
+        }
+    }
 }
 
 // current position
