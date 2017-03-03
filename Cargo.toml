@@ -8,13 +8,13 @@ authors = ["Alberto Leal <mailforalberto@gmail.com>"]
 doctest = false
 
 # TODO: REMOVE
-[dependencies.chomp]
-git = "https://github.com/dashed/chomp"
-rev = "b4e0530b06658066529cc4a55820c42e9094eb2d" # 'satisfy-error' branch
+# [dependencies.chomp]
+# git = "https://github.com/dashed/chomp"
+# rev = "b4e0530b06658066529cc4a55820c42e9094eb2d" # 'satisfy-error' branch
 # branch = "bind_err"
 
 [dependencies]
-# chomp = "0.3.1"
+chomp = "0.3.1"
 # quick-error = "1.1.0"
 # error-chain = "0.7.1"
 enum-set = "0.0.6"
