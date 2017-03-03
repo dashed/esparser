@@ -1,5 +1,5 @@
 #![recursion_limit="1000"]
-#![feature(unicode)]
+#![feature(unicode,specialization)]
 // == crates ==
 #[macro_use]
 extern crate chomp;
@@ -16,7 +16,7 @@ use std::cell::RefCell;
 use chomp::run_parser;
 use chomp::parsers::{SimpleResult, scan, take_till, satisfy, take_while1};
 use chomp::combinators::{option, look_ahead, many_till, many1, many, or, either};
-use chomp::types::{Buffer, Input, ParseResult, U8Input};
+use chomp::types::{Buffer, Input, ParseResult, U8Input, Satisfy};
 use chomp::parse_only;
 use chomp::parsers::Error as ChompError;
 use chomp::primitives::Primitives;
@@ -45,17 +45,26 @@ Bookmark:
  */
 
 
+#[derive(Debug)]
+struct SyntaxError(String);
 
+impl ::std::error::Error for SyntaxError {
+    fn description(&self) -> &str {
+        &self.0
+    }
+}
 
-
+impl ::std::fmt::Display for SyntaxError {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
+        write!(f, "{}", self.0)
+    }
+}
 
 
 // traits
 
 // TODO: put this somewhere
 trait StaticSemantics {}
-
-struct SyntaxError(String);
 
 trait EarlyErrors: StaticSemantics {
     fn check_early_error(&self) -> Option<SyntaxError> {
@@ -68,6 +77,22 @@ trait EarlyErrors: StaticSemantics {
 macro_rules! is_debug_mode {
     () => {
         cfg!(debug_assertions)
+    }
+}
+
+enum ESError {
+    ErrorChain(ErrorChain),
+    SyntaxError(SyntaxError),
+}
+
+impl From<ESError> for Satisfy<ESError> {
+    fn from(input: ESError) -> Satisfy<ESError> {
+        Satisfy::Satisfied(input)
+        // match input {
+        //     ESError::SyntaxError(err) => Satisfy::Satisfied(input),
+        //     ESError::ErrorChain(err) => Satisfy::NotSatisfied(input),
+        // }
+
     }
 }
 
@@ -148,6 +173,7 @@ macro_rules! error_chain_for {
 
 error_chain_for!(ErrorLocation);
 error_chain_for!(U8Error);
+error_chain_for!(SyntaxError);
 
 #[derive(Debug)]
 struct ErrorMsg(String);
@@ -722,6 +748,7 @@ fn string_till<I: U8Input, F>(input: ESInput<I>, mut stop_at: F) -> ESParseResul
         .bind(|i, line: Vec<char>| i.ret(line.into_iter().collect()))
 }
 
+// TODO: remove
 // TODO: test
 #[inline]
 fn parse_utf8_char_of_bytes<I: U8Input>(i: ESInput<I>, needle: &[u8]) -> ESParseResult<I, char> {
@@ -1385,7 +1412,7 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
         parse!{i;
 
             let whitespace_char =
-                parse_utf8_char_of_bytes(b"\x0009") <|> // <TAB>; CHARACTER TABULATION
+                (i -> string(i, b"\x0009").map(|_| '\u{0009}')) <|> // <TAB>; CHARACTER TABULATION
                 parse_utf8_char_of_bytes(b"\x000B") <|> // <VT>; LINE TABULATION
                 parse_utf8_char_of_bytes(b"\x000C") <|> // <FF>; FORM FEED (FF)
                 parse_utf8_char_of_bytes(b"\x0020") <|> // <SP>; SPACE
@@ -2833,7 +2860,7 @@ fn unicode_escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Unicod
             }
         }}
     )
-    .bind(|i, result| {
+    .bind(|i, result| -> ESParseResult<I, UnicodeEscapeSequence> {
         match result {
             Either::Left(sequence) => {
 
@@ -2862,6 +2889,12 @@ fn unicode_escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Unicod
             Either::Right(c) => {
                 i.ret(c)
             }
+        }
+    })
+    .bind(|i, result| -> ESParseResult<I, UnicodeEscapeSequence> {
+        match result.check_early_error() {
+            None => i.ret(result),
+            Some(syntax_error) => i.err(syntax_error.into())
         }
     })
 }
@@ -2902,6 +2935,15 @@ fn hex_4_digits_test() {
             assert!(false);
         }
     }
+
+    // TODO: more tests
+}
+
+// == 11.8.5 Regular Expression Literals ==
+//
+// http://www.ecma-international.org/ecma-262/7.0/#sec-literals-regular-expression-literals
+
+// TODO: complete
 
 // == 11.8.6 Template Literal Lexical Components ==
 //
