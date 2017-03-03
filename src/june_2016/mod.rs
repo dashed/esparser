@@ -3,3 +3,7 @@
 // ECMAScript (R) 2016 Language Specification
 //
 // Reference: http://www.ecma-international.org/ecma-262/7.0/
+
+mod traits;
+
+mod section_15;
