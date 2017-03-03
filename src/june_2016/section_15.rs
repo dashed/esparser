@@ -14,6 +14,4 @@ pub struct Script;
 // }
 
 #[test]
-fn foo() {
-
-}
+fn foo() {}

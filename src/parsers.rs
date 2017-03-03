@@ -1,7 +1,7 @@
 
 // 3rd-party imports
 
-use chomp::combinators::{or};
+use chomp::combinators::or;
 use chomp::parsers::Error as ChompError;
 use chomp::types::numbering::{InputPosition, LineNumber, Numbering};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
@@ -30,16 +30,15 @@ type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ESParseError>;
 // Mimic the Failure and Error semantics as detailed here:
 // http://www.scala-lang.org/files/archive/api/current/scala-parser-combinators/scala/util/parsing/combinator/Parsers.html
 enum ESParseError {
-
     // Parser shall backtrack.
     Failure(ErrorChain),
 
     // No backtracking is done.
-    Error(ESError)
+    Error(ESError),
 }
 
 enum ESError {
-    SyntaxError(SyntaxError)
+    SyntaxError(SyntaxError),
 }
 
 // TODO: inner is 'Reason' string.
@@ -132,15 +131,14 @@ struct CurrentCol(u64);
 #[derive(Clone)]
 pub struct CurrentPosition {
     line: CurrentLine,
-    col: CurrentCol
+    col: CurrentCol,
 }
 
 impl CurrentPosition {
-
     pub fn new() -> Self {
         CurrentPosition {
             line: CurrentLine(0),
-            col: CurrentCol(0)
+            col: CurrentCol(0),
         }
     }
 
