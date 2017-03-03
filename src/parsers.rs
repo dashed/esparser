@@ -22,8 +22,8 @@ macro_rules! __parse_internal_or {
 // TODO: docs
 type U8Error = ChompError<u8>;
 
-type ESInput<I> = InputPosition<I, CurrentPosition>;
-type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ESParseError>;
+pub type ESInput<I> = InputPosition<I, CurrentPosition>;
+pub type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ESParseError>;
 
 // error types
 

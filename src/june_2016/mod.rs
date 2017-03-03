@@ -4,6 +4,8 @@
 //
 // Reference: http://www.ecma-international.org/ecma-262/7.0/
 
+mod types;
+
 mod traits;
 
 mod section_15;
