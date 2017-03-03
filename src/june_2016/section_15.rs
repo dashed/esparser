@@ -27,6 +27,3 @@ pub fn script_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ScriptBody> {
     // TODO: complete
     i.ret(ScriptBody)
 }
-
-#[test]
-fn foo() {}

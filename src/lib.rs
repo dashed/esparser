@@ -9,6 +9,9 @@ extern crate enum_set;
 // modules
 
 #[macro_use]
+mod global_macros;
+
+#[macro_use]
 mod parsers;
 
 // TODO: implement
