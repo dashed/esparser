@@ -54,7 +54,7 @@ enum ESError {
 }
 
 // TODO: inner is 'Reason' string.
-struct SyntaxError(String);
+pub struct SyntaxError(String);
 
 // ErrorChain
 
