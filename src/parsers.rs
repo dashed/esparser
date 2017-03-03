@@ -5,6 +5,7 @@ use chomp::combinators::or;
 use chomp::parsers::Error as ChompError;
 use chomp::types::numbering::{InputPosition, LineNumber, Numbering};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
+use chomp::primitives::{Primitives, IntoInner};
 
 // macros
 
@@ -27,14 +28,22 @@ pub type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ESParseError>;
 
 // error types
 
-// Mimic the Failure and Error semantics as detailed here:
-// http://www.scala-lang.org/files/archive/api/current/scala-parser-combinators/scala/util/parsing/combinator/Parsers.html
 enum ESParseError {
     // Parser shall backtrack.
     Failure(ErrorChain),
 
     // No backtracking is done.
     Error(ESError),
+}
+
+impl IntoParseError for ESParseError {
+    #[inline]
+    fn into_parse_error(&self) -> ParseError {
+        match *self {
+            ESParseError::Failure(_) => ParseError::Failure,
+            ESParseError::Error(_) => ParseError::Error,
+        }
+    }
 }
 
 enum ESError {
@@ -178,6 +187,40 @@ impl Numbering for CurrentPosition {
             self.col.0 = 0;  // col num
         } else {
             self.col.0 += 1; // col num
+        }
+    }
+}
+
+// chomp overrides
+
+// Mimic the Failure and Error semantics as detailed here:
+// http://www.scala-lang.org/files/archive/api/current/scala-parser-combinators/scala/util/parsing/combinator/Parsers.html
+pub enum ParseError {
+    // Parser shall backtrack.
+    Failure,
+
+    // No backtracking is done.
+    Error,
+}
+
+pub trait IntoParseError {
+    #[inline]
+    fn into_parse_error(&self) -> ParseError;
+}
+
+#[inline]
+pub fn option<I: Input, T, E: IntoParseError, F>(i: I, f: F, default: T) -> ParseResult<I, T, E>
+    where F: FnOnce(I) -> ParseResult<I, T, E>
+{
+    let m = i.mark();
+
+    match f(i).into_inner() {
+        (b, Ok(d)) => b.ret(d),
+        (b, Err(err)) => {
+            match err.into_parse_error() {
+                ParseError::Failure => b.restore(m).ret(default),
+                ParseError::Error => b.err(err),
+            }
         }
     }
 }

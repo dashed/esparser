@@ -9,16 +9,23 @@ use chomp::types::{U8Input, Input};
 // local imports
 
 use super::types::Parameters;
-use parsers::{ESInput, ESParseResult};
+use parsers::{ESInput, ESParseResult, option};
 
 // 15.1 Scripts
 
-pub struct Script;
+pub struct Script(Option<ScriptBody>);
 
 // TODO: test
-pub fn script<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Script> {
+pub fn script<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Script> {
+    option(i, |i| script_body(i).map(Some), None).map(Script)
+}
 
-    i.ret(Script)
+pub struct ScriptBody;
+
+// TODO: test
+pub fn script_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ScriptBody> {
+    // TODO: complete
+    i.ret(ScriptBody)
 }
 
 #[test]
