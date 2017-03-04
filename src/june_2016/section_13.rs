@@ -10,7 +10,8 @@ use chomp::types::{U8Input, Input};
 // local imports
 
 use super::types::{Parameters, Parameter};
-use parsers::{ESInput, ESParseResult, parse_list, token};
+use super::section_11::{common_delim, CommonDelim};
+use parsers::{ESInput, ESParseResult, parse_list, token, option};
 
 // 13 ECMAScript Language: Statements and Declarations
 //
@@ -25,7 +26,6 @@ enum Statement {
 }
 
 // TODO: test
-// http://www.ecma-international.org/ecma-262/7.0/#prod-Statement
 fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Statement> {
 
     if !(params.is_empty() || params.contains(&Parameter::Yield) ||
@@ -66,7 +66,7 @@ struct BlockStatement(Block);
 
 // TODO: test
 fn block_statement<I: U8Input>(i: ESInput<I>,
-                               params: &EnumSet<Parameter>)
+                               params: &Parameters)
                                -> ESParseResult<I, BlockStatement> {
 
     if is_debug_mode!() {
@@ -87,7 +87,7 @@ struct Block(/* { */
              Vec<CommonDelim> /* } */);
 
 // TODO: test
-fn block<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, Block> {
+fn block<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Block> {
 
     if is_debug_mode!() {
         if !(params.is_empty() || params.contains(&Parameter::Yield) ||
@@ -99,13 +99,11 @@ fn block<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResul
     parse!{i;
 
         token(b'{');
-        // TODO: fix
-        // let delim_left = common_delim();
+        let delim_left = common_delim();
 
         let contents = option(|i| statement_list(i, params).map(|x| Some(Box::new(x))), None);
 
-        // TODO: fix
-        // let delim_right = common_delim();
+        let delim_right = common_delim();
         token(b'}');
 
         ret Block(delim_left, contents, delim_right)
@@ -210,7 +208,7 @@ fn statement_list_item<I: U8Input>(i: ESInput<I>,
 fn foo() {
 
     use chomp::types::numbering::InputPosition;
-    use parsers::CurrentPosition;
+    use parsers::current_position::CurrentPosition;
     use chomp::primitives::IntoInner;
 
     let i = InputPosition::new("var".as_bytes(), CurrentPosition::new());
