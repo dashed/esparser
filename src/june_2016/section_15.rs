@@ -6,6 +6,7 @@ use chomp::types::{U8Input, Input};
 
 use super::types::Parameters;
 use parsers::{ESInput, ESParseResult, option};
+use super::section_13::{StatementList, statement_list};
 
 // 15 ECMAScript Language: Scripts and Modules
 //
@@ -20,10 +21,11 @@ pub fn script<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Script> {
     option(i, |i| script_body(i).map(Some), None).map(Script)
 }
 
-pub struct ScriptBody;
+pub struct ScriptBody(StatementList);
 
 // TODO: test
 pub fn script_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ScriptBody> {
-    // TODO: complete
-    i.ret(ScriptBody)
+    // TODO: move this somewhere else
+    let params = Parameters::new();
+    statement_list(i, &params).map(ScriptBody)
 }

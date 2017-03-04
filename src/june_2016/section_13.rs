@@ -67,7 +67,7 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
 
 // StatementList
 
-struct StatementList(StatementListItem, Vec<StatementListItem>);
+pub struct StatementList(StatementListItem, Vec<StatementListItem>);
 
 impl StatementList {
     fn new(rhs_val: StatementListItem) -> Self {
@@ -95,7 +95,7 @@ generate_list_parser!(
     StatementListItem);
 
 // TODO: test
-fn statement_list<I: U8Input>(i: ESInput<I>,
+pub fn statement_list<I: U8Input>(i: ESInput<I>,
                               params: &Parameters)
                               -> ESParseResult<I, StatementList> {
 

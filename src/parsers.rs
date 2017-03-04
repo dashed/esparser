@@ -464,3 +464,79 @@ pub fn or<I: Input, T, E, F, G>(i: I, f: F, g: G) -> ParseResult<I, T, E>
         }
     }
 }
+
+
+// ------ sandbox ------
+
+
+trait __ParseResult {
+    type Input: Input;
+    type Type;
+    type Error;
+
+    // fn bind<F, U, V>(self, f: F) -> Bind<Self::Input, U, V>
+    //     where F: FnOnce(Self::Input, Self::Type) -> B,
+    //     B: IntoParseResult
+}
+
+// pub type ESInput<I> = InputPosition<I, CurrentPosition>;
+// pub type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ESParseError>;
+
+// trait IntoParseResult {
+//     type Input: Input;
+//     type Item;
+//     type Error;
+
+//     // fn into_parse_result(self) -> ParseResult<Self::Input, Self::Item, Self::Error>;
+// }
+
+// ref: https://www.reddit.com/r/rust/comments/5r6tib/parser_combinators_without_macros_my_take/
+// pub trait Peg<I> {
+
+//     // type Input: Input;
+//     // type Item;
+//     // type Error;
+//     // type ParseResult: IntoParseResult<Input = Self::Input, Item = Self::Item, Error = Self::Error>;
+
+//     // fn parse(&self, input: Self::Input) -> Self::ParseResult;
+//     fn parse(input: I) -> bool;
+// }
+// use std::marker::PhantomData;
+
+
+// struct Foo;
+
+// // impl<I: U8Input> Peg for Foo<I> {
+
+// //     type Input = ESInput<I>;
+// //     // type Item = bool;
+// //     // type Error = ESParseError;
+
+// //     // type ParseResult: IntoParseResult<Input = Self::Input, Item = Self, Error = Self::Error>;
+
+// //     // fn parse(input: Self::Input) -> Self::ParseResult {
+
+// //     // }
+
+// //     fn parse(input: Input) -> bool {
+
+// //     }
+// // }
+
+
+// impl<I: U8Input> Peg<ESInput<I>> for Foo {
+
+//     // type Input = ESInput<I>;
+//     // type Item = bool;
+//     // type Error = ESParseError;
+
+//     // type ParseResult: IntoParseResult<Input = Self::Input, Item = Self, Error = Self::Error>;
+// //
+//     // fn parse(input: Self::Input) -> Self::ParseResult {
+
+//     // }
+
+//     fn parse(input: ESInput<I>) -> bool {
+//         true
+//     }
+// }
