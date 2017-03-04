@@ -410,6 +410,15 @@ pub trait IntoParseError {
 }
 
 #[inline]
+fn token<I: U8Input>(i: ESInput<I>, tok: I::Token) -> ESParseResult<I, I::Token> {
+    chomp::parsers::token(i, tok)
+    // on_error(i, |i| , |i| {
+    //     let reason = format!("Expected: {}", String::from_utf8_lossy(&[tok]));
+    //     ErrorLocation::new(i.position(), reason)
+    // })
+}
+
+#[inline]
 pub fn option<I: Input, T, E: IntoParseError, F>(i: I, f: F, default: T) -> ParseResult<I, T, E>
     where F: FnOnce(I) -> ParseResult<I, T, E>
 {
@@ -465,19 +474,52 @@ pub fn or<I: Input, T, E, F, G>(i: I, f: F, g: G) -> ParseResult<I, T, E>
     }
 }
 
+// like ParseResult::map_err, but this higher-order helper passes &Input to
+// error mapping/transform function
+// #[inline]
+// fn on_error<I: Input, T, E: ::std::error::Error>(parse_result: ParseResult<I, T, E>, transform_err: F)
+//     -> ParseResult<I, T, ErrorChain> {
+
+// }
+
+// fn on_error<I: Input, T, E: ::std::error::Error + 'static, F, V: ::std::error::Error + 'static, G>
+//     (i: I,
+//      f: F,
+//      g: G)
+//      -> ParseResult<I, T, ErrorChain>
+//     where F: FnOnce(I) -> ParseResult<I, T, E>,
+//           G: FnOnce(&I) -> V,
+//           ErrorChain: std::convert::From<E>,
+//           ErrorChain: std::convert::From<V>
+// {
+
+//     match f(i).into_inner() {
+//         (i, Ok(t)) => i.ret(t),
+//         (i, Err(e)) => {
+//             let err_val = g(&i);
+
+//             let foo = ErrorChain::new(e);
+//             let wrapped_err = foo.chain_err(err_val);
+
+//             // let wrapped_err = ErrorChain::new(e).chain_err(err_val);
+//             i.err(wrapped_err)
+//         }
+//     }
+// }
+
 
 // ------ sandbox ------
 
 
-trait __ParseResult {
-    type Input: Input;
-    type Type;
-    type Error;
+// trait __ParseResult {
+//     type Input: Input;
+//     type Type;
+//     type Error;
 
-    // fn bind<F, U, V>(self, f: F) -> Bind<Self::Input, U, V>
-    //     where F: FnOnce(Self::Input, Self::Type) -> B,
-    //     B: IntoParseResult
-}
+//     // fn bind<F, U, V>(self, f: F) -> Bind<Self::Input, U, V>
+//     //     where F: FnOnce(Self::Input, Self::Type) -> B,
+//     //     B: IntoParseResult
+// }
 
 // pub type ESInput<I> = InputPosition<I, CurrentPosition>;
 // pub type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ESParseError>;

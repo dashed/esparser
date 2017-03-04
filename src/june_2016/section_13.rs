@@ -10,21 +10,19 @@ use chomp::types::{U8Input, Input};
 // local imports
 
 use super::types::{Parameters, Parameter};
-use parsers::{ESInput, ESParseResult, parse_list};
+use parsers::{ESInput, ESParseResult, parse_list, token};
 
 // 13 ECMAScript Language: Statements and Declarations
 //
 // Reference: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-statements-and-declarations
 
-struct Statement;
-// enum Statement {
-//     BlockStatement(BlockStatement),
-//     VariableStatement(VariableStatement),
-//     EmptyStatement(EmptyStatement),
-//     ExpressionStatement(ExpressionStatement),
-//     IfStatement(Box<IfStatement>),
-//     BreakableStatement(BreakableStatement), // TODO: more stuff
-// }
+enum Statement {
+    BlockStatement(BlockStatement), /*     VariableStatement(VariableStatement),
+                                     *     EmptyStatement(EmptyStatement),
+                                     *     ExpressionStatement(ExpressionStatement),
+                                     *     IfStatement(Box<IfStatement>),
+                                     *     BreakableStatement(BreakableStatement), // TODO: more stuff */
+}
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Statement
@@ -39,13 +37,10 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
     yield_params.remove(&Parameter::Yield);
     let yield_params = yield_params;
 
-    i.ret(Statement)
+    parse!{i;
 
-    // TODO: fix
-    // parse!{i;
-
-    //     let x =
-    //     (i -> block_statement(i, &params).map(Statement::BlockStatement))
+        let x =
+        (i -> block_statement(i, &params).map(Statement::BlockStatement));
     //     <|>
     //     (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement))
     //     <|>
@@ -59,11 +54,63 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
 
     //     // TODO: more statements
 
-    //     ret x
-    // }
+        ret x
+    }
 }
 
 // 13.2 Block
+
+// BlockStatement
+
+struct BlockStatement(Block);
+
+// TODO: test
+fn block_statement<I: U8Input>(i: ESInput<I>,
+                               params: &EnumSet<Parameter>)
+                               -> ESParseResult<I, BlockStatement> {
+
+    if is_debug_mode!() {
+        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+             params.contains(&Parameter::Return)) {
+            panic!("misuse of block_statement");
+        }
+    }
+
+    block(i, params).map(BlockStatement)
+}
+
+// Block
+
+struct Block(/* { */
+             Vec<CommonDelim>,
+             Option<Box<StatementList>>,
+             Vec<CommonDelim> /* } */);
+
+// TODO: test
+fn block<I: U8Input>(i: ESInput<I>, params: &EnumSet<Parameter>) -> ESParseResult<I, Block> {
+
+    if is_debug_mode!() {
+        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+             params.contains(&Parameter::Return)) {
+            panic!("misuse of block");
+        }
+    }
+
+    parse!{i;
+
+        token(b'{');
+        // TODO: fix
+        // let delim_left = common_delim();
+
+        let contents = option(|i| statement_list(i, params).map(|x| Some(Box::new(x))), None);
+
+        // TODO: fix
+        // let delim_right = common_delim();
+        token(b'}');
+
+        ret Block(delim_left, contents, delim_right)
+    }
+}
 
 // StatementList
 
@@ -96,8 +143,8 @@ generate_list_parser!(
 
 // TODO: test
 pub fn statement_list<I: U8Input>(i: ESInput<I>,
-                              params: &Parameters)
-                              -> ESParseResult<I, StatementList> {
+                                  params: &Parameters)
+                                  -> ESParseResult<I, StatementList> {
 
 
     if is_debug_mode!() {
@@ -115,6 +162,7 @@ pub fn statement_list<I: U8Input>(i: ESInput<I>,
         i.ret(())
     }
 
+    #[inline]
     let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
         statement_list_item(i, &params).bind(|i, rhs| {
             accumulator.borrow_mut().add_item(rhs);
