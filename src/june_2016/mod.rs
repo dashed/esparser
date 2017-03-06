@@ -19,5 +19,8 @@ mod section_12;
 // 13 ECMAScript Language: Statements and Declarations
 mod section_13;
 
+// 14 ECMAScript Language: Functions and Classes
+mod section_14;
+
 // 15 ECMAScript Language: Scripts and Modules
 mod section_15;

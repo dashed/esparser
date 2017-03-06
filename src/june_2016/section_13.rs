@@ -75,6 +75,7 @@ struct Declaration;
 fn declaration<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Declaration> {
 
     if is_debug_mode!() {
+        // validation
         if !(params.is_empty() || params.contains(&Parameter::Yield)) {
             panic!("misuse of declaration");
         }

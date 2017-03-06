@@ -166,6 +166,69 @@ fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
 
 // 12.2.6 Object Initializer
 
+// PropertyDefinition
+
+enum PropertyDefinition {
+    IdentifierReference(IdentifierReference),
+    CoverInitializedName(CoverInitializedName),
+    PropertyName(PropertyName,
+                 Vec<CommonDelim>,
+                 /* : */
+                 Vec<CommonDelim>,
+                 AssignmentExpression),
+    MethodDefinition(MethodDefinition),
+}
+
+// TODO: test
+fn property_definition<I: U8Input>(i: ESInput<I>,
+                                   params: &Parameters)
+                                   -> ESParseResult<I, PropertyDefinition> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of property_definition");
+        }
+    }
+
+    #[inline]
+    fn prop_name<I: U8Input>(i: ESInput<I>,
+                             params: &Parameters)
+                             -> ESParseResult<I, PropertyDefinition> {
+
+        let mut expr_params = params.clone();
+        expr_params.insert(Parameter::In);
+        let expr_params = expr_params;
+
+        parse!{i;
+
+            let name = property_name(&params);
+
+            let delim_1 = common_delim();
+            token(b':');
+            let delim_2 = common_delim();
+
+            let expr = assignment_expression(&expr_params);
+
+            ret PropertyDefinition::PropertyName(name, delim_1, delim_2, expr)
+        }
+    }
+
+    parse!{i;
+
+        let prop_def =
+            (i -> identifier_reference(i, &params).map(PropertyDefinition::IdentifierReference))
+            <|>
+            (i -> cover_initialized_name(i, &params).map(PropertyDefinition::CoverInitializedName))
+            <|>
+            prop_name(&params)
+            <|>
+            (i -> method_definition(i, &params).map(PropertyDefinition::MethodDefinition(x)));
+
+        ret prop_def
+    }
+}
+
 // PropertyName
 
 pub enum PropertyName {
