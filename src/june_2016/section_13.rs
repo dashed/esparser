@@ -17,8 +17,11 @@ use parsers::{ESInput, ESParseResult, parse_list, token, option};
 //
 // Reference: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-statements-and-declarations
 
+// Statement
+
 enum Statement {
-    BlockStatement(BlockStatement), /*     VariableStatement(VariableStatement),
+    BlockStatement(BlockStatement), /* TODO: fix
+                                     *     VariableStatement(VariableStatement),
                                      *     EmptyStatement(EmptyStatement),
                                      *     ExpressionStatement(ExpressionStatement),
                                      *     IfStatement(Box<IfStatement>),
@@ -41,6 +44,8 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
 
         let x =
         (i -> block_statement(i, &params).map(Statement::BlockStatement));
+
+        // TODO: fix
     //     <|>
     //     (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement))
     //     <|>
@@ -55,6 +60,31 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
     //     // TODO: more statements
 
         ret x
+    }
+}
+
+// Declaration
+
+struct Declaration;
+
+// TODO: test
+fn declaration<I: U8Input>(i: ESInput<I>,
+                           params: &Parameters)
+                           -> ESParseResult<I, Declaration> {
+
+    if is_debug_mode!() {
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of declaration");
+        }
+    }
+
+    parse!{i;
+
+        // TODO: complete
+
+        ret {
+            Declaration
+        }
     }
 }
 
@@ -175,7 +205,8 @@ pub fn statement_list<I: U8Input>(i: ESInput<I>,
 
 // TODO: fix
 enum StatementListItem {
-    Statement(Statement), //     Declaration(Declaration),
+    Statement(Statement),
+    Declaration(Declaration),
 }
 
 // TODO: test
@@ -191,19 +222,19 @@ fn statement_list_item<I: U8Input>(i: ESInput<I>,
     }
 
     let mut yield_params = params.clone();
-    yield_params.remove(&Parameter::Yield);
+    yield_params.remove(&Parameter::Return);
     let yield_params = yield_params;
 
     parse!{i;
 
         let item = (i -> statement(i, &params).map(StatementListItem::Statement)) <|>
-        (i -> statement(i, &params).map(StatementListItem::Statement));
-        // (i -> declaration(i, &yield_params).map(|x| StatementListItem::Declaration(x)));
+        (i -> declaration(i, &yield_params).map(StatementListItem::Declaration));
 
         ret item
     }
 }
 
+// TODO: remove this
 #[test]
 fn foo() {
 
