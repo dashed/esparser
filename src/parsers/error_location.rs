@@ -11,7 +11,7 @@ pub struct ErrorLocation {
 }
 
 impl ErrorLocation {
-    fn new(location: CurrentPosition, description: String) -> Self {
+    pub fn new(location: CurrentPosition, description: String) -> Self {
         ErrorLocation {
             location: location,
             description: description,

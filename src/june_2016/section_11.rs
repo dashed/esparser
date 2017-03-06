@@ -4,7 +4,7 @@
 
 // 3rd-party imports
 
-use chomp::types::U8Input;
+use chomp::types::{U8Input, Input};
 
 // local imports
 
@@ -45,15 +45,23 @@ pub fn common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<CommonDel
 
 // 11.2 White Space
 
-struct WhiteSpace(char);
+enum WhiteSpace {
+    CharacterTabulation,
+    LineTabulation,
+    FormFeed,
+    Space,
+    NoBreakSpace,
+    ZeroWidthNoBreakSpace,
+    OtherWhiteSpace(char)
+}
 
 fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
 
     #[inline]
-    fn other_whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, char> {
+    fn other_whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
         parse_utf8_char(i).bind(|i, c: char| {
             if c.is_whitespace() {
-                i.ret(c)
+                i.ret(WhiteSpace::OtherWhiteSpace(c))
             } else {
                 let loc = i.position();
                 let reason = "Expected whitespace.".to_string();
@@ -65,25 +73,33 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
     let parse_result = parse!{i;
 
         let whitespace_char =
-            (i -> string(i, b"\x0009").map(|_| '\u{0009}')) <|> // <TAB>; CHARACTER TABULATION
-            string(b"\x000B") <|> // <VT>; LINE TABULATION
-            string(b"\x000C") <|> // <FF>; FORM FEED (FF)
-            string(b"\x0020") <|> // <SP>; SPACE
-            string(b"\x00A0") <|> // <NBSP>; NO-BREAK SPACE
-            string(b"\xFEFF") <|> // <ZWNBSP>; ZERO WIDTH NO-BREAK SPACE
+            (i -> string(i, b"\x0009").map(|_| WhiteSpace::CharacterTabulation)) <|> // <TAB>; CHARACTER TABULATION
+            (i -> string(i, b"\x000B").map(|_| WhiteSpace::LineTabulation)) <|> // <VT>; LINE TABULATION
+            (i -> string(i, b"\x000C").map(|_| WhiteSpace::FormFeed)) <|> // <FF>; FORM FEED (FF)
+            (i -> string(i, b"\x0020").map(|_| WhiteSpace::Space)) <|> // <SP>; SPACE
+            (i -> string(i, b"\x00A0").map(|_| WhiteSpace::NoBreakSpace)) <|> // <NBSP>; NO-BREAK SPACE
+            (i -> string(i, b"\xFEFF").map(|_| WhiteSpace::ZeroWidthNoBreakSpace)) <|> // <ZWNBSP>; ZERO WIDTH NO-BREAK SPACE
             other_whitespace(); // Any other Unicode "Separator, space" code point
 
-        ret WhiteSpace(whitespace_char)
+        ret whitespace_char
     };
 
-    on_error(parse_result,
-             |i| ErrorLocation::new(i.position(), "Expected whitespace.".to_string()))
+    parse_result
+
+    // TODO: fix
+    // on_error(parse_result,
+    //          |i| ErrorLocation::new(i.position(), "Expected whitespace.".to_string()))
 
 }
 
 // 11.3 Line Terminators
 
-struct LineTerminator(char);
+enum LineTerminator {
+    LineFeed,
+    CarriageReturn,
+    LineSeparator,
+    ParagraphSeparator,
+}
 
 // TODO: test
 fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTerminator> {
@@ -91,19 +107,21 @@ fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTerminator
     let parse_result = parse!{i;
 
         let line_terminator_char =
-            string(b"\x000A") <|> // <LF>; LINE FEED (LF)
-            string(b"\x000D") <|> // <CR>; CARRIAGE RETURN (CR)
-            string(b"\x2028") <|> // <LS>; LINE SEPARATOR
-            string(b"\x2029");    // <PS>; PARAGRAPH SEPARATOR
+            (i -> string(i, b"\x000A").map(|_| LineTerminator::LineFeed)) <|>   // <LF>; LINE FEED (LF)
+            (i -> string(i, b"\x000D").map(|_| LineTerminator::CarriageReturn)) <|> // <CR>; CARRIAGE RETURN (CR)
+            (i -> string(i, b"\x2028").map(|_| LineTerminator::LineSeparator))  <|> // <LS>; LINE SEPARATOR
+            (i -> string(i, b"\x2029").map(|_| LineTerminator::ParagraphSeparator)); // <PS>; PARAGRAPH SEPARATOR
 
         ret LineTerminator(line_terminator_char)
     };
 
-    on_error(parse_result, |i| {
-        let loc = i.position();
-        let reason = "Expected utf8 character.".to_string();
-        ErrorLocation::new(loc, reason)
-    })
+    // TODO: fix
+    parse_result
+    // on_error(parse_result, |i| {
+    //     let loc = i.position();
+    //     let reason = "Expected utf8 character.".to_string();
+    //     ErrorLocation::new(loc, reason)
+    // })
 }
 
 // 11.4 Comments
@@ -125,23 +143,28 @@ fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Comment> {
 
         #[inline]
         fn stop_at<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
-            on_error(i, |i| string(i, END).map(|_| ()), |i| {
-                let loc = i.position();
-                ErrorLocation::new(loc, "Expected */.".to_string())
-            })
+            string(i, END).map(|_| ())
+            // on_error(string(i, END).map(|_| ()), |i| {
+            //     let loc = i.position();
+            //     ErrorLocation::new(loc, "Expected */.".to_string())
+            // })
         }
 
         // TODO: verify production rule satisfaction
         // http://www.ecma-international.org/ecma-262/7.0/#prod-MultiLineCommentChars
 
         parse!{i;
-            on_error(
-                |i| string(i, b"/*"),
-                |i| {
-                    let loc = i.position();
-                    ErrorLocation::new(loc, "Expected /* for multi-line comment.".to_string())
-                }
-            );
+
+            (i -> {
+                on_error(
+                    string(i, b"/*"),
+                    |i| {
+                        let loc = i.position();
+                        ErrorLocation::new(loc, "Expected /* for multi-line comment.".to_string())
+                    }
+                )
+            });
+
             let contents = string_till(stop_at);
             stop_at();
             ret Comment::MultiLineComment(contents)
@@ -158,13 +181,17 @@ fn comment<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Comment> {
         }
 
         parse!{i;
-            on_error(
-                |i| string(i, b"//"),
-                |i| {
-                    let loc = i.position();
-                    ErrorLocation::new(loc, "Expected // for single-line comment.".to_string())
-                }
-            );
+
+            (i -> {
+                on_error(
+                    string(i, b"//"),
+                    |i| {
+                        let loc = i.position();
+                        ErrorLocation::new(loc, "Expected // for single-line comment.".to_string())
+                    }
+                )
+            });
+
             let contents = string_till(stop_at);
             // NOTE: buffer contents matching line_terminator is not consumed
             ret Comment::SingleLineComment(contents)

@@ -40,12 +40,45 @@ pub type ESParseResult<I, T> = ParseResult<ESInput<I>, T, ESParseError>;
 
 // error types
 
+#[derive(Debug)]
 enum ESParseError {
-    // Parser shall backtrack.
+    // Parse failure.
+    // Backtracking allowed.
     Failure(ErrorChain),
 
     // No backtracking is done.
     Error(ESError),
+}
+
+impl ::std::error::Error for ESParseError {
+    fn description(&self) -> &str {
+        match *self {
+            ESParseError::Failure(ref err) => err.description(),
+            ESParseError::Error(ref err) => err.description(),
+        }
+    }
+
+    fn cause(&self) -> Option<&::std::error::Error> {
+        match *self {
+            ESParseError::Failure(ref err) => err.cause(),
+            ESParseError::Error(ref err) => err.cause(),
+        }
+    }
+}
+
+impl ::std::fmt::Display for ESParseError {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
+        match *self {
+            ESParseError::Failure(ref err) => err.fmt(f),
+            ESParseError::Error(ref err) => err.fmt(f),
+        }
+    }
+}
+
+impl ::std::convert::From<ErrorChain> for ESParseError {
+    fn from(err: ErrorChain) -> Self {
+        ESParseError::Failure(err)
+    }
 }
 
 impl IntoParseError for ESParseError {
@@ -58,12 +91,63 @@ impl IntoParseError for ESParseError {
     }
 }
 
+macro_rules! error_chain_for {
+    ($err_type: ident) => {
+        impl ::std::convert::From<$err_type> for ErrorChain {
+            fn from(err: $err_type) -> Self {
+                ErrorChain {
+                    current: Box::new(err),
+                    next: None
+                }
+            }
+        }
+    }
+}
+
+error_chain_for!(U8Error);
+
+#[derive(Debug)]
 enum ESError {
     SyntaxError(SyntaxError),
 }
 
+impl ::std::error::Error for ESError {
+    fn description(&self) -> &str {
+        match *self {
+            ESError::SyntaxError(ref syntax_error) => syntax_error.description(),
+        }
+    }
+
+    fn cause(&self) -> Option<&::std::error::Error> {
+        match *self {
+            ESError::SyntaxError(ref syntax_error) => syntax_error.cause(),
+        }
+    }
+}
+
+impl ::std::fmt::Display for ESError {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
+        match *self {
+            ESError::SyntaxError(ref syntax_error) => syntax_error.fmt(f),
+        }
+    }
+}
+
 // TODO: inner is 'Reason' string.
+#[derive(Debug)]
 pub struct SyntaxError(String);
+
+impl ::std::error::Error for SyntaxError {
+    fn description(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ::std::fmt::Display for SyntaxError {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
+        write!(f, "{}", self.0)
+    }
+}
 
 // ErrorChain
 
@@ -119,6 +203,15 @@ impl ::std::error::Error for ErrorChain {
 impl ::std::fmt::Display for ErrorChain {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
         self.current.fmt(f)
+    }
+}
+
+impl ::std::convert::From<error_location::ErrorLocation> for ErrorChain {
+    fn from(err: error_location::ErrorLocation) -> Self {
+        ErrorChain {
+            current: Box::new(err),
+            next: None,
+        }
     }
 }
 
@@ -357,19 +450,18 @@ pub trait IntoParseError {
 
 #[inline]
 pub fn string<I: U8Input>(i: ESInput<I>, str_match: &[u8]) -> ESParseResult<I, I::Buffer> {
-    on_error(chomp::parsers::string(i, str_match), |i| {
-        let reason = format!("Expected: {}", String::from_utf8_lossy(str_match));
-        error_location::ErrorLocation::new(i.position(), reason)
+    chomp::parsers::string(i, str_match).map_err(|err| {
+        let error_chain = ErrorChain::new(err);
+        ESParseError::Failure(error_chain)
     })
 }
 
 #[inline]
 pub fn token<I: U8Input>(i: ESInput<I>, tok: I::Token) -> ESParseResult<I, I::Token> {
-    chomp::parsers::token(i, tok)
-    // on_error(i, |i| , |i| {
-    //     let reason = format!("Expected: {}", String::from_utf8_lossy(&[tok]));
-    //     ErrorLocation::new(i.position(), reason)
-    // })
+    chomp::parsers::token(i, tok).map_err(|err| {
+        let error_chain = ErrorChain::new(err);
+        ESParseError::Failure(error_chain)
+    })
 }
 
 #[inline]
@@ -438,17 +530,19 @@ pub fn many<I: Input, T, E, F, U>(i: I, f: F) -> ParseResult<I, T, E>
 
 #[inline]
 pub fn look_ahead<I: Input, T, E, F>(i: I, f: F) -> ParseResult<I, T, E>
-  where F: FnOnce(I) -> ParseResult<I, T, E> {
+    where F: FnOnce(I) -> ParseResult<I, T, E>
+{
 
     chomp::combinators::look_ahead(i, f)
 }
 
 #[inline]
 pub fn many_till<I: Input, T, E, R, F, U, N, V>(i: I, p: R, end: F) -> ParseResult<I, T, E>
-  where T: FromIterator<U>,
-        E: From<N>,
-        R: FnMut(I) -> ParseResult<I, U, E>,
-        F: FnMut(I) -> ParseResult<I, V, N> {
+    where T: FromIterator<U>,
+          E: From<N>,
+          R: FnMut(I) -> ParseResult<I, U, E>,
+          F: FnMut(I) -> ParseResult<I, V, N>
+{
 
     chomp::combinators::many_till(i, p, end)
 }
@@ -464,27 +558,35 @@ pub fn string_till<I: U8Input, F>(input: ESInput<I>, mut stop_at: F) -> ESParseR
 
 // like ParseResult::map_err, but this higher-order helper passes &Input to
 // error mapping/transform function
-#[inline]
-pub fn on_error<I: Input, T, E: ::std::error::Error, V: ::std::error::Error, G>
-    (parse_result: ParseResult<I, T, E>,
-     transform_err: G)
-     -> ParseResult<I, T, ErrorChain>
-    where G: FnOnce(&I) -> V
-{
+// #[inline]
+// pub fn on_error<I: Input, T, E: ::std::error::Error, V: ::std::error::Error, G>
+//     (parse_result: ParseResult<I, T, E>,
+//      transform_err: G)
+//      -> ParseResult<I, T, ErrorChain>
+//     where G: FnOnce(&I) -> V
+// {
 
-    match parse_result.into_inner() {
-        (i, Ok(t)) => i.ret(t),
-        (i, Err(e)) => {
-            let err_val = transform_err(&i);
+//     match parse_result.into_inner() {
+//         (i, Ok(t)) => i.ret(t),
+//         (i, Err(e)) => {
 
-            let foo = ErrorChain::new(e);
-            let wrapped_err = foo.chain_err(err_val);
+//             i.err(e)
+//             // match e.into_parse_error() {
+//             //     ESParseError::Failure(error_chain) => {
+//             //         let err_val = transform_err(&i);
+//             //         let foo = ErrorChain::new(error_chain);
+//             //         let wrapped_err_chain = foo.chain_err(err_val);
+//             //         i.err(ESParseError::Failure(wrapped_err_chain))
+//             //     },
+//             //     ESParseError::Error(err) => {
+//             //         i.err(ESParseError::Error(err))
+//             //     }
+//             // }
+//             // let wrapped_err = ErrorChain::new(e).chain_err(err_val);
 
-            // let wrapped_err = ErrorChain::new(e).chain_err(err_val);
-            i.err(wrapped_err)
-        }
-    }
-}
+//         }
+//     }
+// }
 
 pub fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> {
 
@@ -627,7 +729,8 @@ pub fn parse_utf8_char<I: U8Input>(mut i: ESInput<I>) -> ESParseResult<I, char> 
 
             let loc = i.position();
             let reason = "Expected utf8 character.".to_string();
-            return i.err(error_location::ErrorLocation::new(loc, reason).into());
+            let fail_reason = error_location::ErrorLocation::new(loc, reason);
+            return i.err(ESParseError::Failure(fail_reason.into()));
 
         }
         Some(c) => {
