@@ -452,6 +452,198 @@ fn binding_pattern<I: U8Input>(i: ESInput<I>,
     i.ret(BindingPattern)
 }
 
+// BindingProperty
+
+enum BindingProperty {
+    SingleNameBinding(SingleNameBinding),
+    PropertyName(PropertyName,
+                 Vec<CommonDelim>,
+                 /* : (colon) */
+                 Vec<CommonDelim>,
+                 BindingElement),
+}
+
+// TODO: test
+fn binding_property<I: U8Input>(i: ESInput<I>,
+                                params: &Parameters)
+                                -> ESParseResult<I, BindingProperty> {
+
+                                    if is_debug_mode!() {
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of binding_property");
+    }
+}
+
+    #[inline]
+    fn binding_property_property_name<I: U8Input>(i: ESInput<I>,
+                                                  params: &Parameters)
+                                                  -> ESParseResult<I, BindingProperty> {
+
+
+        parse!{i;
+            let prop_name = property_name(&params);
+
+            let delim_1 = common_delim();
+            token(b':');
+            let delim_2 = common_delim();
+
+            let bind_elem = binding_element(&params);
+
+            ret BindingProperty::PropertyName(prop_name, delim_1, delim_2, bind_elem)
+        }
+    }
+
+    parse!{i;
+
+        let binding =
+            (i -> single_name_binding(i, &params).map(|x| BindingProperty::SingleNameBinding(x)))
+            <|>
+            binding_property_property_name(&params);
+
+        ret binding
+    }
+}
+
+// BindingElement
+
+enum BindingElement {
+    SingleNameBinding(SingleNameBinding),
+    BindingPattern(BindingPattern, Vec<CommonDelim>, Option<Initializer>),
+}
+
+// TODO: test
+fn binding_element<I: U8Input>(i: ESInput<I>,
+                               params: &Parameters)
+                               -> ESParseResult<I, BindingElement> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of binding_element");
+        }
+    }
+
+    #[inline]
+    fn binding_element_binding_pattern<I: U8Input>(i: ESInput<I>,
+                                                   params: &Parameters)
+                                                   -> ESParseResult<I, BindingElement> {
+
+        let mut init_params = params.clone();
+        init_params.insert(Parameter::In);
+
+        parse!{i;
+            let bind_pat = binding_pattern(&params);
+
+            // TODO: merge
+            let delim = common_delim();
+
+            let init = option(|i| initializer(i, &init_params).map(|x| Some(x)),
+                None);
+
+            ret BindingElement::BindingPattern(bind_pat, delim, init)
+        }
+    }
+
+    parse!{i;
+
+        let binding =
+            (i -> single_name_binding(i, &params).map(|x| BindingElement::SingleNameBinding(x)))
+            <|>
+            binding_element_binding_pattern(&params);
+
+        ret binding
+    }
+}
+
+// SingleNameBinding
+
+struct SingleNameBinding(BindingIdentifier, Option<(Vec<CommonDelim>, Initializer)>);
+
+// TODO: test
+fn single_name_binding<I: U8Input>(i: ESInput<I>,
+                                   params: &Parameters)
+                                   -> ESParseResult<I, SingleNameBinding> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of single_name_binding");
+        }
+    }
+
+    let mut init_params = params.clone();
+    init_params.insert(Parameter::In);
+
+    parse!{i;
+
+        let ident = binding_identifier(&params);
+
+        let init = option(|i| {
+            common_delim(i)
+                .bind(|i, delim| {
+
+                    initializer(i, &init_params)
+                        .map(|init| Some((delim, init)))
+                })
+        },
+            None);
+
+        ret SingleNameBinding(ident, init)
+    }
+}
+
+// BindingRestElement
+
+enum BindingRestElement {
+    BindingIdentifier(Vec<CommonDelim>, BindingIdentifier),
+    BindingPattern(Vec<CommonDelim>, BindingPattern),
+}
+
+// TODO: test
+fn binding_rest_element<I: U8Input>(i: ESInput<I>,
+                                    params: &Parameters)
+                                    -> ESParseResult<I, BindingRestElement> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of binding_rest_element");
+        }
+    }
+
+    enum BindingRestElementContent {
+        BindingIdentifier(BindingIdentifier),
+        BindingPattern(BindingPattern),
+    }
+
+    parse!{i;
+
+        (i -> {
+            on_error(string(i, b"..."),
+                |i| {
+                    let loc = i.position();
+                    // TODO: proper err message?
+                    ErrorLocation::new(loc, "Expected ... here.".to_string())
+                }
+            )
+        });
+
+        let delim = common_delim();
+
+        let contents = (i -> binding_identifier(i, &params).map(BindingRestElementContent::BindingIdentifier))
+            <|>
+            (i -> binding_pattern(i, &params).map(BindingRestElementContent::BindingPattern));
+
+        ret {
+            match contents {
+                BindingRestElementContent::BindingIdentifier(x) => BindingRestElement::BindingIdentifier(delim, x),
+                BindingRestElementContent::BindingPattern(x) => BindingRestElement::BindingPattern(delim, x)
+            }
+        }
+    }
+}
+
 // TODO: remove this
 #[test]
 fn foo() {
