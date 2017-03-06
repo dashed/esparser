@@ -1,4 +1,3 @@
-
 // ECMA-262 7^th Edition / June 2016
 // ECMAScript (R) 2016 Language Specification
 //
@@ -10,6 +9,9 @@ mod traits;
 
 // 11 ECMAScript Language: Lexical Grammar
 mod section_11;
+
+// 12 ECMAScript Language: Expressions
+mod section_12;
 
 // 13 ECMAScript Language: Statements and Declarations
 mod section_13;

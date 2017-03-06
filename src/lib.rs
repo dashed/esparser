@@ -1,4 +1,5 @@
 #![recursion_limit="1000"]
+#![feature(unicode)]
 
 // crates
 

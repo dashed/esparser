@@ -22,6 +22,7 @@ use chomp::types::numbering::{InputPosition, LineNumber, Numbering};
 use chomp::types::{Buffer, Input, ParseResult, U8Input};
 use chomp::primitives::{Primitives, IntoInner};
 use chomp::prelude::Either;
+use chomp::parsers::SimpleResult;
 
 // local imports
 
@@ -533,6 +534,24 @@ pub fn many<I: Input, T, E, F, U>(i: I, f: F) -> ParseResult<I, T, E>
           T: FromIterator<U>
 {
     chomp::combinators::many(i, f)
+}
+
+#[inline]
+pub fn many1<I: Input, T, E, F, U>(i: I, f: F) -> ParseResult<I, T, E>
+    where F: FnMut(I) -> ParseResult<I, U, E>,
+          T: FromIterator<U>
+{
+    chomp::combinators::many1(i, f)
+}
+
+#[inline]
+pub fn satisfy<I: Input, F>(mut i: I, f: F) -> ParseResult<I, I::Token, ESParseError>
+  where F: FnOnce(I::Token) -> bool,
+  ErrorChain: ::std::convert::From<chomp::parsers::Error<<I as chomp::types::Input>::Token>> {
+    chomp::parsers::satisfy(i, f).map_err(|err| {
+        let error_chain = ErrorChain::new(err);
+        ESParseError::Failure(error_chain)
+    })
 }
 
 #[inline]

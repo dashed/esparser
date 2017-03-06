@@ -6,12 +6,15 @@ use std::cell::RefCell;
 // 3rd-party imports
 
 use chomp::types::{U8Input, Input};
+use chomp::prelude::Either;
 
 // local imports
 
 use super::types::{Parameters, Parameter};
-use super::section_11::{common_delim, CommonDelim};
-use parsers::{ESInput, ESParseResult, parse_list, token, option};
+use super::section_11::{common_delim, common_delim_required, CommonDelim, SemiColon, semicolon};
+use super::section_12::{initializer, Initializer, binding_identifier, BindingIdentifier};
+use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either};
+use parsers::error_location::ErrorLocation;
 
 // 13 ECMAScript Language: Statements and Declarations
 //
@@ -68,9 +71,7 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
 struct Declaration;
 
 // TODO: test
-fn declaration<I: U8Input>(i: ESInput<I>,
-                           params: &Parameters)
-                           -> ESParseResult<I, Declaration> {
+fn declaration<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Declaration> {
 
     if is_debug_mode!() {
         if !(params.is_empty() || params.contains(&Parameter::Yield)) {
@@ -87,6 +88,10 @@ fn declaration<I: U8Input>(i: ESInput<I>,
         }
     }
 }
+
+// TODO: HoistableDeclaration
+
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BreakableStatement
 
 // 13.2 Block
 
@@ -176,6 +181,7 @@ pub fn statement_list<I: U8Input>(i: ESInput<I>,
 
 
     if is_debug_mode!() {
+        // validation
         if !(params.is_empty() || params.contains(&Parameter::Yield) ||
              params.contains(&Parameter::Return)) {
             panic!("misuse of statement_list");
@@ -215,6 +221,7 @@ fn statement_list_item<I: U8Input>(i: ESInput<I>,
                                    -> ESParseResult<I, StatementListItem> {
 
     if is_debug_mode!() {
+        // validation
         if !(params.is_empty() || params.contains(&Parameter::Yield) ||
              params.contains(&Parameter::Return)) {
             panic!("misuse of statement_list_item");
@@ -232,6 +239,217 @@ fn statement_list_item<I: U8Input>(i: ESInput<I>,
 
         ret item
     }
+}
+
+
+// 13.3.2 Variable Statement
+
+struct VariableStatement(/* var */
+                         Vec<CommonDelim>,
+                         VariableDeclarationList,
+                         SemiColon);
+
+// TODO: test
+fn variable_statement<I: U8Input>(i: ESInput<I>,
+                                  params: &Parameters)
+                                  -> ESParseResult<I, VariableStatement> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of variable_statement");
+        }
+    }
+
+    let mut params = params.clone();
+    params.insert(Parameter::In);
+    let params = params;
+
+    parse!{i;
+
+        (i -> {
+
+            on_error(
+                string(i, b"var"),
+                |i| {
+                    let loc = i.position();
+                    ErrorLocation::new(loc, "Expected 'var' keyword.".to_string())
+                }
+            )
+        });
+
+        let delim_1 = common_delim_required();
+        let list = variable_declaration_list(&params);
+        let semi_colon = semicolon();
+
+        ret VariableStatement(delim_1, list, semi_colon)
+    }
+}
+
+// VariableDeclarationList
+
+struct VariableDeclarationList(VariableDeclaration, Vec<VariableDeclarationListRest>);
+
+impl VariableDeclarationList {
+    fn new(rhs_val: VariableDeclaration) -> Self {
+        VariableDeclarationList(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: VariableDeclarationListDelim,
+                rhs_val: VariableDeclaration)
+                -> Self {
+
+        let VariableDeclarationList(head, rest) = self;
+        let mut rest = rest;
+
+        let VariableDeclarationListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = VariableDeclarationListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        VariableDeclarationList(head, rest)
+    }
+}
+
+struct VariableDeclarationListRest(Vec<CommonDelim>,
+                                   /* , (comma) */
+                                   Vec<CommonDelim>,
+                                   VariableDeclaration);
+
+struct VariableDeclarationListDelim(Vec<CommonDelim>,
+                                    /* , (comma) */
+                                    Vec<CommonDelim>);
+
+generate_list_parser!(
+    VariableDeclarationList;
+    VariableDeclarationListRest;
+    VariableDeclarationListState;
+    VariableDeclarationListDelim;
+    VariableDeclaration);
+
+// TODO: test
+fn variable_declaration_list<I: U8Input>(i: ESInput<I>,
+                                         params: &Parameters)
+                                         -> ESParseResult<I, VariableDeclarationList> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+             params.contains(&Parameter::In)) {
+            panic!("misuse of variable_declaration_list");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<VariableDeclarationListState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(
+                    token(i, b','),
+                    |i| {
+                        let loc = i.position();
+                        // TODO: proper err message?
+                        ErrorLocation::new(loc, "Expected , here.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+
+            ret {
+                let delim = VariableDeclarationListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        variable_declaration(i, &params).bind(|i, rhs| {
+            accumulator.borrow_mut().add_item(rhs);
+            i.ret(())
+        })
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
+enum VariableDeclaration {
+    BindingIdentifier(BindingIdentifier, Option<(Vec<CommonDelim>, Initializer)>),
+    BindingPattern(BindingPattern, Vec<CommonDelim>, Initializer),
+}
+
+// TODO: test
+fn variable_declaration<I: U8Input>(i: ESInput<I>,
+                                    params: &Parameters)
+                                    -> ESParseResult<I, VariableDeclaration> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+             params.contains(&Parameter::In)) {
+            panic!("misuse of variable_declaration");
+        }
+    }
+
+    let binding_params = {
+        let mut binding_params = params.clone();
+        binding_params.remove(&Parameter::In);
+        binding_params
+    };
+
+    either(i,
+           |i| binding_identifier(i, &binding_params), // left
+           |i| binding_pattern(i, &binding_params) /* right */)
+        .bind(|i, result| {
+            match result {
+                Either::Left(binding_identifier) => {
+                    option(i,
+                           |i| {
+                        parse!{i;
+                            let delim = common_delim();
+                            let init = initializer(&params);
+
+                            ret Some((delim, init))
+                        }
+                    },
+                           None)
+                        .map(|delim_and_init| {
+                            VariableDeclaration::BindingIdentifier(binding_identifier,
+                                                                   delim_and_init)
+                        })
+                }
+                Either::Right(binding_pattern) => {
+                    parse!{i;
+                    let delim = common_delim();
+                    let init = initializer(&params);
+                    ret VariableDeclaration::BindingPattern(binding_pattern, delim, init)
+                }
+                }
+            }
+        })
+}
+
+// 13.3.3 Destructuring Binding Patterns
+
+struct BindingPattern;
+
+// TODO: test
+fn binding_pattern<I: U8Input>(i: ESInput<I>,
+                               params: &Parameters)
+                               -> ESParseResult<I, BindingPattern> {
+
+    // TODO: complete
+    i.ret(BindingPattern)
 }
 
 // TODO: remove this
