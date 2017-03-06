@@ -9,6 +9,7 @@ use parsers::{ESParseResult, ESInput, string, parse_utf8_char, on_error, many, m
               token, option, either};
 use super::section_11::{reserved_word, identifier_name, IdentifierName, CommonDelim, common_delim,
                         string_literal, StringLiteral, numeric_literal, NumericLiteral};
+use super::section_14::{method_definition, MethodDefinition};
 use super::types::{Parameters, Parameter};
 use parsers::error_location::ErrorLocation;
 
@@ -223,7 +224,7 @@ fn property_definition<I: U8Input>(i: ESInput<I>,
             <|>
             prop_name(&params)
             <|>
-            (i -> method_definition(i, &params).map(PropertyDefinition::MethodDefinition(x)));
+            (i -> method_definition(i, &params).map(PropertyDefinition::MethodDefinition));
 
         ret prop_def
     }

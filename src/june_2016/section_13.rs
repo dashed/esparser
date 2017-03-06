@@ -510,15 +510,15 @@ fn binding_property<I: U8Input>(i: ESInput<I>,
 
 // BindingElement
 
-enum BindingElement {
+pub enum BindingElement {
     SingleNameBinding(SingleNameBinding),
     BindingPattern(BindingPattern, Vec<CommonDelim>, Option<Initializer>),
 }
 
 // TODO: test
-fn binding_element<I: U8Input>(i: ESInput<I>,
-                               params: &Parameters)
-                               -> ESParseResult<I, BindingElement> {
+pub fn binding_element<I: U8Input>(i: ESInput<I>,
+                                   params: &Parameters)
+                                   -> ESParseResult<I, BindingElement> {
 
     if is_debug_mode!() {
         // validation
@@ -598,15 +598,15 @@ fn single_name_binding<I: U8Input>(i: ESInput<I>,
 
 // BindingRestElement
 
-enum BindingRestElement {
+pub enum BindingRestElement {
     BindingIdentifier(Vec<CommonDelim>, BindingIdentifier),
     BindingPattern(Vec<CommonDelim>, BindingPattern),
 }
 
 // TODO: test
-fn binding_rest_element<I: U8Input>(i: ESInput<I>,
-                                    params: &Parameters)
-                                    -> ESParseResult<I, BindingRestElement> {
+pub fn binding_rest_element<I: U8Input>(i: ESInput<I>,
+                                        params: &Parameters)
+                                        -> ESParseResult<I, BindingRestElement> {
 
     if is_debug_mode!() {
         // validation
