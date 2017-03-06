@@ -9,7 +9,7 @@ mod types;
 mod traits;
 
 // 11 ECMAScript Language: Lexical Grammar
-// mod section_11;
+mod section_11;
 
 // 13 ECMAScript Language: Statements and Declarations
 // mod section_13;

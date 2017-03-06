@@ -8,13 +8,13 @@ use chomp::types::{U8Input, Input};
 
 // local imports
 
-use parsers::{ESParseResult, ESInput, ErrorLocation, on_error, string, parse_utf8_char, many,
-              string_till};
+use parsers::{ESParseResult, ESInput, string, parse_utf8_char, on_error, many, string_till};
+use parsers::error_location::ErrorLocation;
 
 #[derive(Debug)]
 pub enum CommonDelim {
-    WhiteSpace(char),
-    LineTerminator(char),
+    WhiteSpace(WhiteSpace),
+    LineTerminator(LineTerminator),
     Comment(Comment),
 }
 
@@ -35,6 +35,21 @@ fn __common_delim<I: U8Input>(i: ESInput<I>,
 
     if !parse_line_terminator {
 
+        return parse!{i;
+            let delim =
+                (i -> whitespace(i).map(CommonDelim::WhiteSpace)) <|>
+                (i -> comment(i).map(|c| CommonDelim::Comment(c)));
+            ret delim
+        };
+
+    }
+
+    parse!{i;
+        let delim =
+            (i -> whitespace(i).map(CommonDelim::WhiteSpace)) <|>
+            (i -> line_terminator(i).map(CommonDelim::LineTerminator)) <|>
+            (i -> comment(i).map(|c| CommonDelim::Comment(c)));
+        ret delim
     }
 }
 
@@ -45,6 +60,7 @@ pub fn common_delim<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<CommonDel
 
 // 11.2 White Space
 
+#[derive(Debug)]
 enum WhiteSpace {
     CharacterTabulation,
     LineTabulation,
@@ -52,7 +68,8 @@ enum WhiteSpace {
     Space,
     NoBreakSpace,
     ZeroWidthNoBreakSpace,
-    OtherWhiteSpace(char)
+    // TODO: bound for char to be whitespace?
+    OtherWhiteSpace(char),
 }
 
 fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
@@ -94,6 +111,7 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
 
 // 11.3 Line Terminators
 
+#[derive(Debug)]
 enum LineTerminator {
     LineFeed,
     CarriageReturn,
@@ -106,13 +124,13 @@ fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTerminator
 
     let parse_result = parse!{i;
 
-        let line_terminator_char =
+        let result =
             (i -> string(i, b"\x000A").map(|_| LineTerminator::LineFeed)) <|>   // <LF>; LINE FEED (LF)
             (i -> string(i, b"\x000D").map(|_| LineTerminator::CarriageReturn)) <|> // <CR>; CARRIAGE RETURN (CR)
             (i -> string(i, b"\x2028").map(|_| LineTerminator::LineSeparator))  <|> // <LS>; LINE SEPARATOR
             (i -> string(i, b"\x2029").map(|_| LineTerminator::ParagraphSeparator)); // <PS>; PARAGRAPH SEPARATOR
 
-        ret LineTerminator(line_terminator_char)
+        ret result
     };
 
     // TODO: fix
