@@ -1,7 +1,3 @@
-// 11 ECMAScript Language: Lexical Grammar
-//
-// Reference: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-lexical-grammar
-
 // 3rd-party imports
 
 use chomp::types::{U8Input, Input};
@@ -10,6 +6,10 @@ use chomp::types::{U8Input, Input};
 
 use parsers::{ESParseResult, ESInput, string, parse_utf8_char, on_error, many, string_till};
 use parsers::error_location::ErrorLocation;
+
+// 11 ECMAScript Language: Lexical Grammar
+//
+// Reference: http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-lexical-grammar
 
 #[derive(Debug)]
 pub enum CommonDelim {
@@ -38,7 +38,7 @@ fn __common_delim<I: U8Input>(i: ESInput<I>,
         return parse!{i;
             let delim =
                 (i -> whitespace(i).map(CommonDelim::WhiteSpace)) <|>
-                (i -> comment(i).map(|c| CommonDelim::Comment(c)));
+                (i -> comment(i).map(CommonDelim::Comment));
             ret delim
         };
 
@@ -48,7 +48,7 @@ fn __common_delim<I: U8Input>(i: ESInput<I>,
         let delim =
             (i -> whitespace(i).map(CommonDelim::WhiteSpace)) <|>
             (i -> line_terminator(i).map(CommonDelim::LineTerminator)) <|>
-            (i -> comment(i).map(|c| CommonDelim::Comment(c)));
+            (i -> comment(i).map(CommonDelim::Comment));
         ret delim
     }
 }

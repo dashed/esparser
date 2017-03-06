@@ -12,7 +12,7 @@ mod traits;
 mod section_11;
 
 // 13 ECMAScript Language: Statements and Declarations
-// mod section_13;
+mod section_13;
 
 // 15 ECMAScript Language: Scripts and Modules
-// mod section_15;
+mod section_15;
