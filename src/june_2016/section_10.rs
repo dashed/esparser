@@ -14,7 +14,7 @@ use parsers::{parse_utf8_char, ESParseResult, ESInput};
 
 // SourceCharacter
 
-pub struct SourceCharacter(char);
+pub struct SourceCharacter(pub char);
 
 pub fn source_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SourceCharacter> {
     // (from spec)

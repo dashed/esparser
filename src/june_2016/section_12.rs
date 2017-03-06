@@ -7,7 +7,8 @@ use chomp::prelude::Either;
 
 use parsers::{ESParseResult, ESInput, string, parse_utf8_char, on_error, many, many1, string_till,
               token, option, either};
-use super::section_11::{reserved_word, identifier_name, IdentifierName, CommonDelim, common_delim, string_literal, StringLiteral};
+use super::section_11::{reserved_word, identifier_name, IdentifierName, CommonDelim, common_delim,
+                        string_literal, StringLiteral, numeric_literal, NumericLiteral};
 use super::types::{Parameters, Parameter};
 use parsers::error_location::ErrorLocation;
 

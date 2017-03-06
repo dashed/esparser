@@ -164,7 +164,7 @@ enum LineTerminatorSequence {
     CarriageReturn,
     LineSeparator,
     ParagraphSeparator,
-    CarriageReturnLineFeed
+    CarriageReturnLineFeed,
 }
 
 // TODO: test
@@ -190,12 +190,11 @@ fn line_terminator_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTermin
         ret line_terminator_seq
     };
 
-    on_error(parse_result,
-             |i| {
-                 let loc = i.position();
-                 let reason = "Expected linte terminator sequence.".to_string();
-                 ErrorLocation::new(loc, reason)
-             })
+    on_error(parse_result, |i| {
+        let loc = i.position();
+        let reason = "Expected linte terminator sequence.".to_string();
+        ErrorLocation::new(loc, reason)
+    })
 }
 
 // 11.4 Comments
@@ -582,7 +581,348 @@ fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 
 // 11.8.3 Numeric Literals
 
-// TODO: complete
+// NumericLiteral
+
+pub enum NumericLiteral {
+    Decimal(DecimalLiteral),
+    BinaryInteger(BinaryIntegerLiteral),
+    OctalInteger(OctalIntegerLiteral),
+    HexInteger(HexIntegerLiteral),
+}
+
+// TODO: test
+pub fn numeric_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NumericLiteral> {
+    parse!{i;
+
+        let result =
+            (i -> decimal_literal(i).map(NumericLiteral::Decimal)) <|>
+            (i -> binary_integer_literal(i).map(NumericLiteral::BinaryInteger)) <|>
+            (i -> octal_integer_literal(i).map(NumericLiteral::OctalInteger)) <|>
+            (i -> hex_integer_literal(i).map(NumericLiteral::HexInteger));
+
+        ret result
+    }
+}
+
+// DecimalLiteral
+
+enum DecimalLiteral {
+    WholeFractionDecimal(DecimalIntegerLiteral,
+                         /* . */
+                         Option<DecimalDigits>,
+                         Option<ExponentPart>),
+    FractionDecimal(/* . */
+                    DecimalDigits,
+                    Option<ExponentPart>),
+    WholeDecimal(DecimalIntegerLiteral, Option<ExponentPart>),
+}
+
+// TODO: test
+fn decimal_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalLiteral> {
+    or(i,
+       |i| {
+        parse!{i;
+
+            let whole = decimal_integer_literal();
+            token(b'.');
+            let fraction = option(|i| decimal_digits(i).map(Some), None);
+            let exp_part = option(|i| exponent_part(i).map(Some), None);
+
+            ret DecimalLiteral::WholeFractionDecimal(whole, fraction, exp_part)
+        }
+    },
+       |i| {
+        or(i,
+           |i| {
+            parse!{i;
+
+                token(b'.');
+                let fraction = decimal_digits();
+                let exp_part = option(|i| exponent_part(i).map(Some), None);
+
+                ret DecimalLiteral::FractionDecimal(fraction, exp_part)
+            }
+        },
+           |i| {
+            parse!{i;
+
+                let whole = decimal_integer_literal();
+                let exp_part = option(|i| exponent_part(i).map(Some), None);
+
+                ret DecimalLiteral::WholeDecimal(whole, exp_part)
+            }
+        })
+    })
+}
+
+// DecimalIntegerLiteral
+
+enum DecimalIntegerLiteral {
+    Zero,
+    NonZero(NonZeroDigit, Option<DecimalDigits>),
+}
+
+// TODO: test
+fn decimal_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalIntegerLiteral> {
+    or(i,
+       |i| token(i, b'0').map(|_| DecimalIntegerLiteral::Zero),
+       |i| {
+        parse!{i;
+
+            let prefix = non_zero_digit();
+            let suffix = option(|i| decimal_digits(i).map(Some), None);
+
+            ret {
+                DecimalIntegerLiteral::NonZero(prefix, suffix)
+            }
+        }
+    })
+}
+
+// DecimalDigits
+
+struct DecimalDigits(Vec<DecimalDigit>);
+
+// TODO: test
+fn decimal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalDigits> {
+
+    let parse_result = many1(i, decimal_digit)
+        .bind(|i, buf: Vec<DecimalDigit>| i.ret(DecimalDigits(buf)));
+
+    on_error(parse_result, |i| {
+        let loc = i.position();
+        ErrorLocation::new(loc, "Expected decimal digit (0 or 9).".to_string())
+    })
+}
+
+// DecimalDigit
+
+// TODO: explicit enum
+#[derive(Clone)]
+struct DecimalDigit(char);
+
+// TODO: test
+fn decimal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DecimalDigit> {
+
+    #[inline]
+    fn is_decimal_digit(c: u8) -> bool {
+        (b'0' <= c && c <= b'9')
+    }
+
+    on_error(satisfy(i, is_decimal_digit), |i| {
+            let loc = i.position();
+            ErrorLocation::new(loc, "Expected decimal digit (0 to 9).".to_string())
+        })
+        .map(|c| DecimalDigit(c as char))
+}
+
+// NonZeroDigit
+
+struct NonZeroDigit(char);
+
+// TODO: test
+fn non_zero_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NonZeroDigit> {
+
+    #[inline]
+    fn is_non_zero_digit(c: u8) -> bool {
+        (b'1' <= c && c <= b'9')
+    }
+
+    on_error(satisfy(i, is_non_zero_digit), |i| {
+            let loc = i.position();
+            ErrorLocation::new(loc, "Expected non-zero digit (1 to 9).".to_string())
+        })
+        .map(|c| NonZeroDigit(c as char))
+}
+
+// ExponentPart
+
+struct ExponentPart(ExponentIndicator, SignedInteger);
+
+// TODO: test
+fn exponent_part<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ExponentPart> {
+    parse!{i;
+        let exp_indicator = exponent_indicator();
+        let result = signed_integer();
+        ret ExponentPart(exp_indicator, result)
+    }
+}
+
+// ExponentIndicator
+
+enum ExponentIndicator {
+    E,
+    e,
+}
+
+// TODO: test
+fn exponent_indicator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ExponentIndicator> {
+    or(i,
+       |i| token(i, b'e').map(|_| ExponentIndicator::e),
+       |i| token(i, b'E').map(|_| ExponentIndicator::E))
+}
+
+// SignedInteger
+
+enum SignedInteger {
+    Unsigned(DecimalDigits),
+    Positive(DecimalDigits),
+    Negative(DecimalDigits),
+}
+
+// TODO: test
+fn signed_integer<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SignedInteger> {
+
+    enum Signed {
+        Unsigned,
+        Positive,
+        Negative,
+    }
+
+    parse!{i;
+
+        let prefix = option(|i| -> ESParseResult<I, Signed> {
+            parse!{i;
+                let signed = (i -> token(i, b'+').map(|_| Signed::Positive)) <|>
+                (i -> token(i, b'-').map(|_| Signed::Negative));
+                ret signed
+            }
+        }, Signed::Unsigned);
+
+        let result = decimal_digits();
+
+        ret {
+            match prefix {
+                Signed::Unsigned => SignedInteger::Unsigned(result),
+                Signed::Positive => SignedInteger::Positive(result),
+                Signed::Negative => SignedInteger::Negative(result)
+            }
+        }
+    }
+}
+
+// BinaryIntegerLiteral
+
+struct BinaryIntegerLiteral(BinaryDigits);
+
+// TODO: test
+fn binary_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryIntegerLiteral> {
+    parse!{i;
+        token(b'0');
+
+        // TODO: store this into  BinaryIntegerLiteral
+        token(b'b') <|> token(b'B');
+
+
+        let result = binary_digits();
+        ret BinaryIntegerLiteral(result)
+    }
+}
+
+// BinaryDigits
+
+struct BinaryDigits(Vec<BinaryDigit>);
+
+// TODO: test
+fn binary_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryDigits> {
+
+    let parse_result = many1(i, binary_digit)
+        .bind(|i, buf: Vec<BinaryDigit>| i.ret(BinaryDigits(buf)));
+
+    on_error(parse_result, |i| {
+        let loc = i.position();
+        ErrorLocation::new(loc, "Expected binary digit (0 or 1).".to_string())
+    })
+}
+
+// BinaryDigit
+
+// TODO: enum
+#[derive(Clone)]
+struct BinaryDigit(char);
+
+// TODO: test
+#[inline]
+fn binary_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, BinaryDigit> {
+
+    #[inline]
+    fn is_binary_digit(c: u8) -> bool {
+        (b'0' <= c && c <= b'1')
+    }
+
+    on_error(satisfy(i, is_binary_digit), |i| {
+            let loc = i.position();
+            ErrorLocation::new(loc, "Expected binary digit (0 or 1).".to_string())
+        })
+        .map(|c| BinaryDigit(c as char))
+}
+
+// OctalIntegerLiteral
+
+struct OctalIntegerLiteral(OctalDigits);
+
+// TODO: test
+fn octal_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalIntegerLiteral> {
+    parse!{i;
+        token(b'0');
+        token(b'o') <|> token(b'O');
+        let result = octal_digits();
+        ret OctalIntegerLiteral(result)
+    }
+}
+
+// OctalDigits
+
+struct OctalDigits(Vec<OctalDigit>);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-OctalDigits
+fn octal_digits<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalDigits> {
+
+    let parse_result = many1(i, octal_digit)
+        .bind(|i, buf: Vec<OctalDigit>| i.ret(OctalDigits(buf)));
+
+    on_error(parse_result, |i| {
+        let loc = i.position();
+        ErrorLocation::new(loc, "Expected octal digit (0 to 7).".to_string())
+    })
+}
+
+// OctalDigit
+
+#[derive(Clone)]
+struct OctalDigit(char);
+
+// TODO: test
+#[inline]
+fn octal_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, OctalDigit> {
+
+    #[inline]
+    fn is_octal_digit(c: u8) -> bool {
+        (b'0' <= c && c <= b'7')
+    }
+
+    on_error(satisfy(i, is_octal_digit), |i| {
+            let loc = i.position();
+            ErrorLocation::new(loc, "Expected octal digit (0 to 7).".to_string())
+        })
+        .map(|c| OctalDigit(c as char))
+
+}
+
+// HexIntegerLiteral
+
+struct HexIntegerLiteral(HexDigits);
+
+// TODO: test
+fn hex_integer_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexIntegerLiteral> {
+    parse!{i;
+        token(b'0');
+        token(b'x') <|> token(b'X');
+        let result = hex_digits();
+        ret HexIntegerLiteral(result)
+    }
+}
 
 // HexDigits
 
