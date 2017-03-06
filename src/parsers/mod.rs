@@ -76,6 +76,16 @@ impl ::std::fmt::Display for ESParseError {
     }
 }
 
+impl IntoParseError for ESParseError {
+    #[inline]
+    fn into_parse_error(&self) -> ParseError {
+        match *self {
+            ESParseError::Failure(_) => ParseError::Failure,
+            ESParseError::Error(_) => ParseError::Error,
+        }
+    }
+}
+
 impl ::std::convert::From<ErrorChain> for ESParseError {
     fn from(err: ErrorChain) -> Self {
         ESParseError::Failure(err)
@@ -89,13 +99,10 @@ impl ::std::convert::From<error_location::ErrorLocation> for ESParseError {
     }
 }
 
-impl IntoParseError for ESParseError {
-    #[inline]
-    fn into_parse_error(&self) -> ParseError {
-        match *self {
-            ESParseError::Failure(_) => ParseError::Failure,
-            ESParseError::Error(_) => ParseError::Error,
-        }
+impl<'a> ::std::convert::From<&'a str> for ESParseError {
+    fn from(err: &str) -> Self {
+        let error_chain = ErrorChain::new(err);
+        ESParseError::Failure(error_chain)
     }
 }
 
@@ -237,6 +244,41 @@ impl<'a> Iterator for ErrorChainIter<'a> {
                 Some(e)
             }
             None => None,
+        }
+    }
+}
+
+// ErrMsg
+
+#[derive(Debug)]
+struct ErrorMsg(String);
+
+impl ::std::error::Error for ErrorMsg {
+    fn description(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ::std::fmt::Display for ErrorMsg {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl<'a> ::std::convert::From<&'a str> for ErrorChain {
+    fn from(err: &str) -> Self {
+        ErrorChain {
+            current: Box::new(ErrorMsg(format!("{}", err))),
+            next: None,
+        }
+    }
+}
+
+impl ::std::convert::From<String> for ErrorChain {
+    fn from(err: String) -> Self {
+        ErrorChain {
+            current: Box::new(ErrorMsg(err)),
+            next: None,
         }
     }
 }

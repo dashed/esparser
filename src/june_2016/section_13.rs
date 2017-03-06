@@ -12,7 +12,8 @@ use chomp::prelude::Either;
 
 use super::types::{Parameters, Parameter};
 use super::section_11::{common_delim, common_delim_required, CommonDelim, SemiColon, semicolon};
-use super::section_12::{initializer, Initializer, binding_identifier, BindingIdentifier};
+use super::section_12::{initializer, Initializer, binding_identifier, BindingIdentifier,
+                        PropertyName, property_name};
 use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either};
 use parsers::error_location::ErrorLocation;
 
@@ -441,6 +442,7 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>,
 
 // 13.3.3 Destructuring Binding Patterns
 
+
 struct BindingPattern;
 
 // TODO: test
@@ -468,12 +470,12 @@ fn binding_property<I: U8Input>(i: ESInput<I>,
                                 params: &Parameters)
                                 -> ESParseResult<I, BindingProperty> {
 
-                                    if is_debug_mode!() {
-    // validation
-    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
-        panic!("misuse of binding_property");
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of binding_property");
+        }
     }
-}
 
     #[inline]
     fn binding_property_property_name<I: U8Input>(i: ESInput<I>,

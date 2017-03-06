@@ -11,8 +11,9 @@ use chomp::prelude::Either;
 // local imports
 
 use parsers::{ESParseResult, ESInput, string, parse_utf8_char, on_error, many, many1, string_till,
-              token, option, satisfy, either};
+              token, option, satisfy, either, or};
 use parsers::error_location::ErrorLocation;
+use super::section_10::{source_character, SourceCharacter};
 
 // 11 ECMAScript Language: Lexical Grammar
 //
@@ -123,6 +124,8 @@ fn whitespace<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, WhiteSpace> {
 
 // 11.3 Line Terminators
 
+// LineTerminator
+
 #[derive(Debug)]
 enum LineTerminator {
     LineFeed,
@@ -152,6 +155,47 @@ fn line_terminator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTerminator
     //     let reason = "Expected utf8 character.".to_string();
     //     ErrorLocation::new(loc, reason)
     // })
+}
+
+// LineTerminatorSequence
+
+enum LineTerminatorSequence {
+    LineFeed,
+    CarriageReturn,
+    LineSeparator,
+    ParagraphSeparator,
+    CarriageReturnLineFeed
+}
+
+// TODO: test
+fn line_terminator_seq<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineTerminatorSequence> {
+
+    let parse_result = parse!{i;
+
+        let line_terminator_seq =
+            (i -> string(i, b"\x000A").map(|_| LineTerminatorSequence::LineFeed)) <|> // <LF>; LINE FEED (LF)
+            (i -> {
+                parse!{i;
+                    let cr = string(b"\x000D");
+                    let lf = string(b"\x000A");
+                    ret {
+                        LineTerminatorSequence::CarriageReturnLineFeed
+                    }
+                }
+            }) <|>                                                                // <CR><LF>
+            (i -> string(i, b"\x000D").map(|_| LineTerminatorSequence::CarriageReturn)) <|> // <CR>; CARRIAGE RETURN (CR)
+            (i -> string(i, b"\x2028").map(|_| LineTerminatorSequence::LineSeparator)) <|> // <LS>; LINE SEPARATOR
+            (i -> string(i, b"\x2029").map(|_| LineTerminatorSequence::ParagraphSeparator));    // <PS>; PARAGRAPH SEPARATOR
+
+        ret line_terminator_seq
+    };
+
+    on_error(parse_result,
+             |i| {
+                 let loc = i.position();
+                 let reason = "Expected linte terminator sequence.".to_string();
+                 ErrorLocation::new(loc, reason)
+             })
 }
 
 // 11.4 Comments
@@ -633,12 +677,399 @@ fn hex_digit<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexDigit> {
 
 // 11.8.4 String Literals
 
+// StringLiteral
+
+pub enum StringLiteral {
+    SingleQuoted(Option<SingleStringCharacters>),
+    DoubleQuoted(Option<DoubleStringCharacters>),
+}
+
+// TODO: test
+pub fn string_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, StringLiteral> {
+    or(i,
+       |i| {
+        parse!{i;
+                token(b'"');
+
+                let string = option(|i| double_string_characters(i).map(Some), None);
+
+                token(b'"');
+
+                ret StringLiteral::DoubleQuoted(string)
+            }
+    },
+       |i| {
+        parse!{i;
+                token(b'\'');
+
+                let string = option(|i| single_string_characters(i).map(Some), None);
+
+                token(b'\'');
+
+                ret StringLiteral::SingleQuoted(string)
+            }
+    })
+}
+
+// DoubleStringCharacters
+
+// NOTE: This isn't Vec<DoubleStringCharacter> since DoubleStringCharactersItem::String is better than
+//       DoubleStringCharacter::SourceCharacter
+struct DoubleStringCharacters(Vec<DoubleStringCharactersItem>);
+
+enum DoubleStringCharactersItem {
+    // many DoubleStringCharacter::SourceCharacter merged together
+    String(String),
+    EscapeSequence(EscapeSequence),
+    LineContinuation(LineContinuation),
+}
+
+// TODO: test
+fn double_string_characters<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DoubleStringCharacters> {
+
+    use std::mem;
+
+    many1(i, double_string_character).bind(|i, chars: Vec<DoubleStringCharacter>| {
+
+        let mut result: Vec<DoubleStringCharactersItem> = vec![];
+
+        let mut string_buf = String::new();
+
+        for c in chars.into_iter() {
+
+            match c {
+                DoubleStringCharacter::SourceCharacter(c) => {
+                    let SourceCharacter(c) = c;
+                    string_buf.push(c);
+                    continue;
+                }
+                _ => {
+                    string_buf.shrink_to_fit();
+                    if string_buf.len() >= 1 {
+                        let moved_string_buf = mem::replace(&mut string_buf, String::new());
+                        result.push(DoubleStringCharactersItem::String(moved_string_buf));
+                    }
+                }
+            }
+
+            match c {
+                DoubleStringCharacter::SourceCharacter(_) => {
+                    unreachable!();
+                }
+                DoubleStringCharacter::EscapeSequence(e) => {
+                    result.push(DoubleStringCharactersItem::EscapeSequence(e))
+                }
+                DoubleStringCharacter::LineContinuation(l) => {
+                    result.push(DoubleStringCharactersItem::LineContinuation(l))
+                }
+            }
+        }
+
+        string_buf.shrink_to_fit();
+        if string_buf.len() >= 1 {
+            result.push(DoubleStringCharactersItem::String(string_buf));
+        }
+
+        i.ret(DoubleStringCharacters(result))
+    })
+}
+
+// SingleStringCharacters
+
+// NOTE: This isn't Vec<SingleStringCharacter> since SingleStringCharactersItem::String is better than
+//       SingleStringCharacter::SourceCharacter
+struct SingleStringCharacters(Vec<SingleStringCharactersItem>);
+
+enum SingleStringCharactersItem {
+    // many SingleStringCharacter::SourceCharacter merged together
+    String(String),
+    EscapeSequence(EscapeSequence),
+    LineContinuation(LineContinuation),
+}
+
+// TODO: test case: empty input
+// TODO: test
+fn single_string_characters<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SingleStringCharacters> {
+
+    use std::mem;
+
+    many1(i, single_string_character).bind(|i, chars: Vec<SingleStringCharacter>| {
+
+        let mut result: Vec<SingleStringCharactersItem> = vec![];
+
+        let mut string_buf = String::new();
+
+        for c in chars.into_iter() {
+
+            match c {
+                SingleStringCharacter::SourceCharacter(c) => {
+                    let SourceCharacter(c) = c;
+                    string_buf.push(c);
+                    continue;
+                }
+                _ => {
+                    string_buf.shrink_to_fit();
+                    if string_buf.len() >= 1 {
+                        let moved_string_buf = mem::replace(&mut string_buf, String::new());
+                        result.push(SingleStringCharactersItem::String(moved_string_buf));
+                    }
+                }
+            }
+
+            match c {
+                SingleStringCharacter::SourceCharacter(_) => {
+                    unreachable!();
+                }
+                SingleStringCharacter::EscapeSequence(e) => {
+                    result.push(SingleStringCharactersItem::EscapeSequence(e))
+                }
+                SingleStringCharacter::LineContinuation(l) => {
+                    result.push(SingleStringCharactersItem::LineContinuation(l))
+                }
+            }
+        }
+
+        string_buf.shrink_to_fit();
+        if string_buf.len() >= 1 {
+            result.push(SingleStringCharactersItem::String(string_buf));
+        }
+
+        i.ret(SingleStringCharacters(result))
+    })
+}
+
+// DoubleStringCharacter
+
+enum DoubleStringCharacter {
+    SourceCharacter(SourceCharacter),
+    EscapeSequence(EscapeSequence),
+    LineContinuation(LineContinuation),
+}
+
+// TODO: test case: empty input
+// TODO: test
+fn double_string_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DoubleStringCharacter> {
+
+    #[inline]
+    fn char_match<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, DoubleStringCharacter> {
+        either(i,
+               |i| {
+            parse!{i;
+                    (i -> token(i, b'"').map(|_| ())) <|>
+                    (i -> token(i, b'\\').map(|_| ())) <|>
+                    (i -> line_terminator(i).map(|_| ()));
+
+                    ret {()}
+                }
+        },
+               source_character)
+            .bind(|i, result| {
+                match result {
+                    Either::Left(_) => {
+                        // TODO: err message
+                        i.err("Non-legal character.".into())
+                    }
+                    Either::Right(c) => i.ret(DoubleStringCharacter::SourceCharacter(c)),
+                }
+            })
+    }
+
+    parse!{i;
+        let result = char_match() <|>
+        (i -> token(i, b'\\').then(escape_sequence).map(DoubleStringCharacter::EscapeSequence)) <|>
+        (i -> line_continuation(i).map(DoubleStringCharacter::LineContinuation));
+
+        ret result
+    }
+}
+
+// SingleStringCharacter
+
+enum SingleStringCharacter {
+    SourceCharacter(SourceCharacter),
+    EscapeSequence(EscapeSequence),
+    LineContinuation(LineContinuation),
+}
+
+// TODO: test
+fn single_string_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SingleStringCharacter> {
+
+    #[inline]
+    fn char_match<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SingleStringCharacter> {
+        either(i,
+               |i| {
+            parse!{i;
+                    (i -> token(i, b'\'').map(|_| ())) <|>
+                    (i -> token(i, b'\\').map(|_| ())) <|>
+                    (i -> line_terminator(i).map(|_| ()));
+
+                    ret {()}
+                }
+        },
+               source_character)
+            .bind(|i, result| {
+                match result {
+                    Either::Left(_) => {
+                        // TODO: err message
+                        i.err("Non-legal character.".into())
+                    }
+                    Either::Right(c) => i.ret(SingleStringCharacter::SourceCharacter(c)),
+                }
+            })
+    }
+
+    parse!{i;
+        let result = char_match() <|>
+        (i -> token(i, b'\\').then(escape_sequence).map(SingleStringCharacter::EscapeSequence)) <|>
+        (i -> line_continuation(i).map(SingleStringCharacter::LineContinuation));
+
+        ret result
+    }
+}
+
+// LineContinuation
+
+struct LineContinuation(LineTerminatorSequence);
+
+// TODO: test
+fn line_continuation<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LineContinuation> {
+    token(i, b'\\').then(line_terminator_seq).map(|x| LineContinuation(x))
+}
+
+// EscapeSequence
+
+enum EscapeSequence {
+    CharacterEscapeSequence(CharacterEscapeSequence),
+    Zero,
+    HexEscapeSequence(HexEscapeSequence),
+    UnicodeEscapeSequence(UnicodeEscapeSequence),
+}
+
+// TODO: test
+fn escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EscapeSequence> {
+    parse!{i;
+
+        let result =
+            (i -> character_escape_sequence(i).map(EscapeSequence::CharacterEscapeSequence)) <|>
+            (i -> token(i, b'0').map(|_| EscapeSequence::Zero)) <|>
+            (i -> hex_escape_sequence(i).map(EscapeSequence::HexEscapeSequence)) <|>
+            (i -> unicode_escape_sequence(i).map(EscapeSequence::UnicodeEscapeSequence));
+
+        ret result
+    }
+}
+
+// CharacterEscapeSequence
+
+enum CharacterEscapeSequence {
+    SingleEscapeCharacter(SingleEscapeCharacter),
+    NonEscapeCharacter(NonEscapeCharacter),
+}
+
+// TODO: test
+fn character_escape_sequence<I: U8Input>(i: ESInput<I>)
+                                         -> ESParseResult<I, CharacterEscapeSequence> {
+    or(i,
+       |i| single_escape_character(i).map(CharacterEscapeSequence::SingleEscapeCharacter),
+       |i| non_escape_character(i).map(CharacterEscapeSequence::NonEscapeCharacter))
+}
+
+// SingleEscapeCharacter
+
+// TODO: enum SingleEscapeCharacterItem { ... }
+struct SingleEscapeCharacter(char);
+
+// TODO: test
+fn single_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, SingleEscapeCharacter> {
+    parse!{i;
+
+        let t = token(b'\'') <|>
+            token(b'"') <|>
+            token(b'\\') <|>
+            token(b'b') <|>
+            token(b'f') <|>
+            token(b'n') <|>
+            token(b'r') <|>
+            token(b't') <|>
+            token(b'v');
+
+        ret {
+            SingleEscapeCharacter(t as char)
+        }
+    }
+}
+
+// NonEscapeCharacter
+
+struct NonEscapeCharacter(char);
+
+// TODO: test
+fn non_escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NonEscapeCharacter> {
+    either(i,
+           |i| or(i, escape_character, |i| line_terminator(i).map(|_| ())),
+           source_character)
+        .bind(|i, result| {
+            match result {
+                Either::Left(_left) => {
+                    // TODO: fix error
+                    i.err("Reason TBA.".into())
+                }
+                Either::Right(c) => {
+                    let SourceCharacter(c) = c;
+                    i.ret(NonEscapeCharacter(c))
+                }
+            }
+        })
+}
+
+// EscapeCharacter
+
+// TODO: test
+fn escape_character<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+    parse!{i;
+        (i -> single_escape_character(i).map(|_| ())) <|>
+        (i -> decimal_digit(i).map(|_| ())) <|>
+        (i -> token(i, b'x').map(|_| ())) <|>
+        (i -> token(i, b'u').map(|_| ()));
+
+        ret {
+            // NOTE: satisfied results are not used
+            ()
+        }
+    }
+}
+
+// HexEscapeSequence
+
+struct HexEscapeSequence(HexDigit, HexDigit);
+
+// TODO: test
+fn hex_escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, HexEscapeSequence> {
+    parse!{i;
+
+        token(b'x');
+
+        let digit_1 = hex_digit();
+        let digit_2 = hex_digit();
+
+        ret {
+            HexEscapeSequence(digit_1, digit_2)
+            // TODO: remove
+            // let mut result = String::with_capacity(2);
+            // result.push(digit_1 as char);
+            // result.push(digit_2 as char);
+            // string_to_unicode_char(&result).unwrap()
+        }
+    }
+}
+
+// UnicodeEscapeSequence
+
 enum UnicodeEscapeSequence {
     HexDigits(HexDigits),
     Hex4Digits(Hex4Digits),
 }
 
-// http://www.ecma-international.org/ecma-262/7.0/#prod-UnicodeEscapeSequence
 // TODO: needs test
 fn unicode_escape_sequence<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, UnicodeEscapeSequence> {
     either(i,

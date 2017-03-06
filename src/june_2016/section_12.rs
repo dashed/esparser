@@ -7,7 +7,7 @@ use chomp::prelude::Either;
 
 use parsers::{ESParseResult, ESInput, string, parse_utf8_char, on_error, many, many1, string_till,
               token, option, either};
-use super::section_11::{reserved_word, identifier_name, IdentifierName};
+use super::section_11::{reserved_word, identifier_name, IdentifierName, CommonDelim, common_delim, string_literal, StringLiteral};
 use super::types::{Parameters, Parameter};
 use parsers::error_location::ErrorLocation;
 
@@ -165,10 +165,194 @@ fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
 
 // 12.2.6 Object Initializer
 
-pub struct Initializer;
+// PropertyName
 
+pub enum PropertyName {
+    LiteralPropertyName(LiteralPropertyName),
+    ComputedPropertyName(ComputedPropertyName),
+}
+
+// TODO: test
+pub fn property_name<I: U8Input>(i: ESInput<I>,
+                                 params: &Parameters)
+                                 -> ESParseResult<I, PropertyName> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of property_name");
+        }
+    }
+
+    parse!{i;
+
+        let prop_name = (i -> literal_property_name(i).map(PropertyName::LiteralPropertyName))
+        <|>
+        (i -> computed_property_name(i, &params).map(PropertyName::ComputedPropertyName));
+
+        ret prop_name
+    }
+}
+
+// LiteralPropertyName
+
+enum LiteralPropertyName {
+    IdentifierName(IdentifierName),
+    StringLiteral(StringLiteral),
+    NumericLiteral(NumericLiteral),
+}
+
+// TODO: test
+fn literal_property_name<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LiteralPropertyName> {
+    parse!{i;
+
+        let literal_prop_name =
+            (i -> identifier_name(i).map(LiteralPropertyName::IdentifierName))
+            <|>
+            (i -> string_literal(i).map(LiteralPropertyName::StringLiteral))
+            <|>
+            (i -> numeric_literal(i).map(LiteralPropertyName::NumericLiteral));
+
+        ret literal_prop_name
+    }
+}
+
+// ComputedPropertyName
+
+struct ComputedPropertyName(/* [ */
+                            Vec<CommonDelim>,
+                            AssignmentExpression,
+                            Vec<CommonDelim> /* ] */);
+
+// TODO: test
+fn computed_property_name<I: U8Input>(i: ESInput<I>,
+                                      params: &Parameters)
+                                      -> ESParseResult<I, ComputedPropertyName> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of computed_property_name");
+        }
+    }
+
+    let mut params = params.clone();
+    params.insert(Parameter::In);
+    let params = params;
+
+    parse!{i;
+
+        token(b'[');
+        let delim_left = common_delim();
+
+        let expr = assignment_expression(&params);
+
+        let delim_right = common_delim();
+        token(b']');
+
+        ret ComputedPropertyName(delim_left, expr, delim_right)
+    }
+}
+
+// CoverInitializedName
+
+struct CoverInitializedName(IdentifierReference, Vec<CommonDelim>, Initializer);
+
+// TODO: test
+fn cover_initialized_name<I: U8Input>(i: ESInput<I>,
+                                      params: &Parameters)
+                                      -> ESParseResult<I, CoverInitializedName> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of cover_initialized_name");
+        }
+    }
+
+    parse!{i;
+
+        let id_ref = identifier_reference(&params);
+
+        let delim = common_delim();
+
+        let initializer = (i -> {
+
+            let mut params = params.clone();
+            params.insert(Parameter::In);
+
+            initializer(i, &params)
+        });
+
+        ret CoverInitializedName(id_ref, delim, initializer)
+    }
+}
+
+// Initializer
+
+pub struct Initializer(/* = */
+                       Vec<CommonDelim>,
+                       AssignmentExpression);
+
+// TODO: test
 pub fn initializer<I: U8Input>(i: ESInput<I>,
                                params: &Parameters)
                                -> ESParseResult<I, Initializer> {
-    i.ret(Initializer)
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::In) ||
+             params.contains(&Parameter::Yield)) {
+            panic!("misuse of initializer");
+        }
+    }
+
+    parse!{i;
+
+        token(b'=');
+
+        let delim = common_delim();
+
+        let expr = assignment_expression(params);
+
+        ret Initializer(delim, expr)
+    }
+}
+
+// 12.15 Assignment Operators
+
+// AssignmentExpression
+
+struct AssignmentExpression;
+// TODO: fix
+// enum AssignmentExpression {
+//     ConditionalExpression(Box<ConditionalExpression>),
+// }
+
+// TODO: test
+fn assignment_expression<I: U8Input>(i: ESInput<I>,
+                                     params: &Parameters)
+                                     -> ESParseResult<I, AssignmentExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::In) ||
+             params.contains(&Parameter::Yield)) {
+            panic!("misuse of assignment_expression");
+        }
+    }
+
+    i.ret(AssignmentExpression)
+    // TODO: fix
+    // parse!{i;
+
+    //     let result = (i -> conditional_expression(i, params)
+    //         .map(|x| AssignmentExpression::ConditionalExpression(Box::new(x))));
+
+    //     // TODO: complete
+
+    //     ret {
+    //         result
+    //     }
+    // }
 }

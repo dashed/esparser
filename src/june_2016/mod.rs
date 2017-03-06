@@ -7,6 +7,9 @@ mod types;
 
 mod traits;
 
+// 10 ECMAScript Language: Source Code
+mod section_10;
+
 // 11 ECMAScript Language: Lexical Grammar
 mod section_11;
 
