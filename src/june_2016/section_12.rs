@@ -825,15 +825,296 @@ pub fn initializer<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// 12.12 Binary Bitwise Operators
+
+complete me
+
+// 12.13 Binary Logical Operators
+
+// LogicalANDExpression
+
+// LogicalAndExpression := BitwiseORExpression LogicalAndExpressionRest*
+// LogicalAndExpressionRest := Delim && Delim BitwiseORExpression
+
+struct LogicalAndExpression(BitwiseORExpression, Vec<LogicalAndExpressionRest>);
+
+impl LogicalAndExpression {
+    fn new(rhs_val: BitwiseORExpression) -> Self {
+        LogicalAndExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: LogicalAndExpressionDelim,
+                rhs_val: BitwiseORExpression)
+                -> Self {
+
+        let LogicalAndExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let LogicalAndExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = LogicalAndExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        LogicalAndExpression(head, rest)
+    }
+}
+
+struct LogicalAndExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, BitwiseORExpression);
+
+struct LogicalAndExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
+
+generate_list_parser!(
+    LogicalAndExpression;
+    LogicalAndExpressionRest;
+    LogicalAndExpressionState;
+    LogicalAndExpressionDelim;
+    BitwiseORExpression);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-LogicalANDExpression
+fn logical_and_expression<I: U8Input>(i: ESInput<I>,
+                                      params: &Parameters)
+                                      -> ESParseResult<I, LogicalAndExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::In) ||
+             params.contains(&Parameter::Yield)) {
+            panic!("misuse of logical_and_expression");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<LogicalAndExpressionState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(string(i, b"&&"),
+                    |i| {
+                        let loc = i.position();
+                        ErrorLocation::new(loc, "Expected && operator.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+            ret {
+                let delim = LogicalAndExpressionDelim(delim_1, delim_2);
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = bitwise_or_expression(params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+
+}
+
+// LogicOrExpression
+
+// LogicOrExpression := LogicalAndExpression LogicOrExpressionRest*
+// LogicOrExpressionRest := Delim || Delim LogicalAndExpression
+
+struct LogicOrExpression(LogicalAndExpression, Vec<LogicOrExpressionRest>);
+
+impl LogicOrExpression {
+    fn new(rhs_val: LogicalAndExpression) -> Self {
+        LogicOrExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: LogicOrExpressionDelim,
+                rhs_val: LogicalAndExpression)
+                -> Self {
+
+        let LogicOrExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let LogicOrExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = LogicOrExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        LogicOrExpression(head, rest)
+    }
+}
+
+struct LogicOrExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, LogicalAndExpression);
+
+struct LogicOrExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
+
+generate_list_parser!(
+    LogicOrExpression;
+    LogicOrExpressionRest;
+    LogicOrExpressionState;
+    LogicOrExpressionDelim;
+    LogicalAndExpression);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Parameters
+fn logical_or_expression<I: U8Input>(i: ESInput<I>,
+                                     params: &Parameters)
+                                     -> ESParseResult<I, LogicOrExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::In) ||
+             params.contains(&Parameter::Yield)) {
+            panic!("misuse of logical_or_expression");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<LogicOrExpressionState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(string(i, b"||"),
+                    |i| {
+                        let loc = i.position();
+                        ErrorLocation::new(loc, "Expected || operator.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+            ret {
+
+                let delim = LogicOrExpressionDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = logical_and_expression(params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
+
+// 12.14 Conditional Operator ( ? : )
+
+// ConditionalExpression
+
+enum ConditionalExpression {
+    Conditional(LogicOrExpression,
+                Vec<CommonDelim>,
+                Vec<CommonDelim>,
+                AssignmentExpression,
+                Vec<CommonDelim>,
+                Vec<CommonDelim>,
+                AssignmentExpression),
+    LogicOrExpression(LogicOrExpression),
+}
+
+
+// TODO: test
+fn conditional_expression<I: U8Input>(i: ESInput<I>,
+                                      params: &Parameters)
+                                      -> ESParseResult<I, ConditionalExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::In) ||
+             params.contains(&Parameter::Yield)) {
+            panic!("misuse of conditional_expression");
+        }
+    }
+
+    #[inline]
+    fn conditional<I: U8Input>(i: ESInput<I>,
+                               params: &Parameters)
+                               -> ESParseResult<I,
+                                                (Vec<CommonDelim>,
+                                                 Vec<CommonDelim>,
+                                                 AssignmentExpression,
+                                                 Vec<CommonDelim>,
+                                                 Vec<CommonDelim>,
+                                                 AssignmentExpression)> {
+
+        parse!{i;
+
+            let delim_1 = common_delim();
+            token(b'?');
+            let delim_2 = common_delim();
+
+            let consequent = (i -> {
+                let mut params = params.clone();
+                params.insert(Parameter::In);
+                assignment_expression(i, &params)
+            });
+
+            let delim_3 = common_delim();
+            token(b':');
+            let delim_4 = common_delim();
+
+            let alternative = assignment_expression(&params);
+
+            ret {
+                (delim_1, delim_2, consequent, delim_3, delim_4, alternative)
+            }
+        }
+    }
+
+    parse!{i;
+
+        let logical_or_expression = logical_or_expression(&params);
+
+        let conditional = option(|i| conditional(i, &params).map(Some),
+            None);
+
+        ret {
+            match conditional {
+                Some((delim_1, delim_2, consequent, delim_3, delim_4, alternative)) => {
+                    ConditionalExpression::Conditional(
+                        logical_or_expression, delim_1, delim_2, consequent, delim_3, delim_4, alternative)
+                }
+                None => {
+                    ConditionalExpression::LogicOrExpression(logical_or_expression)
+                }
+            }
+        }
+    }
+}
+
 // 12.15 Assignment Operators
 
 // AssignmentExpression
 
-struct AssignmentExpression;
-// TODO: fix
-// enum AssignmentExpression {
-//     ConditionalExpression(Box<ConditionalExpression>),
-// }
+enum AssignmentExpression {
+    ConditionalExpression(Box<ConditionalExpression>),
+}
 
 // TODO: test
 fn assignment_expression<I: U8Input>(i: ESInput<I>,
@@ -848,17 +1129,15 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>,
         }
     }
 
-    i.ret(AssignmentExpression)
-    // TODO: fix
-    // parse!{i;
+    parse!{i;
 
-    //     let result = (i -> conditional_expression(i, params)
-    //         .map(|x| AssignmentExpression::ConditionalExpression(Box::new(x))));
+        let result = (i -> conditional_expression(i, params)
+            .map(|x| AssignmentExpression::ConditionalExpression(Box::new(x))));
 
-    //     // TODO: complete
+        // TODO: complete
 
-    //     ret {
-    //         result
-    //     }
-    // }
+        ret {
+            result
+        }
+    }
 }
