@@ -2895,3 +2895,100 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>,
         }
     }
 }
+
+// 12.16 Comma Operator ( , )
+
+// Expression
+
+struct Expression(AssignmentExpression, Vec<ExpressionRest>);
+
+impl Expression {
+    fn new(rhs_val: AssignmentExpression) -> Self {
+        Expression(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: ExpressionDelim, rhs_val: AssignmentExpression) -> Self {
+
+        let Expression(head, rest) = self;
+        let mut rest = rest;
+
+        let ExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = ExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        Expression(head, rest)
+    }
+}
+
+struct ExpressionRest(Vec<CommonDelim>,
+                      /* , (comma) */
+                      Vec<CommonDelim>,
+                      AssignmentExpression);
+
+struct ExpressionDelim(Vec<CommonDelim>,
+                       /* , (comma) */
+                       Vec<CommonDelim>);
+
+generate_list_parser!(
+    Expression;
+    ExpressionRest;
+    ExpressionState;
+    ExpressionDelim;
+    AssignmentExpression);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-Expression
+fn expression<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Expression> {
+
+    if is_debug_mode!() {
+        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+             params.contains(&Parameter::In)) {
+            panic!("misuse of expression");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<ExpressionState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(token(i, b','),
+                    |i| {
+                        let loc = i.position();
+                        // TODO: proper err message?
+                        ErrorLocation::new(loc, "Expected , here.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+
+            ret {
+                let delim = ExpressionDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let item = assignment_expression(&params);
+
+            ret {
+                accumulator.borrow_mut().add_item(item);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
