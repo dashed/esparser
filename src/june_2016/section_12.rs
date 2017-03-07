@@ -826,6 +826,658 @@ pub fn initializer<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// 12.3 Left-Hand-Side Expressions
+
+// MemberExpression
+
+enum MemberExpression {
+    PrimaryExpression(PrimaryExpression),
+    PropertyAccessorBracket(Box<MemberExpression>,
+                            Vec<CommonDelim>,
+                            /* [ */
+                            Vec<CommonDelim>,
+                            Expression,
+                            Vec<CommonDelim> /* ] */),
+    PropertyAccessorDot(Box<MemberExpression>,
+                        Vec<CommonDelim>,
+                        /* . */
+                        Vec<CommonDelim>,
+                        IdentifierName),
+    TaggedTemplate(Box<MemberExpression>, Vec<CommonDelim>, TemplateLiteral),
+    SuperProperty(SuperProperty),
+    MetaProperty(MetaProperty),
+    FunctionCall(/* new */
+                 Vec<CommonDelim>,
+                 Box<MemberExpression>,
+                 Vec<CommonDelim>,
+                 Arguments),
+}
+
+// TODO: test
+fn member_expression<I: U8Input>(i: ESInput<I>,
+                                 params: &Parameters)
+                                 -> ESParseResult<I, MemberExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of member_expression");
+        }
+    }
+
+    let mut expr_params = params.clone();
+    expr_params.insert(Parameter::In);
+    let expr_params = expr_params;
+
+    parse!{i;
+
+        let expr =
+            (i -> primary_expression(i, &params).map(MemberExpression::PrimaryExpression))
+            <|>
+            (i -> super_property(i, &params).map(MemberExpression::SuperProperty))
+            <|>
+            (i -> meta_property(i).map(MemberExpression::MetaProperty))
+            <|>
+            (i -> {
+                parse!{i;
+
+                    let member_expr = member_expression(&params);
+
+                    let delim_1 = common_delim();
+                    token(b'[');
+                    let delim_2 = common_delim();
+
+                    let expr = expression(&expr_params);
+
+                    let delim_3 = common_delim();
+                    token(b']');
+
+                    ret MemberExpression::PropertyAccessorBracket(Box::new(member_expr), delim_1, delim_2, expr, delim_3)
+                }
+            })
+            <|>
+            (i -> {
+                parse!{i;
+
+                    let member_expr = member_expression(&params);
+
+                    let delim_1 = common_delim();
+                    token(b'.');
+                    let delim_2 = common_delim();
+
+                    let name = identifier_name();
+
+                    ret MemberExpression::PropertyAccessorDot(Box::new(member_expr), delim_1, delim_2, name)
+                }
+            })
+            <|>
+            (i -> {
+                parse!{i;
+
+                    let member_expr = member_expression(&params);
+
+                    let delim = common_delim();
+
+                    let template = template_literal(&params);
+
+                    ret MemberExpression::TaggedTemplate(Box::new(member_expr), delim, template)
+                }
+            })
+            <|>
+            (i -> {
+                parse!{i;
+
+                    string(b"new");
+
+                    let delim_1 = common_delim();
+
+                    let member_expr = member_expression(&params);
+
+                    let delim_2 = common_delim();
+
+                    let args = arguments(&params);
+
+                    ret MemberExpression::FunctionCall(delim_1, Box::new(member_expr), delim_2, args)
+                }
+            });
+
+        ret expr
+    }
+}
+
+// SuperProperty
+
+enum SuperProperty {
+    PropertyAccessorBracket(/* super */
+                            Vec<CommonDelim>,
+                            /* [ */
+                            Vec<CommonDelim>,
+                            Expression,
+                            Vec<CommonDelim> /* ] */),
+    PropertyAccessorDot(/* super */
+                        Vec<CommonDelim>,
+                        /* . */
+                        Vec<CommonDelim>,
+                        IdentifierName),
+}
+
+// TODO: test
+fn super_property<I: U8Input>(i: ESInput<I>,
+                              params: &Parameters)
+                              -> ESParseResult<I, SuperProperty> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of super_property");
+        }
+    }
+
+    string(i, b"super")
+        .then(|i| {
+            or(i,
+                |i| {
+                    let mut params_expr = params.clone();
+                    params_expr.insert(Parameter::In);
+
+                    parse!{i;
+
+                        let delim = common_delim();
+
+                        token(b'[');
+                        let delim_left = common_delim();
+
+                        let expr = expression(&params_expr);
+
+                        let delim_right = common_delim();
+                        token(b']');
+
+                        ret {
+                            SuperProperty::PropertyAccessorBracket(delim, delim_left, expr, delim_right)
+                        }
+                    }
+                },
+                |i| {
+                    parse!{i;
+
+                        let delim = common_delim();
+
+                        token(b'.');
+                        let delim_left = common_delim();
+                        let name = identifier_name();
+
+                            ret {
+                                SuperProperty::PropertyAccessorDot(delim, delim_left, name)
+                            }
+                    }
+                })
+        })
+}
+
+// MetaProperty
+
+struct MetaProperty(NewTarget);
+
+// TODO: test
+fn meta_property<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, MetaProperty> {
+    new_target(i).map(MetaProperty)
+}
+// NewTarget
+
+struct NewTarget(/* new */
+                 Vec<CommonDelim>,
+                 /* . (dot) */
+                 Vec<CommonDelim> /* target */);
+
+// TODO: test
+fn new_target<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, NewTarget> {
+    parse!{i;
+
+        string(b"new");
+
+        let delim_1 = common_delim();
+
+        string(b".");
+
+        let delim_2 = common_delim();
+
+        string(b"target");
+
+
+        ret {
+            NewTarget(delim_1, delim_2)
+        }
+    }
+}
+
+// NewExpression
+
+enum NewExpression {
+    MemberExpression(MemberExpression),
+    NewExpression(/* new */
+                  Vec<CommonDelim>,
+                  Box<NewExpression>),
+}
+
+// TODO: test
+fn new_expression<I: U8Input>(i: ESInput<I>,
+                              params: &Parameters)
+                              -> ESParseResult<I, NewExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of new_expression");
+        }
+    }
+
+    or(i,
+       |i| {
+        parse!{i;
+                string(b"new");
+
+                let delim = common_delim();
+
+                let new_expr = new_expression(&params);
+
+                ret {
+                    NewExpression::NewExpression(delim, Box::new(new_expr))
+                }
+            }
+    },
+       |i| member_expression(i, &params).map(NewExpression::MemberExpression))
+}
+
+// CallExpression
+
+enum CallExpressionHead {
+    FunctionCall(MemberExpression, Vec<CommonDelim>, Arguments),
+    SuperCall(SuperCall),
+}
+
+struct CallExpression(CallExpressionHead, Vec<CallExpressionRest>);
+
+impl CallExpression {
+    fn new(rhs_val: CallExpressionItem) -> Self {
+        match rhs_val {
+            CallExpressionItem::HeadItem(head) => CallExpression(head, vec![]),
+            CallExpressionItem::RestItem(_) => panic!("invariant violation"),
+        }
+    }
+
+    fn add_item(self, operator_delim: CallExpressionDelim, rhs_val: CallExpressionItem) -> Self {
+
+        let CallExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let CallExpressionDelim(delim) = operator_delim;
+
+        let rest_item = match rhs_val {
+            CallExpressionItem::HeadItem(_head) => panic!("invariant violation"),
+            CallExpressionItem::RestItem(rest_item) => rest_item,
+        };
+
+        let rhs = CallExpressionRest(delim, rest_item);
+
+        rest.push(rhs);
+
+        CallExpression(head, rest)
+    }
+}
+
+enum CallExpressionRestItem {
+    FunctionCall(Arguments),
+    PropertyAccessorBracket(/* [ */
+                            Vec<CommonDelim>,
+                            Expression,
+                            Vec<CommonDelim> /* ] */),
+    PropertyAccessorDot(/* . */
+                        Vec<CommonDelim>,
+                        IdentifierName),
+    TaggedTemplate(TemplateLiteral),
+}
+
+struct CallExpressionRest(Vec<CommonDelim>, CallExpressionRestItem);
+
+struct CallExpressionDelim(Vec<CommonDelim>);
+
+enum CallExpressionItem {
+    HeadItem(CallExpressionHead),
+    RestItem(CallExpressionRestItem),
+}
+
+generate_list_parser!(
+    CallExpression;
+    CallExpressionRest;
+    CallExpressionState;
+    CallExpressionDelim;
+    CallExpressionItem);
+
+// TODO: test
+fn call_expression<I: U8Input>(i: ESInput<I>,
+                               params: &Parameters)
+                               -> ESParseResult<I, CallExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of call_expression");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<CallExpressionState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim = common_delim();
+
+            ret {
+                let delim = CallExpressionDelim(delim);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    let mut expr_params = params.clone();
+    expr_params.insert(Parameter::In);
+    let expr_params = expr_params;
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+
+        let is_initial = {
+            accumulator.borrow().is_initial()
+        };
+
+        if is_initial {
+            parse!{i;
+
+                let head = or(
+                    |i| super_call(i, &params).map(CallExpressionHead::SuperCall),
+                    |i| {
+                        parse!{i;
+                            let member = member_expression(&params);
+                            let delim = common_delim();
+                            let args = arguments(&params);
+
+                            ret CallExpressionHead::FunctionCall(member, delim, args)
+                        }
+                    });
+
+                ret {
+                    let rhs = CallExpressionItem::HeadItem(head);
+                    accumulator.borrow_mut().add_item(rhs);
+                    ()
+                }
+            }
+        } else {
+            parse!{i;
+
+                let rest_item =
+                    (i -> {
+                        arguments(i, &params)
+                            .map(CallExpressionRestItem::FunctionCall)
+                    }) <|>
+                    (i -> {
+                        parse!{i;
+
+                            string(b"[");
+                            let delim_left = common_delim();
+
+                            let expr = expression(&expr_params);
+
+                            let delim_right = common_delim();
+                            string(b"]");
+
+                            ret CallExpressionRestItem::PropertyAccessorBracket(delim_left, expr, delim_right)
+                        }
+                    }) <|>
+                    (i -> {
+                        parse!{i;
+                            string(b".");
+                            let delim_left = common_delim();
+                            let ident = identifier_name();
+
+                            ret CallExpressionRestItem::PropertyAccessorDot(delim_left, ident)
+                        }
+                    }) <|>
+                    (i -> {
+                        template_literal(i, &params)
+                            .map(CallExpressionRestItem::TaggedTemplate)
+                    });
+
+                ret {
+                    let rhs = CallExpressionItem::RestItem(rest_item);
+                    accumulator.borrow_mut().add_item(rhs);
+                    ()
+                }
+            }
+        }
+
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
+// SuperCall
+
+struct SuperCall(/* super */
+                 Vec<CommonDelim>,
+                 Arguments);
+
+// TODO: test
+fn super_call<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, SuperCall> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of super_call");
+        }
+    }
+
+    parse!{i;
+
+        string(b"super");
+
+        let delim = common_delim();
+
+        let args = arguments(params);
+
+        ret SuperCall(delim, args)
+    }
+}
+
+// Arguments
+
+enum Arguments {
+    NoArguments(Vec<CommonDelim>),
+    Arguments(Vec<CommonDelim>, ArgumentList, Vec<CommonDelim>),
+}
+
+// TODO: test
+fn arguments<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Arguments> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of arguments");
+        }
+    }
+
+    or(i,
+       |i| {
+        parse!{i;
+
+                string(b"(");
+                let delim = common_delim();
+                string(b")");
+
+                ret Arguments::NoArguments(delim)
+            }
+    },
+       |i| {
+        parse!{i;
+
+                string(b"(");
+                let delim_1 = common_delim();
+
+                let args_list = arguments_list(&params);
+
+                let delim_2 = common_delim();
+                string(b")");
+
+                ret Arguments::Arguments(delim_1, args_list, delim_2)
+            }
+    })
+}
+
+// ArgumentList
+
+enum ArgumentListItem {
+    AssignmentExpression(AssignmentExpression),
+    RestAssignmentExpression(/* ... */
+                             Vec<CommonDelim>,
+                             AssignmentExpression),
+}
+
+struct ArgumentList(ArgumentListItem, Vec<ArgumentListRest>);
+
+impl ArgumentList {
+    fn new(rhs_val: ArgumentListItem) -> Self {
+        ArgumentList(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: ArgumentListDelim, rhs_val: ArgumentListItem) -> Self {
+
+        let ArgumentList(head, rest) = self;
+        let mut rest = rest;
+
+        let ArgumentListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = ArgumentListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        ArgumentList(head, rest)
+    }
+}
+
+struct ArgumentListRest(Vec<CommonDelim>,
+                        /* , (comma) */
+                        Vec<CommonDelim>,
+                        ArgumentListItem);
+
+struct ArgumentListDelim(Vec<CommonDelim>,
+                         /* , (comma) */
+                         Vec<CommonDelim>);
+
+generate_list_parser!(
+    ArgumentList;
+    ArgumentListRest;
+    ArgumentListState;
+    ArgumentListDelim;
+    ArgumentListItem);
+
+// TODO: test
+fn arguments_list<I: U8Input>(i: ESInput<I>,
+                              params: &Parameters)
+                              -> ESParseResult<I, ArgumentList> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of arguments_list");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<ArgumentListState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(token(i, b','),
+                    |i| {
+                        let loc = i.position();
+                        // TODO: proper err message?
+                        ErrorLocation::new(loc, "Expected , here.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+
+            ret {
+                let delim = ArgumentListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+
+    let mut expr_params = params.clone();
+    expr_params.insert(Parameter::In);
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+
+        option(i,
+               |i| {
+                   string(i, b"...")
+                       .then(common_delim)
+                       .map(|x| Some(x))
+               },
+               None)
+            .bind(|i, delim| assignment_expression(i, &expr_params).map(|x| (delim, x)))
+            .bind(|i, (rest_op, assignment_expression)| -> ESParseResult<I, ()> {
+                let rhs = if let Some(delim) = rest_op {
+                    ArgumentListItem::RestAssignmentExpression(delim, assignment_expression)
+                } else {
+                    ArgumentListItem::AssignmentExpression(assignment_expression)
+                };
+
+                accumulator.borrow_mut().add_item(rhs);
+                i.ret(())
+            })
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
+// LeftHandSideExpression
+
+enum LeftHandSideExpression {
+    NewExpression(NewExpression),
+    CallExpression(CallExpression),
+}
+
+// TODO: test
+fn left_hand_side_expression<I: U8Input>(i: ESInput<I>,
+                                         params: &Parameters)
+                                         -> ESParseResult<I, LeftHandSideExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of left_hand_side_expression");
+        }
+    }
+
+    or(i,
+       |i| new_expression(i, &params).map(LeftHandSideExpression::NewExpression),
+       |i| call_expression(i, &params).map(LeftHandSideExpression::CallExpression))
+}
+
+
 // 12.4 Update Expressions
 
 // UpdateExpression
