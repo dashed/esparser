@@ -825,6 +825,75 @@ pub fn initializer<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// 12.5 Unary Operator
+
+// UnaryExpression
+
+enum UnaryExpression {
+    UpdateExpression(Box<UpdateExpression>),
+    Delete(Vec<CommonDelim>, Box<UnaryExpression>),
+    Void(Vec<CommonDelim>, Box<UnaryExpression>),
+    TypeOf(Vec<CommonDelim>, Box<UnaryExpression>),
+    Plus(Vec<CommonDelim>, Box<UnaryExpression>),
+    Minus(Vec<CommonDelim>, Box<UnaryExpression>),
+    Tilde(Vec<CommonDelim>, Box<UnaryExpression>),
+    ExclamationMark(Vec<CommonDelim>, Box<UnaryExpression>),
+}
+
+// TODO: test
+fn unary_expression<I: U8Input>(i: ESInput<I>,
+                                params: &Parameters)
+                                -> ESParseResult<I, UnaryExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of unary_expression");
+        }
+    }
+
+    enum UnaryExpressionOperator {
+        Delete, // delete
+        Void, // void
+        TypeOf, // typeof
+        Plus, // +
+        Minus, // -
+        Tilde, // ~
+        ExclamationMark, // !
+    }
+
+    or(i,
+       |i| {
+        parse!{i;
+
+                let operator = (i -> string(i, b"delete").map(|_| UnaryExpressionOperator::Delete)) <|>
+                    (i -> string(i, b"void").map(|_| UnaryExpressionOperator::Void)) <|>
+                    (i -> string(i, b"typeof").map(|_| UnaryExpressionOperator::TypeOf)) <|>
+                    (i -> string(i, b"+").map(|_| UnaryExpressionOperator::Plus)) <|>
+                    (i -> string(i, b"-").map(|_| UnaryExpressionOperator::Minus)) <|>
+                    (i -> string(i, b"~").map(|_| UnaryExpressionOperator::Tilde)) <|>
+                    (i -> string(i, b"!").map(|_| UnaryExpressionOperator::ExclamationMark));
+
+                let delim = common_delim();
+
+                let unary_expr = unary_expression(&params);
+
+                ret {
+                    match operator {
+                        UnaryExpressionOperator::Delete => UnaryExpression::Delete(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::Void => UnaryExpression::Void(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::TypeOf => UnaryExpression::TypeOf(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::Plus => UnaryExpression::Plus(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::Minus => UnaryExpression::Minus(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::Tilde => UnaryExpression::Tilde(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::ExclamationMark => UnaryExpression::ExclamationMark(delim, Box::new(unary_expr)),
+                    }
+                }
+            }
+    },
+       |i| update_expression(i, &params).map(|x| UnaryExpression::UpdateExpression(Box::new(x))))
+}
+
 // 12.6 Exponentiation Operator
 
 // ExponentiationExpression
