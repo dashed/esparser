@@ -13,8 +13,8 @@ use chomp::prelude::Either;
 use super::types::{Parameters, Parameter};
 use super::section_11::{common_delim, common_delim_required, CommonDelim, SemiColon, semicolon};
 use super::section_12::{initializer, Initializer, binding_identifier, BindingIdentifier,
-                        PropertyName, property_name};
-use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either};
+                        PropertyName, property_name, elision, Elision};
+use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
 use parsers::error_location::ErrorLocation;
 
 // 13 ECMAScript Language: Statements and Declarations
@@ -443,16 +443,426 @@ fn variable_declaration<I: U8Input>(i: ESInput<I>,
 
 // 13.3.3 Destructuring Binding Patterns
 
+// BindingPattern
 
-struct BindingPattern;
+enum BindingPattern {
+    ObjectBindingPattern(Box<ObjectBindingPattern>),
+    ArrayBindingPattern(Box<ArrayBindingPattern>),
+}
 
 // TODO: test
 fn binding_pattern<I: U8Input>(i: ESInput<I>,
                                params: &Parameters)
                                -> ESParseResult<I, BindingPattern> {
 
-    // TODO: complete
-    i.ret(BindingPattern)
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of binding_pattern");
+        }
+    }
+
+    or(i,
+       |i| {
+           object_binding_pattern(i, &params)
+               .map(|x| BindingPattern::ObjectBindingPattern(Box::new(x)))
+       },
+       |i| {
+           array_binding_pattern(i, &params)
+               .map(|x| BindingPattern::ArrayBindingPattern(Box::new(x)))
+       })
+}
+
+// ObjectBindingPattern
+
+enum ObjectBindingPattern {
+    Empty(Vec<CommonDelim>, Vec<CommonDelim>),
+    BindingPropertyList(BindingPropertyList),
+    BindingPropertyListTrailingComma(BindingPropertyList,
+                                     /* , (comma) */
+                                     Vec<CommonDelim>),
+}
+
+// TODO: test
+fn object_binding_pattern<I: U8Input>(i: ESInput<I>,
+                                      params: &Parameters)
+                                      -> ESParseResult<I, ObjectBindingPattern> {
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of object_binding_pattern");
+        }
+    }
+
+    #[inline]
+    fn contents<I: U8Input>(i: ESInput<I>,
+                            params: &Parameters)
+                            -> ESParseResult<I, ObjectBindingPattern> {
+        parse!{i;
+
+            let list = binding_property_list(params);
+
+            let trailing_comma = option(|i| -> ESParseResult<I, _> {
+                parse!{i;
+                    let delim = common_delim();
+                    token(b',');
+                    ret Some(delim)
+                }
+            }, None);
+
+            ret {
+                match trailing_comma {
+                    None => ObjectBindingPattern::BindingPropertyList(list),
+                    Some(delims) => ObjectBindingPattern::BindingPropertyListTrailingComma(list, delims)
+                }
+            }
+        }
+    }
+
+    parse!{i;
+
+        token(b'{');
+        let left_delim = common_delim();
+
+        let contents = option(|i| contents(i, &params).map(|x| Some(x)),
+            None);
+
+        let right_delim = common_delim();
+        token(b'}');
+
+        ret {
+            if contents.is_none() {
+                ObjectBindingPattern::Empty(left_delim, right_delim)
+            } else {
+                contents.unwrap()
+            }
+        }
+    }
+}
+
+// ArrayBindingPattern
+
+struct ArrayBindingPattern(/* [ (left bracket) */
+                           Vec<CommonDelim>,
+                           ArrayBindingPatternContents,
+                           Vec<CommonDelim> /* ] (right bracket) */);
+
+enum ArrayBindingPatternContents {
+    Rest(Option<Elision>, Vec<CommonDelim>, Option<BindingRestElement>),
+    List(BindingElementList),
+    ListWithRest(BindingElementList,
+                 Vec<CommonDelim>, /* , (comma) */
+                 Vec<CommonDelim>,
+                 Option<Elision>,
+                 Vec<CommonDelim>,
+                 Option<BindingRestElement>),
+}
+
+// TODO: test
+fn array_binding_pattern<I: U8Input>(i: ESInput<I>,
+                                     params: &Parameters)
+                                     -> ESParseResult<I, ArrayBindingPattern> {
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of array_binding_pattern");
+        }
+    }
+
+    #[inline]
+    fn array_binding_pattern_rest<I: U8Input>
+        (i: ESInput<I>,
+         params: &Parameters)
+         -> ESParseResult<I, (Option<Elision>, Vec<CommonDelim>, Option<BindingRestElement>)> {
+        parse!{i;
+
+            let elision = option(|i| elision(i).map(|x| Some(x)),
+                None);
+            let delim = common_delim();
+
+            let rest = option(|i| binding_rest_element(i, &params).map(|x| Some(x)),
+                None);
+
+            ret (elision, delim, rest)
+        }
+    }
+
+    #[inline]
+    fn array_binding_pattern_contents<I: U8Input>
+        (i: ESInput<I>,
+         params: &Parameters)
+         -> ESParseResult<I, ArrayBindingPatternContents> {
+        parse!{i;
+
+            // [BindingElementList_[?Yield]]
+            // [BindingElementList_[?Yield] , Elision_opt BindingRestElement_[?Yield]_opt]
+
+            let list = binding_element_list(&params);
+
+            let maybe_end = option(|i| -> ESParseResult<I, _> {
+                parse!{i;
+
+                    let delim_1 = common_delim();
+
+                    (i -> {
+                        on_error(token(i, b','),
+                            |i| {
+                                let loc = i.position();
+                                // TODO: proper err message?
+                                ErrorLocation::new(loc, "Expected , delimeter here.".to_string())
+                            }
+                        )
+                    });
+
+                    let delim_2 = common_delim();
+
+                    let (elision, delim_3, rest) = array_binding_pattern_rest(&params);
+
+                    ret Some((delim_1, delim_2, elision, delim_3, rest))
+                }
+            }, None);
+
+            ret {
+                match maybe_end {
+                    None => ArrayBindingPatternContents::List(list),
+                    Some((delim_1, delim_2, elision, delim_3, rest)) =>
+                        ArrayBindingPatternContents::ListWithRest(list, delim_1, delim_2, elision, delim_3, rest),
+                }
+            }
+        }
+    }
+
+    parse!{i;
+
+        token(b'[');
+        let delim_left = common_delim();
+
+        let contents = array_binding_pattern_contents(&params)
+            <|>
+            (i -> array_binding_pattern_rest(i, &params).map(|(elision, delim, rest)| {
+                ArrayBindingPatternContents::Rest(elision, delim, rest)
+            }));
+
+        let delim_right = common_delim();
+        token(b']');
+
+        ret ArrayBindingPattern(delim_left, contents, delim_right)
+    }
+}
+
+// BindingPropertyList
+
+struct BindingPropertyList(BindingProperty, Vec<BindingPropertyListRest>);
+
+impl BindingPropertyList {
+    fn new(rhs_val: BindingProperty) -> Self {
+        BindingPropertyList(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: BindingPropertyListDelim, rhs_val: BindingProperty) -> Self {
+
+        let BindingPropertyList(head, rest) = self;
+        let mut rest = rest;
+
+        let BindingPropertyListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = BindingPropertyListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        BindingPropertyList(head, rest)
+    }
+}
+
+struct BindingPropertyListRest(Vec<CommonDelim>,
+                               /* , (comma) */
+                               Vec<CommonDelim>,
+                               BindingProperty);
+
+struct BindingPropertyListDelim(Vec<CommonDelim>,
+                                /* , (comma) */
+                                Vec<CommonDelim>);
+
+generate_list_parser!(
+    BindingPropertyList;
+    BindingPropertyListRest;
+    BindingPropertyListState;
+    BindingPropertyListDelim;
+    BindingProperty);
+
+// TODO: test
+fn binding_property_list<I: U8Input>(i: ESInput<I>,
+                                     params: &Parameters)
+                                     -> ESParseResult<I, BindingPropertyList> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of binding_property_list");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<BindingPropertyListState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(token(i, b','),
+                    |i| {
+                        let loc = i.position();
+                        // TODO: proper err message?
+                        ErrorLocation::new(loc, "Expected , here.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+
+            ret {
+                let delim = BindingPropertyListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        binding_property(i, &params).bind(|i, rhs| {
+            accumulator.borrow_mut().add_item(rhs);
+            i.ret(())
+        })
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
+// BindingElementList
+
+struct BindingElementList(BindingElisionElement, Vec<BindingElementListRest>);
+
+impl BindingElementList {
+    fn new(rhs_val: BindingElisionElement) -> Self {
+        BindingElementList(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: BindingElementListDelim,
+                rhs_val: BindingElisionElement)
+                -> Self {
+
+        let BindingElementList(head, rest) = self;
+        let mut rest = rest;
+
+        let BindingElementListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = BindingElementListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        BindingElementList(head, rest)
+    }
+}
+
+struct BindingElementListRest(Vec<CommonDelim>,
+                              /* , (comma) */
+                              Vec<CommonDelim>,
+                              BindingElisionElement);
+
+struct BindingElementListDelim(Vec<CommonDelim>,
+                               /* , (comma) */
+                               Vec<CommonDelim>);
+
+generate_list_parser!(
+    BindingElementList;
+    BindingElementListRest;
+    BindingElementListState;
+    BindingElementListDelim;
+    BindingElisionElement);
+
+// TODO: test
+fn binding_element_list<I: U8Input>(i: ESInput<I>,
+                                    params: &Parameters)
+                                    -> ESParseResult<I, BindingElementList> {
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of binding_elision_list");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<BindingElementListState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(token(i, b','),
+                    |i| {
+                        let loc = i.position();
+                        // TODO: proper err message?
+                        ErrorLocation::new(loc, "Expected , here.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+
+            ret {
+                let delim = BindingElementListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        binding_elision_element(i, &params).bind(|i, rhs| {
+            accumulator.borrow_mut().add_item(rhs);
+            i.ret(())
+        })
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
+// BindingElisionElement
+
+struct BindingElisionElement(Option<Elision>, Vec<CommonDelim>, BindingElement);
+
+// TODO: test
+fn binding_elision_element<I: U8Input>(i: ESInput<I>,
+                                       params: &Parameters)
+                                       -> ESParseResult<I, BindingElisionElement> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of binding_elision_element");
+        }
+    }
+
+    parse!{i;
+
+        let e = option(|i| elision(i).map(Some),
+            None);
+
+        let delim = common_delim();
+
+        let bind_elem = binding_element(&params);
+
+        ret BindingElisionElement(e, delim, bind_elem)
+    }
 }
 
 // BindingProperty

@@ -173,7 +173,7 @@ pub struct ErrorChain {
 }
 
 impl ErrorChain {
-    fn new<T>(err_to_wrap: T) -> Self
+    pub fn new<T>(err_to_wrap: T) -> Self
         where ErrorChain: ::std::convert::From<T>
     {
 
@@ -185,7 +185,7 @@ impl ErrorChain {
         }
     }
 
-    fn chain_err<T>(self, error_to_chain: T) -> Self
+    pub fn chain_err<T>(self, error_to_chain: T) -> Self
         where ErrorChain: ::std::convert::From<T>
     {
 

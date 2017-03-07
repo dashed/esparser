@@ -1,3 +1,8 @@
+// rust imports
+
+use std::rc::Rc;
+use std::cell::RefCell;
+
 // 3rd-party imports
 
 use chomp::types::{U8Input, Input};
@@ -6,7 +11,7 @@ use chomp::prelude::Either;
 // local imports
 
 use parsers::{ESParseResult, ESInput, string, parse_utf8_char, on_error, many, many1, string_till,
-              token, option, either};
+              token, option, either, parse_list, ErrorChain, ESParseError};
 use super::section_11::{reserved_word, identifier_name, IdentifierName, CommonDelim, common_delim,
                         string_literal, StringLiteral, numeric_literal, NumericLiteral};
 use super::section_14::{method_definition, MethodDefinition};
@@ -165,7 +170,443 @@ fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
         })
 }
 
+// 12.2.5 Array Initializer
+
+// ArrayLiteral
+
+struct ArrayLiteral(/* [ (left bracket) */
+                    Vec<CommonDelim>,
+                    ArrayLiteralContents,
+                    Vec<CommonDelim> /* ] (right bracket) */);
+
+enum ArrayLiteralContents {
+    Empty(Option<Elision>),
+    List(ElementList),
+    ListWithElision(ElementList,
+                    Vec<CommonDelim>,
+                    /* , (comma) */
+                    Vec<CommonDelim>,
+                    Elision),
+}
+
+
+// TODO: test
+fn array_literal<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, ArrayLiteral> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of array_literal");
+        }
+    }
+
+
+    #[inline]
+    fn array_literal_contents<I: U8Input>(i: ESInput<I>,
+                                          params: &Parameters)
+                                          -> ESParseResult<I, ArrayLiteralContents> {
+        parse!{i;
+
+            // [ElementList_[?Yield]]
+            // [ElementList_[?Yield] , Elision_opt]
+
+            let list = element_list(&params);
+
+            let maybe_end = option(|i| -> ESParseResult<I, Option<(_, _, _)>> {
+                parse!{i;
+
+                    let delim_1 = common_delim();
+
+                    (i -> {
+                        on_error(token(i, b','),
+                            |i| {
+                                let loc = i.position();
+                                // TODO: proper err message?
+                                ErrorLocation::new(loc, "Expected , delimeter here.".to_string())
+                            }
+                        )
+                    });
+
+                    let delim_2 = common_delim();
+                    let elision = elision();
+
+                    ret Some((delim_1, delim_2, elision))
+                }
+            }, None);
+
+            ret {
+                match maybe_end {
+                    None => ArrayLiteralContents::List(list),
+                    Some((delim_1, delim_2, elision)) => ArrayLiteralContents::ListWithElision(list, delim_1, delim_2, elision),
+                }
+            }
+        }
+    }
+
+    parse!{i;
+
+        token(b'[');
+        let delim_left = common_delim();
+
+        let contents = option(|i| elision(i).map(|x| ArrayLiteralContents::Empty(Some(x))),
+            ArrayLiteralContents::Empty(None)) <|>
+            array_literal_contents(&params);
+
+        let delim_right = common_delim();
+        token(b']');
+
+        ret ArrayLiteral(delim_left, contents, delim_right)
+    }
+}
+
+// ElementList
+
+enum ElementListItem {
+    ItemExpression(Option<Elision>, AssignmentExpression),
+    ItemSpread(Option<Elision>, SpreadElement),
+}
+
+struct ElementList(ElementListItem, Vec<ElementListRest>);
+
+impl ElementList {
+    fn new(rhs_val: ElementListItem) -> Self {
+        ElementList(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: ElementListDelim, rhs_val: ElementListItem) -> Self {
+
+        let ElementList(head, rest) = self;
+        let mut rest = rest;
+
+        let ElementListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = ElementListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        ElementList(head, rest)
+    }
+}
+
+struct ElementListRest(Vec<CommonDelim>,
+                       /* , (comma) */
+                       Vec<CommonDelim>,
+                       ElementListItem);
+
+struct ElementListDelim(Vec<CommonDelim>,
+                        /* , (comma) */
+                        Vec<CommonDelim>);
+
+generate_list_parser!(
+    ElementList;
+    ElementListRest;
+    ElementListState;
+    ElementListDelim;
+    ElementListItem);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-ElementList
+fn element_list<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, ElementList> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of element_list");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<ElementListState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(token(i, b','),
+                    |i| {
+                        let loc = i.position();
+                        // TODO: proper err message?
+                        ErrorLocation::new(loc, "Expected , here.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+
+            ret {
+                let delim = ElementListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    let mut assign_expr = params.clone();
+    assign_expr.insert(Parameter::In);
+
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let elision_prefix = option(|i| elision(i).map(|x| Some(x)), None);
+
+            let item = either(
+                |i| {
+                    assignment_expression(i, &assign_expr)
+                },
+                |i| {
+                    spread_element(i, &params)
+                }
+            );
+
+            ret {
+                let rhs = match item {
+                    Either::Left(x) => {
+                        ElementListItem::ItemExpression(elision_prefix, x)
+                    }
+                    Either::Right(x) => {
+                        ElementListItem::ItemSpread(elision_prefix, x)
+                    }
+                };
+
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
+// Elision
+
+// TODO: refactor
+pub struct Elision(Vec<ElisionItem>);
+
+enum ElisionItem {
+    CommonDelim(Vec<CommonDelim>),
+    Comma,
+}
+
+// TODO: test
+pub fn elision<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Elision> {
+    parse!{i;
+
+        token(b',');
+
+        let list: Vec<ElisionItem> = many(|i| -> ESParseResult<I, ElisionItem> {
+            parse!{i;
+                let l = (i -> common_delim(i).map(ElisionItem::CommonDelim)) <|>
+                (i -> token(i, b',').map(|_| ElisionItem::Comma));
+                ret l
+            }
+        });
+
+        ret Elision(list)
+    }
+}
+
+// SpreadElement
+
+struct SpreadElement(AssignmentExpression);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-SpreadElement
+fn spread_element<I: U8Input>(i: ESInput<I>,
+                              params: &Parameters)
+                              -> ESParseResult<I, SpreadElement> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of spread_element");
+        }
+    }
+
+    parse!{i;
+
+        // spread operator
+        (i -> {
+            on_error(string(i, b"..."), |i| {
+                let reason = format!("Expected spread oeprator.");
+                ErrorLocation::new(i.position(), reason)
+            })
+        });
+
+        common_delim();
+
+        let expr = (i -> {
+            let mut params = params.clone();
+            params.insert(Parameter::In);
+            assignment_expression(i, &params)
+        });
+
+        ret SpreadElement(expr)
+    }
+}
+
+
 // 12.2.6 Object Initializer
+
+// ObjectLiteral
+
+struct ObjectLiteral(/* { (left curly bracket) */
+                     Vec<CommonDelim>,
+                     ObjectLiteralContents,
+                     Vec<CommonDelim> /* } (right curly bracket) */);
+
+enum ObjectLiteralContents {
+    Empty,
+    PropertyDefinitionList(PropertyDefinitionList),
+    PropertyDefinitionListTrailingComma(PropertyDefinitionList, Vec<CommonDelim> /* , */),
+}
+
+// TODO: test
+fn object_literal<I: U8Input>(i: ESInput<I>,
+                              params: &Parameters)
+                              -> ESParseResult<I, ObjectLiteral> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of object_literal");
+        }
+    }
+
+    #[inline]
+    fn object_literal_contents<I: U8Input>(i: ESInput<I>,
+                                           params: &Parameters)
+                                           -> ESParseResult<I, ObjectLiteralContents> {
+        parse!{i;
+
+            let list = property_definition_list(&params);
+
+            let trailing_comma = option(|i| -> ESParseResult<I, _> {
+                parse!{i;
+                    let delim = common_delim();
+                    token(b',');
+
+                    ret Some(delim)
+                }
+            }, None);
+
+            ret {
+                match trailing_comma {
+                    None => ObjectLiteralContents::PropertyDefinitionList(list),
+                    Some(delim) => ObjectLiteralContents::PropertyDefinitionListTrailingComma(list, delim)
+                }
+            }
+        }
+    }
+
+    parse!{i;
+
+        token(b'{');
+        let delim_left = common_delim();
+
+        let contents = option(|i| object_literal_contents(i, &params), ObjectLiteralContents::Empty);
+
+        let delim_right = common_delim();
+        token(b'}');
+
+        ret ObjectLiteral(delim_left, contents, delim_right)
+    }
+}
+
+// PropertyDefinitionList
+
+struct PropertyDefinitionList(PropertyDefinition, Vec<PropertyDefinitionListRest>);
+
+impl PropertyDefinitionList {
+    fn new(rhs_val: PropertyDefinition) -> Self {
+        PropertyDefinitionList(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: PropertyDefinitionListDelim,
+                rhs_val: PropertyDefinition)
+                -> Self {
+
+        let PropertyDefinitionList(head, rest) = self;
+        let mut rest = rest;
+
+        let PropertyDefinitionListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = PropertyDefinitionListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        PropertyDefinitionList(head, rest)
+    }
+}
+
+struct PropertyDefinitionListRest(Vec<CommonDelim>,
+                                  /* , (comma) */
+                                  Vec<CommonDelim>,
+                                  PropertyDefinition);
+
+struct PropertyDefinitionListDelim(Vec<CommonDelim>,
+                                   /* , (comma) */
+                                   Vec<CommonDelim>);
+
+generate_list_parser!(
+    PropertyDefinitionList;
+    PropertyDefinitionListRest;
+    PropertyDefinitionListState;
+    PropertyDefinitionListDelim;
+    PropertyDefinition);
+
+// TODO: test
+fn property_definition_list<I: U8Input>(i: ESInput<I>,
+                                        params: &Parameters)
+                                        -> ESParseResult<I, PropertyDefinitionList> {
+
+    // validation
+    if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+        panic!("misuse of property_definition_list");
+    }
+
+    type Accumulator = Rc<RefCell<PropertyDefinitionListState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(
+                    token(i, b','),
+                    |i| {
+                        let loc = i.position();
+                        // TODO: proper err message?
+                        ErrorLocation::new(loc, "Expected , here.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+
+            ret {
+                let delim = PropertyDefinitionListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        property_definition(i, &params).bind(|i, prop_def| {
+            accumulator.borrow_mut().add_item(prop_def);
+            i.ret(())
+        })
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
 
 // PropertyDefinition
 
