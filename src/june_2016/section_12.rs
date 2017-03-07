@@ -14,8 +14,9 @@ use parsers::{ESParseResult, ESInput, string, parse_utf8_char, on_error, many, m
               token, option, either, parse_list, ErrorChain, ESParseError, or};
 use super::section_11::{reserved_word, identifier_name, IdentifierName, CommonDelim, common_delim,
                         common_delim_no_line_term, string_literal, StringLiteral, numeric_literal,
-                        NumericLiteral};
-use super::section_14::{method_definition, MethodDefinition};
+                        NumericLiteral, boolean_literal, null_literal};
+use super::section_14::{method_definition, MethodDefinition, function_expression,
+                        FunctionExpression};
 use super::types::{Parameters, Parameter};
 use parsers::error_location::ErrorLocation;
 
@@ -169,6 +170,90 @@ fn identifier<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Identifier> {
                 Either::Right(name) => i.ret(Identifier(name)),
             }
         })
+}
+
+// 12.2 Primary Expression
+
+enum PrimaryExpression {
+    This,
+    IdentifierReference(IdentifierReference),
+    Literal(Literal),
+    ArrayLiteral(ArrayLiteral),
+    ObjectLiteral(ObjectLiteral),
+    FunctionExpression(FunctionExpression),
+    // TODO: ClassExpression(ClassExpression),
+    // TODO: GeneratorExpression(GeneratorExpression),
+    // TODO: RegularExpressionLiteral(RegularExpressionLiteral),
+    TemplateLiteral(TemplateLiteral), /* TODO: CoverParenthesizedExpressionAndArrowParameterList(CoverParenthesizedExpressionAndArrowParameterList), */
+}
+
+fn primary_expression<I: U8Input>(i: ESInput<I>,
+                                  params: &Parameters)
+                                  -> ESParseResult<I, PrimaryExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of primary_expression");
+        }
+    }
+
+    parse!{i;
+
+        let result =
+
+            (i -> string(i, b"this").map(|_| PrimaryExpression::This))
+
+            // TODO: fix
+            // on_error(
+            //     |i| string(i, b"this").map(|_| PrimaryExpression::This),
+            // |i| {
+            //     let reason = format!("Expected this keyword.");
+            //     ErrorLocation::new(i.position(), reason)
+            // })
+
+            <|>
+
+            (i -> identifier_reference(i, &params)
+                .map(PrimaryExpression::IdentifierReference))
+
+            <|>
+            (i -> literal(i).map(PrimaryExpression::Literal))
+            <|>
+            (i -> array_literal(i, &params).map(PrimaryExpression::ArrayLiteral))
+            <|>
+            (i -> object_literal(i, &params).map(PrimaryExpression::ObjectLiteral))
+            <|>
+            (i -> function_expression(i).map(PrimaryExpression::FunctionExpression))
+            <|>
+            (i -> template_literal(i, &params).map(PrimaryExpression::TemplateLiteral));
+
+        ret result
+    }
+
+}
+
+// 12.2.4 Literals
+
+// Literal
+
+enum Literal {
+    Null,
+    Boolean(Bool),
+    Numeric(NumericLiteral),
+    String(StringLiteral),
+}
+
+// TODO: test
+fn literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Literal> {
+    parse!{i;
+        let literal_result =
+        (i -> null_literal(i).map(|_| Literal::Null)) <|>
+        (i -> boolean_literal(i).map(Literal::Boolean)) <|>
+        (i -> numeric_literal(i).map(Literal::Numeric)) <|>
+        (i -> string_literal(i).map(Literal::String));
+        ret literal_result
+    }
 }
 
 // 12.2.5 Array Initializer

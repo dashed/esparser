@@ -192,7 +192,7 @@ fn function_declaration<I: U8Input>(i: ESInput<I>,
 
 // FunctionExpression
 
-enum FunctionExpression {
+pub enum FunctionExpression {
     NamedFunction(/* function */
                   Vec<CommonDelim>,
                   BindingIdentifier,
@@ -223,7 +223,7 @@ enum FunctionExpression {
 }
 
 // TODO: test
-fn function_expression<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, FunctionExpression> {
+pub fn function_expression<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, FunctionExpression> {
 
     // this is intentionally empty
     let params = Parameters::new();

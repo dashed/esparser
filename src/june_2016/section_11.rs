@@ -502,7 +502,7 @@ pub fn reserved_word<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
         keyword() <|>
         future_reserved_word() <|>
         null_literal() <|>
-        boolean_literal();
+        (i -> boolean_literal(i).map(|_| ()));
 
         ret {()}
     }
@@ -570,19 +570,29 @@ fn future_reserved_word<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
 // 11.8.1 Null Literals
 
 // TODO: test
-fn null_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+pub fn null_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
     string(i, b"null").map(|_| ())
 }
 
 // 11.8.2 Boolean Literals
 
-fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
-    parse!{i;
-        string(b"true") <|>
-        string(b"false");
+pub enum Bool {
+    True,
+    False,
+}
 
-        ret {()}
-    }
+// TODO: test
+#[inline]
+pub fn boolean_literal<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Bool> {
+
+    let parse_result = or(i,
+                          |i| string(i, b"true").map(|_| Bool::True),
+                          |i| string(i, b"false").map(|_| Bool::False));
+
+    on_error(parse_result, |i| {
+        let loc = i.position();
+        ErrorLocation::new(loc, "Expected boolean literal.".to_string())
+    })
 }
 
 // 11.8.3 Numeric Literals
