@@ -14,7 +14,9 @@ use parsers::{ESParseResult, ESInput, string, parse_utf8_char, on_error, many, m
               token, option, either, parse_list, ErrorChain, ESParseError, or};
 use super::section_11::{reserved_word, identifier_name, IdentifierName, CommonDelim, common_delim,
                         common_delim_no_line_term, string_literal, StringLiteral, numeric_literal,
-                        NumericLiteral, boolean_literal, null_literal};
+                        NumericLiteral, boolean_literal, null_literal, Bool, template_middle,
+                        TemplateMiddle, template_tail, TemplateTail, template_head, TemplateHead,
+                        NoSubstitutionTemplate, no_substitution_template};
 use super::section_14::{method_definition, MethodDefinition, function_expression,
                         FunctionExpression};
 use super::types::{Parameters, Parameter};
@@ -909,6 +911,178 @@ pub fn initializer<I: U8Input>(i: ESInput<I>,
 
         ret Initializer(delim, expr)
     }
+}
+
+// 12.2.9 Template Literals
+
+// TemplateLiteral
+
+enum TemplateLiteral {
+    NoSubstitutionTemplate(NoSubstitutionTemplate),
+    SubstitutionTemplate(TemplateHead,
+                         Vec<CommonDelim>,
+                         Expression,
+                         Vec<CommonDelim>,
+                         TemplateSpans),
+}
+
+
+// TODO: test
+fn template_literal<I: U8Input>(i: ESInput<I>,
+                                params: &Parameters)
+                                -> ESParseResult<I, TemplateLiteral> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of template_literal");
+        }
+    }
+
+    or(i,
+       |i| no_substitution_template(i).map(TemplateLiteral::NoSubstitutionTemplate),
+       |i| {
+
+        let mut expr_params = params.clone();
+        expr_params.insert(Parameter::In);
+        let expr_params = expr_params;
+
+        parse!{i;
+
+                let head = template_head();
+
+                let delim_left = common_delim();
+                let expr = expression(&expr_params);
+                let delim_right = common_delim();
+
+                let spans = template_spans(&params);
+
+                ret TemplateLiteral::SubstitutionTemplate(head, delim_left, expr, delim_right, spans)
+            }
+    })
+}
+
+// TemplateSpans
+
+enum TemplateSpans {
+    TemplateTail(TemplateTail),
+    TemplateMiddleList(TemplateMiddleList, Vec<CommonDelim>, TemplateTail),
+}
+
+// TODO: test
+fn template_spans<I: U8Input>(i: ESInput<I>,
+                              params: &Parameters)
+                              -> ESParseResult<I, TemplateSpans> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of template_spans");
+        }
+    }
+
+    option(i, |i| template_middle_list(i, params).map(Some), None).bind(|i, result| {
+
+        match result {
+            Some(middle) => {
+                common_delim(i)
+                    .bind(|i, delim| template_tail(i).map(|tail| (delim, tail)))
+                    .bind(|i, (delim, tail)| {
+                        i.ret(TemplateSpans::TemplateMiddleList(middle, delim, tail))
+                    })
+            }
+            None => template_tail(i).map(TemplateSpans::TemplateTail),
+        }
+    })
+}
+
+// TemplateMiddleList
+
+struct TemplateMiddleListItem(TemplateMiddle,
+                              /* ${ */
+                              Vec<CommonDelim>,
+                              Expression);
+
+struct TemplateMiddleList(TemplateMiddleListItem, Vec<TemplateMiddleListItem>);
+
+impl TemplateMiddleList {
+    fn new(rhs_val: TemplateMiddleListItem) -> Self {
+        TemplateMiddleList(rhs_val, vec![])
+    }
+
+    fn add_item(self, delim: TemplateMiddleListDelim, rhs_val: TemplateMiddleListItem) -> Self {
+
+        let TemplateMiddleList(head, rest) = self;
+
+        let mut rest = rest;
+
+        rest.push(rhs_val);
+
+        TemplateMiddleList(head, rest)
+    }
+}
+
+struct TemplateMiddleListDelim;
+
+generate_list_parser!(
+    TemplateMiddleList;
+    TemplateMiddleListItem; /* rest */
+    TemplateMiddleListState;
+    TemplateMiddleListDelim;
+    TemplateMiddleListItem);
+
+// TODO: test
+// http://www.ecma-international.org/ecma-262/7.0/#prod-TemplateMiddleList
+fn template_middle_list<I: U8Input>(i: ESInput<I>,
+                                    params: &Parameters)
+                                    -> ESParseResult<I, TemplateMiddleList> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of template_middle_list");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<TemplateMiddleListState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            // no-op
+
+            ret {
+                accumulator.borrow_mut().add_delim(TemplateMiddleListDelim);
+                ()
+            }
+        }
+    }
+
+    let mut expr_params = params.clone();
+    expr_params.insert(Parameter::In);
+    let expr_params = expr_params;
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+
+        parse!{i;
+
+            let middle = template_middle();
+
+            let delim = common_delim();
+
+            let expr = expression(&expr_params);
+
+            ret {
+                let rhs = TemplateMiddleListItem(middle, delim, expr);
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 // 12.3 Left-Hand-Side Expressions
