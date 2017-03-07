@@ -71,6 +71,12 @@ pub fn common_delim_required<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<
     many1(i, |i| __common_delim(i, true))
 }
 
+// parse common delimeters but not line terminators
+#[inline]
+pub fn common_delim_no_line_term<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Vec<CommonDelim>> {
+    many(i, |i| __common_delim(i, false))
+}
+
 // 11.2 White Space
 
 #[derive(Debug)]

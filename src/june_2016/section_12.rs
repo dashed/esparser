@@ -13,7 +13,8 @@ use chomp::prelude::Either;
 use parsers::{ESParseResult, ESInput, string, parse_utf8_char, on_error, many, many1, string_till,
               token, option, either, parse_list, ErrorChain, ESParseError, or};
 use super::section_11::{reserved_word, identifier_name, IdentifierName, CommonDelim, common_delim,
-                        string_literal, StringLiteral, numeric_literal, NumericLiteral};
+                        common_delim_no_line_term, string_literal, StringLiteral, numeric_literal,
+                        NumericLiteral};
 use super::section_14::{method_definition, MethodDefinition};
 use super::types::{Parameters, Parameter};
 use parsers::error_location::ErrorLocation;
@@ -825,6 +826,102 @@ pub fn initializer<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// 12.4 Update Expressions
+
+// UpdateExpression
+
+enum UpdateExpression {
+    LeftHandSideExpression(LeftHandSideExpression),
+    PostIncrement(LeftHandSideExpression,
+                  /* ++ */
+                  Vec<CommonDelim>),
+    PostDecrement(LeftHandSideExpression,
+                  /* -- */
+                  Vec<CommonDelim>),
+    PreIncrement(Vec<CommonDelim>,
+                 /* ++ */
+                 UnaryExpression),
+    PreDecrement(Vec<CommonDelim>,
+                 /* -- */
+                 UnaryExpression),
+}
+
+// TODO: test
+fn update_expression<I: U8Input>(i: ESInput<I>,
+                                 params: &Parameters)
+                                 -> ESParseResult<I, UpdateExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of update_expression");
+        }
+    }
+
+    enum PreOperator {
+        PreIncrement,
+        PreDecrement,
+    }
+
+    enum PostOperator {
+        PostIncrement(Vec<CommonDelim>),
+        PostDecrement(Vec<CommonDelim>),
+        None,
+    }
+
+    or(i,
+       |i| {
+        parse!{i;
+
+                let operator = (i -> string(i, b"++").map(|_| PreOperator::PreIncrement)) <|>
+                    (i -> string(i, b"--").map(|_| PreOperator::PreDecrement));
+
+                let delim = common_delim();
+
+                let unary_expr = unary_expression(&params);
+
+                ret {
+                    match operator {
+                        PreOperator::PreIncrement => UpdateExpression::PreIncrement(delim, unary_expr),
+                        PreOperator::PreDecrement => UpdateExpression::PreDecrement(delim, unary_expr),
+                    }
+                }
+            }
+    },
+       |i| {
+        parse!{i;
+
+                let lhs_expr = left_hand_side_expression(&params);
+
+                let operator = (i -> {
+                    // TODO: test this case
+                    common_delim_no_line_term(i)
+                        .bind(|i, delim| {
+                            string(i, b"++")
+                                .map(|_| PostOperator::PostIncrement(delim))
+                        })
+                }) <|>
+                (i -> {
+                    // TODO: test this case
+                    common_delim_no_line_term(i)
+                        .bind(|i, delim| {
+                            string(i, b"--")
+                                .map(|_| PostOperator::PostDecrement(delim))
+                        })
+                }) <|>
+                (i -> i.ret(PostOperator::None));
+
+                ret {
+                    match operator {
+                        PostOperator::PostIncrement(delim) => UpdateExpression::PostIncrement(lhs_expr, delim),
+                        PostOperator::PostDecrement(delim) => UpdateExpression::PostDecrement(lhs_expr, delim),
+                        PostOperator::None => UpdateExpression::LeftHandSideExpression(lhs_expr),
+                    }
+                }
+            }
+    })
+}
+
 // 12.5 Unary Operator
 
 // UnaryExpression
@@ -879,14 +976,17 @@ fn unary_expression<I: U8Input>(i: ESInput<I>,
                 let unary_expr = unary_expression(&params);
 
                 ret {
+
+                    let unary_expr = Box::new(unary_expr);
+
                     match operator {
-                        UnaryExpressionOperator::Delete => UnaryExpression::Delete(delim, Box::new(unary_expr)),
-                        UnaryExpressionOperator::Void => UnaryExpression::Void(delim, Box::new(unary_expr)),
-                        UnaryExpressionOperator::TypeOf => UnaryExpression::TypeOf(delim, Box::new(unary_expr)),
-                        UnaryExpressionOperator::Plus => UnaryExpression::Plus(delim, Box::new(unary_expr)),
-                        UnaryExpressionOperator::Minus => UnaryExpression::Minus(delim, Box::new(unary_expr)),
-                        UnaryExpressionOperator::Tilde => UnaryExpression::Tilde(delim, Box::new(unary_expr)),
-                        UnaryExpressionOperator::ExclamationMark => UnaryExpression::ExclamationMark(delim, Box::new(unary_expr)),
+                        UnaryExpressionOperator::Delete => UnaryExpression::Delete(delim, unary_expr),
+                        UnaryExpressionOperator::Void => UnaryExpression::Void(delim, unary_expr),
+                        UnaryExpressionOperator::TypeOf => UnaryExpression::TypeOf(delim, unary_expr),
+                        UnaryExpressionOperator::Plus => UnaryExpression::Plus(delim, unary_expr),
+                        UnaryExpressionOperator::Minus => UnaryExpression::Minus(delim, unary_expr),
+                        UnaryExpressionOperator::Tilde => UnaryExpression::Tilde(delim, unary_expr),
+                        UnaryExpressionOperator::ExclamationMark => UnaryExpression::ExclamationMark(delim, unary_expr),
                     }
                 }
             }
