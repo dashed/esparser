@@ -825,6 +825,125 @@ pub fn initializer<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// 12.11 Equality Operators
+
+// EqualityExpression
+
+struct EqualityExpression(RelationalExpression, Vec<EqualityExpressionRest>);
+
+impl EqualityExpression {
+    fn new(rhs_val: RelationalExpression) -> Self {
+        EqualityExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: EqualityExpressionDelim,
+                rhs_val: RelationalExpression)
+                -> Self {
+
+        let EqualityExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let EqualityExpressionDelim(delim_1, operator, delim_2) = operator_delim;
+
+        let rhs = EqualityExpressionRest(delim_1, operator, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        EqualityExpression(head, rest)
+    }
+}
+
+struct EqualityExpressionRest(Vec<CommonDelim>,
+                              EqualityExpressionOperator,
+                              Vec<CommonDelim>,
+                              RelationalExpression);
+
+enum EqualityExpressionOperator {
+    Equality,
+    Inequality,
+    StrictEquality,
+    StrictInequality,
+}
+
+struct EqualityExpressionDelim(Vec<CommonDelim>, EqualityExpressionOperator, Vec<CommonDelim>);
+
+generate_list_parser!(
+    EqualityExpression;
+    EqualityExpressionRest;
+    EqualityExpressionState;
+    EqualityExpressionDelim;
+    RelationalExpression);
+
+// TODO: test
+fn equality_expression<I: U8Input>(i: ESInput<I>,
+                                   params: &Parameters)
+                                   -> ESParseResult<I, EqualityExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::In) ||
+             params.contains(&Parameter::Yield)) {
+            panic!("misuse of equality_expression");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<EqualityExpressionState>>;
+
+    #[inline]
+    fn equality_operator<I: U8Input>(i: ESInput<I>)
+                                     -> ESParseResult<I, EqualityExpressionOperator> {
+        parse!{i;
+
+            let operator = (i -> string(i, b"===").map(|_| EqualityExpressionOperator::StrictEquality)) <|>
+            (i -> string(i, b"==").map(|_| EqualityExpressionOperator::Equality)) <|>
+            (i -> string(i, b"!==").map(|_| EqualityExpressionOperator::StrictInequality)) <|>
+            (i -> string(i, b"!=").map(|_| EqualityExpressionOperator::Inequality));
+
+            ret operator
+        }
+    }
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            let equality_operator = (i -> {
+                on_error(
+                    equality_operator(i),
+                    |i| {
+                        let loc = i.position();
+                        ErrorLocation::new(loc, "Expected one of these operators: ==, ===, !==, or !=.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+            ret {
+                let delim = EqualityExpressionDelim(delim_1, equality_operator, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = relational_expression(params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
 // 12.12 Binary Bitwise Operators
 
 // BitwiseANDExpression
