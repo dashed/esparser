@@ -825,6 +825,123 @@ pub fn initializer<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// 12.7 Multiplicative Operators
+
+// MultiplicativeExpression
+
+struct MultiplicativeExpression(ExponentiationExpression, Vec<MultiplicativeExpressionRest>);
+
+impl MultiplicativeExpression {
+    fn new(rhs_val: ExponentiationExpression) -> Self {
+        MultiplicativeExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: MultiplicativeExpressionDelim,
+                rhs_val: ExponentiationExpression)
+                -> Self {
+
+        let MultiplicativeExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let MultiplicativeExpressionDelim(delim_1, operator, delim_2) = operator_delim;
+
+        let rhs = MultiplicativeExpressionRest(delim_1, operator, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        MultiplicativeExpression(head, rest)
+    }
+}
+
+struct MultiplicativeExpressionRest(Vec<CommonDelim>,
+                                    MultiplicativeOperator,
+                                    Vec<CommonDelim>,
+                                    ExponentiationExpression);
+
+struct MultiplicativeExpressionDelim(Vec<CommonDelim>, MultiplicativeOperator, Vec<CommonDelim>);
+
+generate_list_parser!(
+    MultiplicativeExpression;
+    MultiplicativeExpressionRest;
+    MultiplicativeExpressionState;
+    MultiplicativeExpressionDelim;
+    ExponentiationExpression);
+
+// TODO: test
+fn multiplicative_expression<I: U8Input>(i: ESInput<I>,
+                                         params: &Parameters)
+                                         -> ESParseResult<I, MultiplicativeExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of multiplicative_expression");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<MultiplicativeExpressionState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            let multiplicative_operator = (i -> {
+                on_error(multiplicative_operator(i),
+                    |i| {
+                        let loc = i.position();
+                        ErrorLocation::new(loc, "Expected one of these operators: *, /, or %.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+            ret {
+                let delim = MultiplicativeExpressionDelim(delim_1, multiplicative_operator, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = exponentiation_expression(&params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
+// MultiplicativeOperator
+
+enum MultiplicativeOperator {
+    Multiplication, // *
+    Division, // /
+    Remainder, // %
+}
+
+// TODO: test
+#[inline]
+fn multiplicative_operator<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, MultiplicativeOperator> {
+    parse!{i;
+
+        let operator = (i -> string(i, b"*").map(|_| MultiplicativeOperator::Multiplication)) <|>
+            (i -> string(i, b"/").map(|_| MultiplicativeOperator::Division)) <|>
+            (i -> string(i, b"%").map(|_| MultiplicativeOperator::Remainder));
+
+        ret operator
+    }
+}
+
 // 12.8 Additive Operators
 
 // AdditiveExpression
