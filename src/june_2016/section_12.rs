@@ -827,7 +827,290 @@ pub fn initializer<I: U8Input>(i: ESInput<I>,
 
 // 12.12 Binary Bitwise Operators
 
-complete me
+// BitwiseANDExpression
+
+// BitwiseANDExpression := EqualityExpression BitwiseANDExpressionRest*
+// BitwiseANDExpressionRest := Delim ^ Delim EqualityExpression
+
+struct BitwiseANDExpression(EqualityExpression, Vec<BitwiseANDExpressionRest>);
+
+impl BitwiseANDExpression {
+    fn new(rhs_val: EqualityExpression) -> Self {
+        BitwiseANDExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: BitwiseANDExpressionDelim,
+                rhs_val: EqualityExpression)
+                -> Self {
+
+        let BitwiseANDExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let BitwiseANDExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = BitwiseANDExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        BitwiseANDExpression(head, rest)
+    }
+}
+
+struct BitwiseANDExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, EqualityExpression);
+
+struct BitwiseANDExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
+
+generate_list_parser!(
+    BitwiseANDExpression;
+    BitwiseANDExpressionRest;
+    BitwiseANDExpressionState;
+    BitwiseANDExpressionDelim;
+    EqualityExpression);
+
+// TODO: test
+fn bitwise_and_expression<I: U8Input>(i: ESInput<I>,
+                                      params: &Parameters)
+                                      -> ESParseResult<I, BitwiseANDExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::In) ||
+             params.contains(&Parameter::Yield)) {
+            panic!("misuse of bitwise_and_expression");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<BitwiseANDExpressionState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(string(i, b"&"),
+                    |i| {
+                        let loc = i.position();
+                        ErrorLocation::new(loc, "Expected & operator.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+            ret {
+
+                let delim = BitwiseANDExpressionDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = equality_expression(params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
+// BitwiseXORExpression
+
+// BitwiseXORExpression := BitwiseANDExpression BitwiseXORExpressionRest*
+// BitwiseXORExpressionRest := Delim ^ Delim BitwiseANDExpression
+
+struct BitwiseXORExpression(BitwiseANDExpression, Vec<BitwiseXORExpressionRest>);
+
+impl BitwiseXORExpression {
+    fn new(rhs_val: BitwiseANDExpression) -> Self {
+        BitwiseXORExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: BitwiseXORExpressionDelim,
+                rhs_val: BitwiseANDExpression)
+                -> Self {
+
+        let BitwiseXORExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let BitwiseXORExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = BitwiseXORExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        BitwiseXORExpression(head, rest)
+    }
+}
+
+struct BitwiseXORExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, BitwiseANDExpression);
+
+struct BitwiseXORExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
+
+generate_list_parser!(
+    BitwiseXORExpression;
+    BitwiseXORExpressionRest;
+    BitwiseXORExpressionState;
+    BitwiseXORExpressionDelim;
+    BitwiseANDExpression);
+
+// TODO: test
+fn bitwise_xor_expression<I: U8Input>(i: ESInput<I>,
+                                      params: &Parameters)
+                                      -> ESParseResult<I, BitwiseXORExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::In) ||
+             params.contains(&Parameter::Yield)) {
+            panic!("misuse of bitwise_xor_expression");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<BitwiseXORExpressionState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(string(i, b"^"),
+                    |i| {
+                        let loc = i.position();
+                        ErrorLocation::new(loc, "Expected ^ operator.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+
+            ret {
+                let delim = BitwiseXORExpressionDelim(delim_1, delim_2);
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = bitwise_and_expression(params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+
+}
+
+// BitwiseORExpression
+
+// BitwiseORExpression := BitwiseXORExpression BitwiseORExpressionRest*
+// BitwiseORExpressionRest := Delim | Delim BitwiseXORExpression
+
+struct BitwiseORExpression(BitwiseXORExpression, Vec<BitwiseORExpressionRest>);
+
+impl BitwiseORExpression {
+    fn new(rhs_val: BitwiseXORExpression) -> Self {
+        BitwiseORExpression(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: BitwiseORExpressionDelim,
+                rhs_val: BitwiseXORExpression)
+                -> Self {
+
+        let BitwiseORExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let BitwiseORExpressionDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = BitwiseORExpressionRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        BitwiseORExpression(head, rest)
+    }
+}
+
+struct BitwiseORExpressionRest(Vec<CommonDelim>, Vec<CommonDelim>, BitwiseXORExpression);
+
+struct BitwiseORExpressionDelim(Vec<CommonDelim>, Vec<CommonDelim>);
+
+generate_list_parser!(
+    BitwiseORExpression;
+    BitwiseORExpressionRest;
+    BitwiseORExpressionState;
+    BitwiseORExpressionDelim;
+    BitwiseXORExpression);
+
+// TODO: test
+fn bitwise_or_expression<I: U8Input>(i: ESInput<I>,
+                                     params: &Parameters)
+                                     -> ESParseResult<I, BitwiseORExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::In) ||
+             params.contains(&Parameter::Yield)) {
+            panic!("misuse of bitwise_or_expression");
+        }
+    }
+
+    type Accumulator = Rc<RefCell<BitwiseORExpressionState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(string(i, b"|"),
+                    |i| {
+                        let loc = i.position();
+                        ErrorLocation::new(loc, "Expected | operator.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+            ret {
+                let delim = BitwiseORExpressionDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        parse!{i;
+            let rhs = bitwise_xor_expression(params);
+            ret {
+                accumulator.borrow_mut().add_item(rhs);
+                ()
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
 
 // 12.13 Binary Logical Operators
 
