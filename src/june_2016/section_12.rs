@@ -11,7 +11,7 @@ use chomp::prelude::Either;
 // local imports
 
 use parsers::{ESParseResult, ESInput, string, parse_utf8_char, on_error, many, many1, string_till,
-              token, option, either, parse_list, ErrorChain, ESParseError};
+              token, option, either, parse_list, ErrorChain, ESParseError, or};
 use super::section_11::{reserved_word, identifier_name, IdentifierName, CommonDelim, common_delim,
                         string_literal, StringLiteral, numeric_literal, NumericLiteral};
 use super::section_14::{method_definition, MethodDefinition};
@@ -823,6 +823,52 @@ pub fn initializer<I: U8Input>(i: ESInput<I>,
 
         ret Initializer(delim, expr)
     }
+}
+
+// 12.6 Exponentiation Operator
+
+// ExponentiationExpression
+
+enum ExponentiationExpression {
+    UnaryExpression(UnaryExpression),
+    UpdateExpression(UpdateExpression,
+                     Vec<CommonDelim>,
+                     Vec<CommonDelim>,
+                     Box<ExponentiationExpression>),
+}
+
+// TODO: test
+fn exponentiation_expression<I: U8Input>(i: ESInput<I>,
+                                         params: &Parameters)
+                                         -> ESParseResult<I, ExponentiationExpression> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of exponentiation_expression");
+        }
+    }
+
+    or(i,
+       |i| unary_expression(i, &params).map(|x| ExponentiationExpression::UnaryExpression(x)),
+       |i| {
+        parse!{i;
+
+                let update_expr = update_expression(&params);
+
+                let delim_1 = common_delim();
+
+                string(b"**");
+
+                let delim_2 = common_delim();
+
+                let exp_expr = exponentiation_expression(&params);
+
+                ret {
+                    ExponentiationExpression::UpdateExpression(update_expr, delim_1, delim_2, Box::new(exp_expr))
+                }
+            }
+    })
 }
 
 // 12.7 Multiplicative Operators
