@@ -2422,13 +2422,7 @@ fn relational_expression<I: U8Input>(i: ESInput<I>,
                                      params: &Parameters)
                                      -> ESParseResult<I, RelationalExpression> {
 
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::In) ||
-             params.contains(&Parameter::Yield)) {
-            panic!("misuse of relational_expression");
-        }
-    }
+    ensure_params!(params; "relational_expression"; Parameter::In; Parameter::Yield);
 
     let has_in = params.contains(&Parameter::In);
 
@@ -2453,7 +2447,7 @@ fn relational_expression<I: U8Input>(i: ESInput<I>,
                 (i -> string(i, b"instanceof").map(|_| RelationalExpressionOperator::GreaterOrEqual)) <|>
                 (i -> {
                     if has_in {
-                        string(i, b"in").map(|_| RelationalExpressionOperator::GreaterOrEqual)
+                        string(i, b"in").map(|_| RelationalExpressionOperator::In)
                     } else {
                         i.err({
                             // TODO: reason

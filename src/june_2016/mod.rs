@@ -3,6 +3,7 @@
 //
 // Reference: http://www.ecma-international.org/ecma-262/7.0/
 
+#[macro_use]
 mod types;
 
 mod traits;

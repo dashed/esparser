@@ -6,7 +6,24 @@ use std::mem;
 
 use enum_set::{EnumSet, CLike};
 
+// Ref: https://is.gd/kEGYIp
+macro_rules! ensure_params {
+    ($input:expr; $callee:expr; $( $test:expr );*) => {
+
+        if is_debug_mode!() {
+
+            // validation
+            if !($input.is_empty() $(|| $input.contains(& $test ))*) {
+                panic!("misuse of {}", $callee);
+            }
+
+        }
+    };
+}
+
 // Based on: http://www.ecma-international.org/ecma-262/7.0/#sec-grammar-notation
+//
+// Used to conditionally include or exclude production grammar rules.
 #[repr(u32)]
 #[derive(Clone)]
 pub enum Parameter {
