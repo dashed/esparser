@@ -24,12 +24,13 @@ use parsers::error_location::ErrorLocation;
 // Statement
 
 enum Statement {
-    BlockStatement(BlockStatement), /* TODO: fix
-                                     *     VariableStatement(VariableStatement),
-                                     *     EmptyStatement(EmptyStatement),
-                                     *     ExpressionStatement(ExpressionStatement),
-                                     *     IfStatement(Box<IfStatement>),
-                                     *     BreakableStatement(BreakableStatement), // TODO: more stuff */
+    BlockStatement(BlockStatement),
+    VariableStatement(VariableStatement), /* TODO: fix
+                                           *     ,
+                                           *     EmptyStatement(EmptyStatement),
+                                           *     ExpressionStatement(ExpressionStatement),
+                                           *     IfStatement(Box<IfStatement>),
+                                           *     BreakableStatement(BreakableStatement), // TODO: more stuff */
 }
 
 // TODO: test
@@ -43,17 +44,15 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
     }
 
     let mut yield_params = params.clone();
-    yield_params.remove(&Parameter::Yield);
+    yield_params.remove(&Parameter::Return);
     let yield_params = yield_params;
 
     parse!{i;
 
-        let x =
-        (i -> block_statement(i, &params).map(Statement::BlockStatement));
-
-        // TODO: fix
-    //     <|>
-    //     (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement))
+        let stmt =
+        (i -> block_statement(i, &params).map(Statement::BlockStatement))
+        <|>
+        (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement));
     //     <|>
     //     (i -> empty_statement(i).map(Statement::EmptyStatement))
     //     <|>
@@ -65,7 +64,7 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
 
     //     // TODO: more statements
 
-        ret x
+        ret stmt
     }
 }
 
@@ -272,7 +271,6 @@ fn variable_statement<I: U8Input>(i: ESInput<I>,
     parse!{i;
 
         (i -> {
-
             on_error(
                 string(i, b"var"),
                 |i| {

@@ -291,6 +291,8 @@ impl ::std::convert::From<String> for ErrorChain {
 macro_rules! generate_list_parser {
     ($root_name: ident; $rest_name: ident; $state_name: ident; $delim_name: ident; $inner_parser: ident) => {
 
+        // TODO: enforce $root_name to have trait??
+
         enum $state_name {
             Initial,
             WellFormed($root_name),
