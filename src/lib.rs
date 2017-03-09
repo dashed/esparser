@@ -6,6 +6,8 @@
 #[macro_use]
 extern crate chomp;
 extern crate enum_set;
+#[macro_use]
+extern crate downcast_rs;
 
 // modules
 

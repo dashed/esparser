@@ -501,6 +501,14 @@ pub trait IntoParseError {
 }
 
 #[inline]
+pub fn eof<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ()> {
+    chomp::parsers::eof(i).map_err(|err| {
+        let error_chain = ErrorChain::new(err);
+        ESParseError::Failure(error_chain)
+    })
+}
+
+#[inline]
 pub fn string<I: U8Input>(i: ESInput<I>, str_match: &[u8]) -> ESParseResult<I, I::Buffer> {
     chomp::parsers::string(i, str_match).map_err(|err| {
         let error_chain = ErrorChain::new(err);
