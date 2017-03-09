@@ -13,7 +13,7 @@ use chomp::prelude::Either;
 use super::types::{Parameters, Parameter};
 use super::section_11::{common_delim, common_delim_required, CommonDelim, SemiColon, semicolon};
 use super::section_12::{initializer, Initializer, binding_identifier, BindingIdentifier,
-                        PropertyName, property_name, elision, Elision};
+                        PropertyName, property_name, elision, Elision, Expression, expression};
 use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
 use parsers::error_location::ErrorLocation;
 
@@ -26,12 +26,10 @@ use parsers::error_location::ErrorLocation;
 enum Statement {
     BlockStatement(BlockStatement),
     VariableStatement(VariableStatement),
-    EmptyStatement(EmptyStatement), 
-    /* TODO: fix
-
-                                           *     ExpressionStatement(ExpressionStatement),
-                                           *     IfStatement(Box<IfStatement>),
-                                           *     BreakableStatement(BreakableStatement), // TODO: more stuff */
+    EmptyStatement(EmptyStatement),
+    ExpressionStatement(ExpressionStatement), /* TODO: fix
+                                               *     IfStatement(Box<IfStatement>),
+                                               *     BreakableStatement(BreakableStatement), // TODO: more stuff */
 }
 
 // TODO: test
@@ -55,9 +53,9 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
         <|>
         (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement))
         <|>
-        (i -> empty_statement(i).map(Statement::EmptyStatement));
-    //     <|>
-    //     (i -> expression_statement(i, &params).map(Statement::ExpressionStatement))
+        (i -> empty_statement(i).map(Statement::EmptyStatement))
+        <|>
+        (i -> expression_statement(i, &yield_params).map(Statement::ExpressionStatement));
     //     <|>
     //     (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))))
     //     <|>
@@ -1069,7 +1067,55 @@ fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement
 
 // 13.5 Expression Statement
 
-// TODO: complete
+struct ExpressionStatement(Expression, SemiColon);
+
+// TODO: test
+fn expression_statement<I: U8Input>(i: ESInput<I>,
+                                    params: &Parameters)
+                                    -> ESParseResult<I, ExpressionStatement> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
+            panic!("misuse of expression_statement");
+        }
+    }
+
+    either(i,
+           |i| -> ESParseResult<I, ()> {
+        parse!{i;
+
+                string(b"{") <|>
+                string(b"function") <|>
+                string(b"class") <|>
+                string(b"let") <|>
+                string(b"[");
+
+                ret {()}
+            }
+    },
+           |i| {
+
+        let mut in_params = params.clone();
+        in_params.insert(Parameter::In);
+        let in_params = in_params;
+
+        parse!{i;
+
+                let expr = expression(&in_params);
+                let semi_colon = semicolon();
+
+                ret ExpressionStatement(expr, semi_colon)
+            }
+    })
+        .bind(|i, result| {
+            match result {
+                // TODO: improve error message to indicate token that should not be produced
+                Either::Left(_) => i.err("".into()),
+                Either::Right(statement) => i.ret(statement),
+            }
+        })
+}
 
 // 13.6 The if Statement
 

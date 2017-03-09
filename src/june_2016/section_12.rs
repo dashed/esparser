@@ -3233,7 +3233,7 @@ fn assignment_expression<I: U8Input>(i: ESInput<I>,
 
 // Expression
 
-struct Expression(AssignmentExpression, Vec<ExpressionRest>);
+pub struct Expression(AssignmentExpression, Vec<ExpressionRest>);
 
 impl Expression {
     fn new(rhs_val: AssignmentExpression) -> Self {
@@ -3273,7 +3273,7 @@ generate_list_parser!(
 
 // TODO: test
 // http://www.ecma-international.org/ecma-262/7.0/#prod-Expression
-fn expression<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Expression> {
+pub fn expression<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Expression> {
 
     if is_debug_mode!() {
         if !(params.is_empty() || params.contains(&Parameter::Yield) ||
