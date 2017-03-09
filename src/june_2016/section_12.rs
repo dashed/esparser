@@ -1089,20 +1089,8 @@ fn template_middle_list<I: U8Input>(i: ESInput<I>,
 
 // MemberExpression
 
-enum MemberExpression {
+enum MemberExpressionHead {
     PrimaryExpression(PrimaryExpression),
-    PropertyAccessorBracket(Box<MemberExpression>,
-                            Vec<CommonDelim>,
-                            /* [ */
-                            Vec<CommonDelim>,
-                            Expression,
-                            Vec<CommonDelim> /* ] */),
-    PropertyAccessorDot(Box<MemberExpression>,
-                        Vec<CommonDelim>,
-                        /* . */
-                        Vec<CommonDelim>,
-                        IdentifierName),
-    TaggedTemplate(Box<MemberExpression>, Vec<CommonDelim>, TemplateLiteral),
     SuperProperty(SuperProperty),
     MetaProperty(MetaProperty),
     FunctionCall(/* new */
@@ -1111,6 +1099,66 @@ enum MemberExpression {
                  Vec<CommonDelim>,
                  Arguments),
 }
+
+struct MemberExpression(MemberExpressionHead, Vec<MemberExpressionRest>);
+
+impl MemberExpression {
+    fn new(rhs_val: MemberExpressionItem) -> Self {
+        match rhs_val {
+            MemberExpressionItem::HeadItem(head) => MemberExpression(head, vec![]),
+            MemberExpressionItem::RestItem(_) => panic!("invariant violation"),
+        }
+    }
+
+    fn add_item(self,
+                operator_delim: MemberExpressionDelim,
+                rhs_val: MemberExpressionItem)
+                -> Self {
+
+        let MemberExpression(head, rest) = self;
+        let mut rest = rest;
+
+        let MemberExpressionDelim(delim) = operator_delim;
+
+        let rest_item = match rhs_val {
+            MemberExpressionItem::HeadItem(_head) => panic!("invariant violation"),
+            MemberExpressionItem::RestItem(rest_item) => rest_item,
+        };
+
+        let rhs = MemberExpressionRest(delim, rest_item);
+
+        rest.push(rhs);
+
+        MemberExpression(head, rest)
+    }
+}
+
+enum MemberExpressionRestItem {
+    PropertyAccessorBracket(/* [ */
+                            Vec<CommonDelim>,
+                            Expression,
+                            Vec<CommonDelim> /* ] */),
+    PropertyAccessorDot(/* . */
+                        Vec<CommonDelim>,
+                        IdentifierName),
+    TaggedTemplate(TemplateLiteral),
+}
+
+struct MemberExpressionRest(Vec<CommonDelim>, MemberExpressionRestItem);
+
+struct MemberExpressionDelim(Vec<CommonDelim>);
+
+enum MemberExpressionItem {
+    HeadItem(MemberExpressionHead),
+    RestItem(MemberExpressionRestItem),
+}
+
+generate_list_parser!(
+    MemberExpression;
+    MemberExpressionRest;
+    MemberExpressionState;
+    MemberExpressionDelim;
+    MemberExpressionItem);
 
 // TODO: test
 fn member_expression<I: U8Input>(i: ESInput<I>,
@@ -1128,80 +1176,106 @@ fn member_expression<I: U8Input>(i: ESInput<I>,
     expr_params.insert(Parameter::In);
     let expr_params = expr_params;
 
-    parse!{i;
+    type Accumulator = Rc<RefCell<MemberExpressionState>>;
 
-        let expr =
-            (i -> primary_expression(i, &params).map(MemberExpression::PrimaryExpression))
-            <|>
-            (i -> super_property(i, &params).map(MemberExpression::SuperProperty))
-            <|>
-            (i -> meta_property(i).map(MemberExpression::MetaProperty))
-            <|>
-            (i -> {
-                parse!{i;
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
 
-                    let member_expr = member_expression(&params);
+            let delim = common_delim();
 
-                    let delim_1 = common_delim();
-                    token(b'[');
-                    let delim_2 = common_delim();
+            ret {
+                let delim = MemberExpressionDelim(delim);
 
-                    let expr = expression(&expr_params);
-
-                    let delim_3 = common_delim();
-                    token(b']');
-
-                    ret MemberExpression::PropertyAccessorBracket(Box::new(member_expr), delim_1, delim_2, expr, delim_3)
-                }
-            })
-            <|>
-            (i -> {
-                parse!{i;
-
-                    let member_expr = member_expression(&params);
-
-                    let delim_1 = common_delim();
-                    token(b'.');
-                    let delim_2 = common_delim();
-
-                    let name = identifier_name();
-
-                    ret MemberExpression::PropertyAccessorDot(Box::new(member_expr), delim_1, delim_2, name)
-                }
-            })
-            <|>
-            (i -> {
-                parse!{i;
-
-                    let member_expr = member_expression(&params);
-
-                    let delim = common_delim();
-
-                    let template = template_literal(&params);
-
-                    ret MemberExpression::TaggedTemplate(Box::new(member_expr), delim, template)
-                }
-            })
-            <|>
-            (i -> {
-                parse!{i;
-
-                    string(b"new");
-
-                    let delim_1 = common_delim();
-
-                    let member_expr = member_expression(&params);
-
-                    let delim_2 = common_delim();
-
-                    let args = arguments(&params);
-
-                    ret MemberExpression::FunctionCall(delim_1, Box::new(member_expr), delim_2, args)
-                }
-            });
-
-        ret expr
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
     }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+
+        let is_initial = {
+            accumulator.borrow().is_initial()
+        };
+
+        if is_initial {
+            parse!{i;
+
+                let head = (i -> primary_expression(i, &params).map(MemberExpressionHead::PrimaryExpression)) <|>
+
+                    (i -> super_property(i, &params).map(MemberExpressionHead::SuperProperty)) <|>
+
+                    (i -> meta_property(i).map(MemberExpressionHead::MetaProperty)) <|>
+
+                    (i -> {
+                        parse!{i;
+
+                            string(b"new");
+
+                            let delim_1 = common_delim();
+
+                            let member_expr = member_expression(&params);
+
+                            let delim_2 = common_delim();
+
+                            let args = arguments(&params);
+
+                            ret MemberExpressionHead::FunctionCall(delim_1, Box::new(member_expr), delim_2, args)
+                        }
+                    });
+
+                ret {
+                    let rhs = MemberExpressionItem::HeadItem(head);
+                    accumulator.borrow_mut().add_item(rhs);
+                    ()
+                }
+            }
+        } else {
+            parse!{i;
+
+                let rest_item =
+                    (i -> {
+                        parse!{i;
+
+                            token(b'[');
+                            let delim_1 = common_delim();
+
+                            let expr = expression(&expr_params);
+
+                            let delim_2 = common_delim();
+                            token(b']');
+
+                            ret MemberExpressionRestItem::PropertyAccessorBracket(delim_1, expr, delim_2)
+                        }
+                    })
+                    <|>
+                    (i -> {
+                        parse!{i;
+
+                            token(b'.');
+                            let delim = common_delim();
+
+                            let name = identifier_name();
+
+                            ret MemberExpressionRestItem::PropertyAccessorDot(delim, name)
+                        }
+                    })
+                    <|>
+                    (i -> template_literal(i, &params).map(MemberExpressionRestItem::TaggedTemplate));
+
+
+                ret {
+                    let rhs = MemberExpressionItem::RestItem(rest_item);
+                    accumulator.borrow_mut().add_item(rhs);
+                    ()
+                }
+            }
+        }
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
 }
 
 // SuperProperty
