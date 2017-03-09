@@ -35,9 +35,11 @@ enum Statement {
 // TODO: test
 fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Statement> {
 
-    if !(params.is_empty() || params.contains(&Parameter::Yield) ||
-         params.contains(&Parameter::Return)) {
-        panic!("misuse of statement");
+    if is_debug_mode!() {
+        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+             params.contains(&Parameter::Return)) {
+            panic!("misuse of statement");
+        }
     }
 
     let mut yield_params = params.clone();
