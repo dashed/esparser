@@ -25,9 +25,10 @@ use parsers::error_location::ErrorLocation;
 
 enum Statement {
     BlockStatement(BlockStatement),
-    VariableStatement(VariableStatement), /* TODO: fix
-                                           *     ,
-                                           *     EmptyStatement(EmptyStatement),
+    VariableStatement(VariableStatement),
+    EmptyStatement(EmptyStatement), 
+    /* TODO: fix
+
                                            *     ExpressionStatement(ExpressionStatement),
                                            *     IfStatement(Box<IfStatement>),
                                            *     BreakableStatement(BreakableStatement), // TODO: more stuff */
@@ -52,9 +53,9 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
         let stmt =
         (i -> block_statement(i, &params).map(Statement::BlockStatement))
         <|>
-        (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement));
-    //     <|>
-    //     (i -> empty_statement(i).map(Statement::EmptyStatement))
+        (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement))
+        <|>
+        (i -> empty_statement(i).map(Statement::EmptyStatement));
     //     <|>
     //     (i -> expression_statement(i, &params).map(Statement::ExpressionStatement))
     //     <|>
@@ -1056,6 +1057,65 @@ pub fn binding_rest_element<I: U8Input>(i: ESInput<I>,
         }
     }
 }
+
+// 13.4 Empty Statement
+
+struct EmptyStatement(SemiColon);
+
+// TODO: test
+fn empty_statement<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, EmptyStatement> {
+    semicolon(i).map(EmptyStatement)
+}
+
+// 13.5 Expression Statement
+
+// TODO: complete
+
+// 13.6 The if Statement
+
+// TODO: complete
+
+// 13.7 Iteration Statements
+
+// TODO: complete
+
+// 13.8 The continue Statement
+
+// TODO: complete
+
+// 13.9 The break Statement
+
+// TODO: complete
+
+// 13.10 The return Statement
+
+// TODO: complete
+
+// 13.11 The with Statement
+
+// TODO: complete
+
+// 13.12 The switch Statement
+
+// TODO: complete
+
+// 13.13 Labelled Statements
+
+// TODO: complete
+
+// 13.14 The throw Statement
+
+// TODO: complete
+
+// 13.15 The try Statement
+
+// TODO: complete
+
+// 13.16 The debugger Statement
+
+// TODO: complete
+
+// ----
 
 // TODO: remove this
 #[test]
