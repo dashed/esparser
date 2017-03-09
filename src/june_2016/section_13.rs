@@ -1119,7 +1119,110 @@ fn expression_statement<I: U8Input>(i: ESInput<I>,
 
 // 13.6 The if Statement
 
-// TODO: complete
+enum IfStatement {
+    OneBranch(/* if */
+              Vec<CommonDelim>,
+              /* ( */
+              Vec<CommonDelim>,
+              Expression,
+              Vec<CommonDelim>,
+              /* ) */
+              Vec<CommonDelim>,
+              Statement),
+    TwoBranch(/* if */
+              Vec<CommonDelim>,
+              /* ( */
+              Vec<CommonDelim>,
+              Expression,
+              Vec<CommonDelim>,
+              /* ) */
+              Vec<CommonDelim>,
+              Statement,
+              Vec<CommonDelim>,
+              /* else */
+              Vec<CommonDelim>,
+              Statement),
+}
+
+// TODO: test
+fn if_statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, IfStatement> {
+
+    if is_debug_mode!() {
+        // validation
+        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+             params.contains(&Parameter::Return)) {
+            panic!("misuse of if_statement");
+        }
+    }
+
+    let mut test_condition_params = Parameters::new();
+    test_condition_params.insert(Parameter::In);
+
+    if params.contains(&Parameter::Yield) {
+        test_condition_params.insert(Parameter::Yield);
+    }
+    let test_condition_params = test_condition_params;
+
+    #[inline]
+    fn optional_else<I: U8Input>
+        (i: ESInput<I>,
+         params: &Parameters)
+         -> ESParseResult<I, (Vec<CommonDelim>, Vec<CommonDelim>, Statement)> {
+
+        if is_debug_mode!() {
+            // validation
+            if !(params.is_empty() || params.contains(&Parameter::Yield) ||
+                 params.contains(&Parameter::Return)) {
+                panic!("misuse of optional_else");
+            }
+        }
+
+        parse!{i;
+
+            let delim_1 = common_delim();
+            string(b"else");
+            let delim_2 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                (delim_1, delim_2, stmt)
+            }
+        }
+    }
+
+    parse!{i;
+
+        string(b"if");
+
+        let delim_1 = common_delim();
+        token(b'(');
+        let delim_2 = common_delim();
+
+        let expr = expression(&test_condition_params);
+
+        let delim_3 = common_delim();
+        token(b')');
+        let delim_4 = common_delim();
+
+        let stmt = statement(&params);
+
+        let else_branch = option(
+            |i| optional_else(i, &params).map(Some),
+            None);
+
+        ret {
+            match else_branch {
+                Some((delim_5, delim_6, else_branch)) => {
+                    IfStatement::TwoBranch(delim_1, delim_2, expr, delim_3, delim_4, stmt, delim_5, delim_6, else_branch)
+                },
+                None => {
+                    IfStatement::OneBranch(delim_1, delim_2, expr, delim_3, delim_4, stmt)
+                }
+            }
+        }
+    }
+}
 
 // 13.7 Iteration Statements
 
