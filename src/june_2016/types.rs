@@ -45,8 +45,20 @@ macro_rules! iterable_enum {
 
         // Return vector containing all the enum values
         impl $enum_name {
-            fn make_vec() -> Vec<Self> {
-                vec![$($enum_name::$enum_item,)*]
+
+            // TODO: remove
+            // fn make_vec() -> Vec<Self> {
+            //     vec![$($enum_name::$enum_item,)*]
+            // }
+
+            fn make_enum_set() -> EnumSet<Self> {
+                let mut set = EnumSet::new();
+
+                $(
+                    set.insert($enum_name::$enum_item);
+                )*
+
+                set
             }
         }
     )
