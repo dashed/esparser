@@ -1482,7 +1482,21 @@ enum IterationStatement {
                Vec<CommonDelim>,
                Statement),
 
-    ForDeclarationLoop,
+    ForDeclarationLoop(/* for */
+                       Vec<CommonDelim>,
+                       /* ( */
+                       Vec<CommonDelim>,
+                       LexicalDeclaration,
+                       Vec<CommonDelim>,
+                       Option<Expression>,
+                       Vec<CommonDelim>,
+                       /* ; */
+                       Vec<CommonDelim>,
+                       Option<Expression>,
+                       Vec<CommonDelim>,
+                       /* ) */
+                       Vec<CommonDelim>,
+                       Statement),
 
     ForIn,
     ForVarIn,
@@ -1707,6 +1721,59 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
         }
     }
 
+    fn for_declaration_loop<I: U8Input>(i: ESInput<I>,
+                                        params: &Parameters,
+                                        expr_params: &Parameters)
+                                        -> ESParseResult<I, IterationStatement> {
+
+        let init_expr_params = {
+            let mut init_expr_params = expr_params.clone();
+            init_expr_params.remove(&Parameter::In);
+            init_expr_params
+        };
+
+        parse!{i;
+
+
+            string(b"for");
+
+            let delim_1 = common_delim();
+
+            string(b"(");
+
+            let delim_2 = common_delim();
+
+            // initialization
+
+            let declaration = lexical_declaration(&init_expr_params);
+
+            let delim_3 = common_delim();
+
+            let init_expr = option(|i| expression(i, &expr_params).map(Some), None);
+
+            let delim_4 = common_delim();
+
+            string(b";");
+
+            let delim_5 = common_delim();
+
+            let condition = option(|i| expression(i, &expr_params).map(Some), None);
+
+            let delim_6 = common_delim();
+
+            string(b")");
+
+            let delim_7 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                IterationStatement::ForDeclarationLoop(delim_1,
+                    delim_2, declaration, delim_3, init_expr, delim_4, delim_5, condition, delim_6, delim_7, stmt)
+            }
+        }
+    }
+
     let parse_result = parse!{i;
 
         let iteration_statement: IterationStatement =
@@ -1715,8 +1782,8 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
             while_parse(&params, &expr_params) <|>
 
             for_loop(&params, &expr_params) <|>
-            for_var_loop(&params, &expr_params);
-            // for_declaration_loop(&params, &expr_params);
+            for_var_loop(&params, &expr_params) <|>
+            for_declaration_loop(&params, &expr_params);
 
 
         ret iteration_statement
@@ -1730,7 +1797,9 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
 struct ForDeclaration(LetOrConst, Vec<CommonDelim>, ForBinding);
 
 // TODO: test
-fn for_declaration<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, ForDeclaration> {
+fn for_declaration<I: U8Input>(i: ESInput<I>,
+                               params: &Parameters)
+                               -> ESParseResult<I, ForDeclaration> {
 
     ensure_params!(params; "for_declaration"; Parameter::Yield);
 
