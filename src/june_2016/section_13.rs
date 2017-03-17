@@ -13,7 +13,8 @@ use chomp::prelude::Either;
 use super::types::{Parameters, Parameter};
 use super::section_11::{common_delim, common_delim_required, CommonDelim, SemiColon, semicolon};
 use super::section_12::{initializer, Initializer, binding_identifier, BindingIdentifier,
-                        PropertyName, property_name, elision, Elision, Expression, expression};
+                        PropertyName, property_name, elision, Elision, Expression, expression,
+                        LeftHandSideExpression, left_hand_side_expression};
 use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
 use parsers::error_location::ErrorLocation;
 
@@ -1441,19 +1442,13 @@ enum IterationStatement {
     ForLoop(/* for */
             Vec<CommonDelim>,
             /* ( */
+            Option<(Vec<CommonDelim>, Expression)>,
             Vec<CommonDelim>,
-            // initialization
-            Option<Expression>,
+            /* ; */
+            Option<(Vec<CommonDelim>, Expression)>,
             Vec<CommonDelim>,
-            /* ;
-            condition */
-            Vec<CommonDelim>,
-            Option<Expression>,
-            Vec<CommonDelim>,
-            /* ;
-            afterthought */
-            Vec<CommonDelim>,
-            Option<Expression>,
+            /* ; */
+            Option<(Vec<CommonDelim>, Expression)>,
             Vec<CommonDelim>,
             /* ) */
             Vec<CommonDelim>,
@@ -1468,15 +1463,11 @@ enum IterationStatement {
                // initialization
                VariableDeclarationList,
                Vec<CommonDelim>,
-               /* ;
-            condition */
+               /* ; */
+               Option<(Vec<CommonDelim>, Expression)>,
                Vec<CommonDelim>,
-               Option<Expression>,
-               Vec<CommonDelim>,
-               /* ;
-            afterthought */
-               Vec<CommonDelim>,
-               Option<Expression>,
+               /* ; */
+               Option<(Vec<CommonDelim>, Expression)>,
                Vec<CommonDelim>,
                /* ) */
                Vec<CommonDelim>,
@@ -1487,18 +1478,29 @@ enum IterationStatement {
                        /* ( */
                        Vec<CommonDelim>,
                        LexicalDeclaration,
-                       Vec<CommonDelim>,
-                       Option<Expression>,
+                       Option<(Vec<CommonDelim>, Expression)>,
                        Vec<CommonDelim>,
                        /* ; */
-                       Vec<CommonDelim>,
-                       Option<Expression>,
+                       Option<(Vec<CommonDelim>, Expression)>,
                        Vec<CommonDelim>,
                        /* ) */
                        Vec<CommonDelim>,
                        Statement),
 
-    ForIn,
+    ForIn(/* for */
+          Vec<CommonDelim>,
+          /* ( */
+          Vec<CommonDelim>,
+          LeftHandSideExpression,
+          Vec<CommonDelim>,
+          /* in */
+          Vec<CommonDelim>,
+          Expression,
+          Vec<CommonDelim>,
+          /* ) */
+          Vec<CommonDelim>,
+          Statement),
+
     ForVarIn,
     ForDeclarationIn,
 
@@ -1610,14 +1612,20 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
 
             string(b"(");
 
-            let delim_2 = common_delim();
-
             // initialization
 
             let initialization = (i -> {
                 either(i, |i| or(i, |i| string(i, b"let"), |i| string(i, b"[")),
-                    |i| option(i, |i| expression(i, &init_expr_params).map(Some), None))
-                    .bind(|i, result| -> ESParseResult<I, Option<Expression>> {
+                    |i| {
+                        option(i, |i| {
+                            parse!{i;
+                                let delim = common_delim();
+                                let expr = expression(&init_expr_params);
+                                ret Some((delim, expr))
+                            }
+                        }, None)
+                    })
+                    .bind(|i, result| -> ESParseResult<I, Option<(Vec<CommonDelim>, Expression)>> {
                         match result {
                             // TODO: err
                             Either::Left(_) => i.err("".into()),
@@ -1630,19 +1638,27 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
 
             string(b";");
 
-            let delim_4 = common_delim();
-
             // condition
 
-            let condition = option(|i| expression(i, &expr_params).map(Some), None);
+            let condition = option(|i| -> ESParseResult<I, Option<(Vec<CommonDelim>, Expression)>> {
+                parse!{i;
+                    let delim = common_delim();
+                    let expr = expression(&expr_params);
+                    ret Some((delim, expr))
+                }
+            }, None);
 
             let delim_5 = common_delim();
 
             string(b";");
 
-            let delim_6 = common_delim();
-
-            let afterthought = option(|i| expression(i, &expr_params).map(Some), None);
+            let afterthought = option(|i| -> ESParseResult<I, Option<(Vec<CommonDelim>, Expression)>> {
+                parse!{i;
+                    let delim = common_delim();
+                    let expr = expression(&expr_params);
+                    ret Some((delim, expr))
+                }
+            }, None);
 
             let delim_7 = common_delim();
 
@@ -1653,8 +1669,8 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
             let stmt = statement(&params);
 
             ret {
-                IterationStatement::ForLoop(delim_1, delim_2, initialization,
-                    delim_3, delim_4, condition, delim_5, delim_6, afterthought, delim_7, delim_8, stmt)
+                IterationStatement::ForLoop(delim_1, initialization,
+                    delim_3, condition, delim_5, afterthought, delim_7, delim_8, stmt)
             }
         }
     }
@@ -1693,19 +1709,27 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
 
             string(b";");
 
-            let delim_5 = common_delim();
-
             // condition
 
-            let condition = option(|i| expression(i, &expr_params).map(Some), None);
+            let condition = option(|i| -> ESParseResult<I, Option<(Vec<CommonDelim>, Expression)>> {
+                parse!{i;
+                    let delim = common_delim();
+                    let expr = expression(&expr_params);
+                    ret Some((delim, expr))
+                }
+            }, None);
 
             let delim_6 = common_delim();
 
             string(b";");
 
-            let delim_7 = common_delim();
-
-            let afterthought = option(|i| expression(i, &expr_params).map(Some), None);
+            let afterthought = option(|i| -> ESParseResult<I, Option<(Vec<CommonDelim>, Expression)>> {
+                parse!{i;
+                    let delim = common_delim();
+                    let expr = expression(&expr_params);
+                    ret Some((delim, expr))
+                }
+            }, None);
 
             let delim_8 = common_delim();
 
@@ -1716,7 +1740,7 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
             let stmt = statement(&params);
 
             ret {
-                IterationStatement::ForVarLoop(delim_1, delim_2, delim_3, vars_list, delim_4, delim_5, condition, delim_6, delim_7, afterthought, delim_8, delim_9, stmt)
+                IterationStatement::ForVarLoop(delim_1, delim_2, delim_3, vars_list, delim_4, condition, delim_6, afterthought, delim_8, delim_9, stmt)
             }
         }
     }
@@ -1747,17 +1771,25 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
 
             let declaration = lexical_declaration(&init_expr_params);
 
-            let delim_3 = common_delim();
-
-            let init_expr = option(|i| expression(i, &expr_params).map(Some), None);
+            let init_expr = option(|i| -> ESParseResult<I, Option<(Vec<CommonDelim>, Expression)>> {
+                parse!{i;
+                    let delim = common_delim();
+                    let expr = expression(&expr_params);
+                    ret Some((delim, expr))
+                }
+            }, None);
 
             let delim_4 = common_delim();
 
             string(b";");
 
-            let delim_5 = common_delim();
-
-            let condition = option(|i| expression(i, &expr_params).map(Some), None);
+            let condition = option(|i| -> ESParseResult<I, Option<(Vec<CommonDelim>, Expression)>> {
+                parse!{i;
+                    let delim = common_delim();
+                    let expr = expression(&expr_params);
+                    ret Some((delim, expr))
+                }
+            }, None);
 
             let delim_6 = common_delim();
 
@@ -1769,7 +1801,7 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
 
             ret {
                 IterationStatement::ForDeclarationLoop(delim_1,
-                    delim_2, declaration, delim_3, init_expr, delim_4, delim_5, condition, delim_6, delim_7, stmt)
+                    delim_2, declaration, init_expr, delim_4, condition, delim_6, delim_7, stmt)
             }
         }
     }

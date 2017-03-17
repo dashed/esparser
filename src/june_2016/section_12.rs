@@ -1788,15 +1788,15 @@ fn arguments_list<I: U8Input>(i: ESInput<I>,
 
 // LeftHandSideExpression
 
-enum LeftHandSideExpression {
+pub enum LeftHandSideExpression {
     NewExpression(NewExpression),
     CallExpression(CallExpression),
 }
 
 // TODO: test
-fn left_hand_side_expression<I: U8Input>(i: ESInput<I>,
-                                         params: &Parameters)
-                                         -> ESParseResult<I, LeftHandSideExpression> {
+pub fn left_hand_side_expression<I: U8Input>(i: ESInput<I>,
+                                             params: &Parameters)
+                                             -> ESParseResult<I, LeftHandSideExpression> {
 
     if is_debug_mode!() {
         // validation
