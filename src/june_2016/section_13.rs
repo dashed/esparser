@@ -243,6 +243,81 @@ fn statement_list_item<I: U8Input>(i: ESInput<I>,
     }
 }
 
+// 13.3 Declarations and the Variable Statement
+
+// 13.3.1 Let and Const Declarations
+
+// TODO: LexicalDeclaration
+
+enum LetOrConst {
+    Let,
+    Const
+}
+
+// TODO: test
+fn let_or_const<I: U8Input>(i: ESInput<I>)
+                                  -> ESParseResult<I, LetOrConst> {
+    or(i, |i| string(i, b"let").map(|_| LetOrConst::Let),
+        |i| string(i, b"const").map(|_| LetOrConst::Const))
+}
+
+// TODO: BindingList
+
+enum LexicalBinding {
+    BindingIdentifier(BindingIdentifier, Option<(Vec<CommonDelim>, Initializer)>),
+    BindingPattern(BindingPattern, Vec<CommonDelim>, Initializer),
+}
+
+// TODO: test
+fn lexical_binding<I: U8Input>(i: ESInput<I>, params: &Parameters)
+                                  -> ESParseResult<I, LexicalBinding> {
+
+    ensure_params!(params; "lexical_binding"; Parameter::In; Parameter::Yield);
+
+    let binding_params = {
+        let mut binding_params = params.clone();
+        binding_params.remove(&Parameter::In);
+        binding_params
+    };
+
+    or(i,
+        |i| {
+            parse!{i;
+
+                let ident = binding_identifier(&binding_params);
+
+                let init = option(|i| -> ESParseResult<I, Option<(Vec<CommonDelim>, Initializer)>> {
+                    parse!{i;
+
+                        let delim = common_delim();
+                        let init = initializer(&params);
+
+                        ret {
+                            Some((delim, init))
+                        }
+                    }
+                }, None);
+
+                ret {
+                    LexicalBinding::BindingIdentifier(ident, init)
+                }
+            }
+        },
+        |i| {
+            parse!{i;
+
+                let ident = binding_pattern(&binding_params);
+
+                let delim = common_delim();
+
+                let init = initializer(&params);
+
+                ret {
+                    LexicalBinding::BindingPattern(ident, delim, init)
+                }
+            }
+        })
+}
 
 // 13.3.2 Variable Statement
 
