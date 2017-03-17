@@ -1256,11 +1256,13 @@ enum IterationStatement {
             // initialization
             Option<Expression>,
             Vec<CommonDelim>,
-            /* ; */
+            /* ;
+            condition */
             Vec<CommonDelim>,
             Option<Expression>,
             Vec<CommonDelim>,
-            /* ; */
+            /* ;
+            afterthought */
             Vec<CommonDelim>,
             Option<Expression>,
             Vec<CommonDelim>,
@@ -1268,7 +1270,29 @@ enum IterationStatement {
             Vec<CommonDelim>,
             Statement),
 
-    ForVarLoop,
+    ForVarLoop(/* for */
+            Vec<CommonDelim>,
+            /* ( */
+            Vec<CommonDelim>,
+            /* var */
+            Vec<CommonDelim>,
+            // initialization
+            VariableDeclarationList,
+            Vec<CommonDelim>,
+            /* ;
+            condition */
+            Vec<CommonDelim>,
+            Option<Expression>,
+            Vec<CommonDelim>,
+            /* ;
+            afterthought */
+            Vec<CommonDelim>,
+            Option<Expression>,
+            Vec<CommonDelim>,
+            /* ) */
+            Vec<CommonDelim>,
+            Statement),
+
     ForDeclarationLoop,
 
     ForIn,
@@ -1432,12 +1456,78 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
         }
     }
 
+    fn for_var_loop<I: U8Input>(i: ESInput<I>,
+                                params: &Parameters,
+                                expr_params: &Parameters)
+                                -> ESParseResult<I, IterationStatement> {
+
+        let init_expr_params = {
+            let mut init_expr_params = expr_params.clone();
+            init_expr_params.remove(&Parameter::In);
+            init_expr_params
+        };
+
+        parse!{i;
+
+
+            string(b"for");
+
+            let delim_1 = common_delim();
+
+            string(b"(");
+
+            let delim_2 = common_delim();
+
+            string(b"var");
+
+            let delim_3 = common_delim();
+
+            // initialization
+
+            let vars_list = variable_declaration_list(&init_expr_params);
+
+            let delim_4 = common_delim();
+
+            string(b";");
+
+            let delim_5 = common_delim();
+
+            // condition
+
+            let condition = option(|i| expression(i, &expr_params).map(Some), None);
+
+            let delim_6 = common_delim();
+
+            string(b";");
+
+            let delim_7 = common_delim();
+
+            let afterthought = option(|i| expression(i, &expr_params).map(Some), None);
+
+            let delim_8 = common_delim();
+
+            string(b")");
+
+            let delim_9 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                IterationStatement::ForVarLoop(delim_1, delim_2, delim_3, vars_list, delim_4, delim_5, condition, delim_6, delim_7, afterthought, delim_8, delim_9, stmt)
+            }
+        }
+    }
+
     let parse_result = parse!{i;
 
         let iteration_statement: IterationStatement =
+
             do_while(&params, &expr_params) <|>
             while_parse(&params, &expr_params) <|>
-            for_loop(&params, &expr_params);
+
+            for_loop(&params, &expr_params) <|>
+            for_var_loop(&params, &expr_params) <|>
+            for_declaration_loop(&params, &expr_params);
 
 
         ret iteration_statement
