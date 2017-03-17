@@ -1226,7 +1226,225 @@ fn if_statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult
 
 // 13.7 Iteration Statements
 
-// TODO: complete
+enum IterationStatement {
+    DoWhile(/* do */
+            Vec<CommonDelim>,
+            Statement,
+            Vec<CommonDelim>,
+            /* while */
+            Vec<CommonDelim>,
+            /* ( */
+            Vec<CommonDelim>,
+            Expression,
+            Vec<CommonDelim>,
+            /* ) */
+            SemiColon),
+    While(/* while */
+          Vec<CommonDelim>,
+          /* ( */
+          Vec<CommonDelim>,
+          Expression,
+          Vec<CommonDelim>,
+          /* ) */
+          Vec<CommonDelim>,
+          Statement),
+
+    ForLoop(/* for */
+            Vec<CommonDelim>,
+            /* ( */
+            Vec<CommonDelim>,
+            // initialization
+            Option<Expression>,
+            Vec<CommonDelim>,
+            /* ; */
+            Vec<CommonDelim>,
+            Option<Expression>,
+            Vec<CommonDelim>,
+            /* ; */
+            Vec<CommonDelim>,
+            Option<Expression>,
+            Vec<CommonDelim>,
+            /* ) */
+            Vec<CommonDelim>,
+            Statement),
+
+    ForVarLoop,
+    ForDeclarationLoop,
+
+    ForIn,
+    ForVarIn,
+    ForDeclarationIn,
+
+    ForOf,
+    ForVarOf,
+    ForDeclarationOf,
+}
+
+// TODO: test
+fn iteration_statement<I: U8Input>(i: ESInput<I>,
+                                   params: &Parameters)
+                                   -> ESParseResult<I, IterationStatement> {
+
+    ensure_params!(params; "iteration_statement"; Parameter::Return; Parameter::Yield);
+
+    let expr_params = {
+        let mut expr_params = params.clone();
+
+        expr_params.remove(&Parameter::Return);
+        expr_params.insert(Parameter::In);
+
+        expr_params
+    };
+    let expr_params = &expr_params;
+
+    fn do_while<I: U8Input>(i: ESInput<I>,
+                            params: &Parameters,
+                            expr_params: &Parameters)
+                            -> ESParseResult<I, IterationStatement> {
+        parse!{i;
+
+            string(b"do");
+
+            let delim_1 = common_delim();
+
+            let stmt = statement(params);
+
+            let delim_2 = common_delim();
+
+            string(b"while");
+
+            let delim_3 = common_delim();
+
+            string(b"(");
+
+            let delim_4 = common_delim();
+
+            let expr = expression(expr_params);
+
+            let delim_5 = common_delim();
+
+            string(b")");
+
+            let semi_colon = semicolon();
+
+            ret {
+                IterationStatement::DoWhile(delim_1, stmt, delim_2, delim_3, delim_4, expr, delim_5, semi_colon)
+            }
+        }
+    }
+
+    fn while_parse<I: U8Input>(i: ESInput<I>,
+                               params: &Parameters,
+                               expr_params: &Parameters)
+                               -> ESParseResult<I, IterationStatement> {
+        parse!{i;
+
+            string(b"while");
+
+            let delim_1 = common_delim();
+
+            string(b"(");
+
+            let delim_2 = common_delim();
+
+            let expr = expression(&expr_params);
+
+            let delim_3 = common_delim();
+
+            string(b")");
+
+            let delim_4 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                IterationStatement::While(delim_1, delim_2, expr, delim_3, delim_4, stmt)
+            }
+        }
+    }
+
+    fn for_loop<I: U8Input>(i: ESInput<I>,
+                            params: &Parameters,
+                            expr_params: &Parameters)
+                            -> ESParseResult<I, IterationStatement> {
+
+        let init_expr_params = {
+            let mut init_expr_params = expr_params.clone();
+            init_expr_params.remove(&Parameter::In);
+            init_expr_params
+        };
+
+        parse!{i;
+
+
+            string(b"for");
+
+            let delim_1 = common_delim();
+
+            string(b"(");
+
+            let delim_2 = common_delim();
+
+            // initialization
+
+            let initialization = (i -> {
+                either(i, |i| or(i, |i| string(i, b"let"), |i| string(i, b"[")),
+                    |i| option(i, |i| expression(i, &init_expr_params).map(Some), None))
+                    .bind(|i, result| -> ESParseResult<I, Option<Expression>> {
+                        match result {
+                            // TODO: err
+                            Either::Left(_) => i.err("".into()),
+                            Either::Right(expr) => i.ret(expr)
+                        }
+                    })
+            });
+
+            let delim_3 = common_delim();
+
+            string(b";");
+
+            let delim_4 = common_delim();
+
+            // condition
+
+            let condition = option(|i| expression(i, &expr_params).map(Some), None);
+
+            let delim_5 = common_delim();
+
+            string(b";");
+
+            let delim_6 = common_delim();
+
+            let afterthought = option(|i| expression(i, &expr_params).map(Some), None);
+
+            let delim_7 = common_delim();
+
+            string(b")");
+
+            let delim_8 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                IterationStatement::ForLoop(delim_1, delim_2, initialization,
+                    delim_3, delim_4, condition, delim_5, delim_6, afterthought, delim_7, delim_8, stmt)
+            }
+        }
+    }
+
+    let parse_result = parse!{i;
+
+        let iteration_statement: IterationStatement =
+            do_while(&params, &expr_params) <|>
+            while_parse(&params, &expr_params) <|>
+            for_loop(&params, &expr_params);
+
+
+        ret iteration_statement
+    };
+
+    parse_result
+}
 
 // 13.8 The continue Statement
 
