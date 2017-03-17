@@ -253,8 +253,8 @@ struct LexicalDeclaration(LetOrConst, Vec<CommonDelim>, BindingList);
 
 // TODO: test
 fn lexical_declaration<I: U8Input>(i: ESInput<I>,
-                                         params: &Parameters)
-                                         -> ESParseResult<I, LexicalDeclaration> {
+                                   params: &Parameters)
+                                   -> ESParseResult<I, LexicalDeclaration> {
 
     ensure_params!(params; "lexical_declaration"; Parameter::In; Parameter::Yield);
 
@@ -276,14 +276,14 @@ fn lexical_declaration<I: U8Input>(i: ESInput<I>,
 
 enum LetOrConst {
     Let,
-    Const
+    Const,
 }
 
 // TODO: test
-fn let_or_const<I: U8Input>(i: ESInput<I>)
-                                  -> ESParseResult<I, LetOrConst> {
-    or(i, |i| string(i, b"let").map(|_| LetOrConst::Let),
-        |i| string(i, b"const").map(|_| LetOrConst::Const))
+fn let_or_const<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, LetOrConst> {
+    or(i,
+       |i| string(i, b"let").map(|_| LetOrConst::Let),
+       |i| string(i, b"const").map(|_| LetOrConst::Const))
 }
 
 // BindingList
@@ -295,10 +295,7 @@ impl BindingList {
         BindingList(rhs_val, vec![])
     }
 
-    fn add_item(self,
-                operator_delim: BindingListDelim,
-                rhs_val: LexicalBinding)
-                -> Self {
+    fn add_item(self, operator_delim: BindingListDelim, rhs_val: LexicalBinding) -> Self {
 
         let BindingList(head, rest) = self;
         let mut rest = rest;
@@ -314,13 +311,13 @@ impl BindingList {
 }
 
 struct BindingListRest(Vec<CommonDelim>,
-                                   /* , (comma) */
-                                   Vec<CommonDelim>,
-                                   LexicalBinding);
+                       /* , (comma) */
+                       Vec<CommonDelim>,
+                       LexicalBinding);
 
 struct BindingListDelim(Vec<CommonDelim>,
-                                    /* , (comma) */
-                                    Vec<CommonDelim>);
+                        /* , (comma) */
+                        Vec<CommonDelim>);
 
 generate_list_parser!(
     BindingList;
@@ -330,9 +327,7 @@ generate_list_parser!(
     LexicalBinding);
 
 // TODO: test
-fn binding_list<I: U8Input>(i: ESInput<I>,
-                                         params: &Parameters)
-                                         -> ESParseResult<I, BindingList> {
+fn binding_list<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, BindingList> {
 
     ensure_params!(params; "binding_list"; Parameter::In; Parameter::Yield);
 
@@ -385,8 +380,9 @@ enum LexicalBinding {
 }
 
 // TODO: test
-fn lexical_binding<I: U8Input>(i: ESInput<I>, params: &Parameters)
-                                  -> ESParseResult<I, LexicalBinding> {
+fn lexical_binding<I: U8Input>(i: ESInput<I>,
+                               params: &Parameters)
+                               -> ESParseResult<I, LexicalBinding> {
 
     ensure_params!(params; "lexical_binding"; Parameter::In; Parameter::Yield);
 
@@ -397,8 +393,8 @@ fn lexical_binding<I: U8Input>(i: ESInput<I>, params: &Parameters)
     };
 
     or(i,
-        |i| {
-            parse!{i;
+       |i| {
+        parse!{i;
 
                 let ident = binding_identifier(&binding_params);
 
@@ -418,9 +414,9 @@ fn lexical_binding<I: U8Input>(i: ESInput<I>, params: &Parameters)
                     LexicalBinding::BindingIdentifier(ident, init)
                 }
             }
-        },
-        |i| {
-            parse!{i;
+    },
+       |i| {
+        parse!{i;
 
                 let ident = binding_pattern(&binding_params);
 
@@ -432,7 +428,7 @@ fn lexical_binding<I: U8Input>(i: ESInput<I>, params: &Parameters)
                     LexicalBinding::BindingPattern(ident, delim, init)
                 }
             }
-        })
+    })
 }
 
 // 13.3.2 Variable Statement
@@ -1464,27 +1460,27 @@ enum IterationStatement {
             Statement),
 
     ForVarLoop(/* for */
-            Vec<CommonDelim>,
-            /* ( */
-            Vec<CommonDelim>,
-            /* var */
-            Vec<CommonDelim>,
-            // initialization
-            VariableDeclarationList,
-            Vec<CommonDelim>,
-            /* ;
+               Vec<CommonDelim>,
+               /* ( */
+               Vec<CommonDelim>,
+               /* var */
+               Vec<CommonDelim>,
+               // initialization
+               VariableDeclarationList,
+               Vec<CommonDelim>,
+               /* ;
             condition */
-            Vec<CommonDelim>,
-            Option<Expression>,
-            Vec<CommonDelim>,
-            /* ;
+               Vec<CommonDelim>,
+               Option<Expression>,
+               Vec<CommonDelim>,
+               /* ;
             afterthought */
-            Vec<CommonDelim>,
-            Option<Expression>,
-            Vec<CommonDelim>,
-            /* ) */
-            Vec<CommonDelim>,
-            Statement),
+               Vec<CommonDelim>,
+               Option<Expression>,
+               Vec<CommonDelim>,
+               /* ) */
+               Vec<CommonDelim>,
+               Statement),
 
     ForDeclarationLoop,
 
@@ -1719,14 +1715,50 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
             while_parse(&params, &expr_params) <|>
 
             for_loop(&params, &expr_params) <|>
-            for_var_loop(&params, &expr_params) <|>
-            for_declaration_loop(&params, &expr_params);
+            for_var_loop(&params, &expr_params);
+            // for_declaration_loop(&params, &expr_params);
 
 
         ret iteration_statement
     };
 
     parse_result
+}
+
+// ForDeclaration
+
+struct ForDeclaration(LetOrConst, Vec<CommonDelim>, ForBinding);
+
+// TODO: test
+fn for_declaration<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, ForDeclaration> {
+
+    ensure_params!(params; "for_declaration"; Parameter::Yield);
+
+    parse!{i;
+
+        let let_or_const = let_or_const();
+        let delim = common_delim();
+        let bind = for_binding(params);
+
+        ret ForDeclaration(let_or_const, delim, bind)
+    }
+}
+
+// ForBinding
+
+enum ForBinding {
+    BindingIdentifier(BindingIdentifier),
+    BindingPattern(BindingPattern),
+}
+
+// TODO: test
+fn for_binding<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, ForBinding> {
+
+    ensure_params!(params; "for_binding"; Parameter::Yield);
+
+    or(i,
+       |i| binding_identifier(i, &params).map(ForBinding::BindingIdentifier),
+       |i| binding_pattern(i, &params).map(ForBinding::BindingPattern))
 }
 
 // 13.8 The continue Statement
