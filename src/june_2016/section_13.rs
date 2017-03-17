@@ -247,7 +247,32 @@ fn statement_list_item<I: U8Input>(i: ESInput<I>,
 
 // 13.3.1 Let and Const Declarations
 
-// TODO: LexicalDeclaration
+// LexicalDeclaration
+
+struct LexicalDeclaration(LetOrConst, Vec<CommonDelim>, BindingList);
+
+// TODO: test
+fn lexical_declaration<I: U8Input>(i: ESInput<I>,
+                                         params: &Parameters)
+                                         -> ESParseResult<I, LexicalDeclaration> {
+
+    ensure_params!(params; "lexical_declaration"; Parameter::In; Parameter::Yield);
+
+    parse!{i;
+
+        let let_or_const = let_or_const();
+
+        let delim = common_delim();
+
+        let list = binding_list(params);
+
+        ret {
+            LexicalDeclaration(let_or_const, delim, list)
+        }
+    }
+}
+
+// LetOrConst
 
 enum LetOrConst {
     Let,
@@ -261,7 +286,98 @@ fn let_or_const<I: U8Input>(i: ESInput<I>)
         |i| string(i, b"const").map(|_| LetOrConst::Const))
 }
 
-// TODO: BindingList
+// BindingList
+
+struct BindingList(LexicalBinding, Vec<BindingListRest>);
+
+impl BindingList {
+    fn new(rhs_val: LexicalBinding) -> Self {
+        BindingList(rhs_val, vec![])
+    }
+
+    fn add_item(self,
+                operator_delim: BindingListDelim,
+                rhs_val: LexicalBinding)
+                -> Self {
+
+        let BindingList(head, rest) = self;
+        let mut rest = rest;
+
+        let BindingListDelim(delim_1, delim_2) = operator_delim;
+
+        let rhs = BindingListRest(delim_1, delim_2, rhs_val);
+
+        rest.push(rhs);
+
+        BindingList(head, rest)
+    }
+}
+
+struct BindingListRest(Vec<CommonDelim>,
+                                   /* , (comma) */
+                                   Vec<CommonDelim>,
+                                   LexicalBinding);
+
+struct BindingListDelim(Vec<CommonDelim>,
+                                    /* , (comma) */
+                                    Vec<CommonDelim>);
+
+generate_list_parser!(
+    BindingList;
+    BindingListRest;
+    BindingListState;
+    BindingListDelim;
+    LexicalBinding);
+
+// TODO: test
+fn binding_list<I: U8Input>(i: ESInput<I>,
+                                         params: &Parameters)
+                                         -> ESParseResult<I, BindingList> {
+
+    ensure_params!(params; "binding_list"; Parameter::In; Parameter::Yield);
+
+    type Accumulator = Rc<RefCell<BindingListState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim_1 = common_delim();
+
+            (i -> {
+                on_error(
+                    token(i, b','),
+                    |i| {
+                        let loc = i.position();
+                        // TODO: proper err message?
+                        ErrorLocation::new(loc, "Expected , here.".to_string())
+                    }
+                )
+            });
+
+            let delim_2 = common_delim();
+
+            ret {
+                let delim = BindingListDelim(delim_1, delim_2);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        lexical_binding(i, &params).bind(|i, rhs| {
+            accumulator.borrow_mut().add_item(rhs);
+            i.ret(())
+        })
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
+// LexicalBinding
 
 enum LexicalBinding {
     BindingIdentifier(BindingIdentifier, Option<(Vec<CommonDelim>, Initializer)>),
@@ -320,6 +436,8 @@ fn lexical_binding<I: U8Input>(i: ESInput<I>, params: &Parameters)
 }
 
 // 13.3.2 Variable Statement
+
+// VariableStatement
 
 struct VariableStatement(/* var */
                          Vec<CommonDelim>,
