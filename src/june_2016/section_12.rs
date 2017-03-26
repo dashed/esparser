@@ -118,15 +118,15 @@ pub fn binding_identifier<I: U8Input>(i: ESInput<I>,
 
 // LabelIdentifier
 
-enum LabelIdentifier {
+pub enum LabelIdentifier {
     Identifier(Identifier),
     Yield,
 }
 
 // TODO: test
-fn label_identifier<I: U8Input>(i: ESInput<I>,
-                                params: &Parameters)
-                                -> ESParseResult<I, LabelIdentifier> {
+pub fn label_identifier<I: U8Input>(i: ESInput<I>,
+                                    params: &Parameters)
+                                    -> ESParseResult<I, LabelIdentifier> {
 
     if !params.contains(&Parameter::Yield) {
 

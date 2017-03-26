@@ -11,11 +11,12 @@ use chomp::prelude::Either;
 // local imports
 
 use super::types::{Parameters, Parameter};
-use super::section_11::{common_delim, common_delim_required, CommonDelim, SemiColon, semicolon};
+use super::section_11::{common_delim, common_delim_required, common_delim_no_line_term_required,
+                        CommonDelim, SemiColon, semicolon};
 use super::section_12::{initializer, Initializer, binding_identifier, BindingIdentifier,
                         PropertyName, property_name, elision, Elision, Expression, expression,
                         LeftHandSideExpression, left_hand_side_expression, AssignmentExpression,
-                        assignment_expression};
+                        assignment_expression, label_identifier, LabelIdentifier};
 use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
 use parsers::error_location::ErrorLocation;
 
@@ -31,9 +32,8 @@ enum Statement {
     EmptyStatement(EmptyStatement),
     ExpressionStatement(ExpressionStatement),
     IfStatement(Box<IfStatement>),
-
-     /* TODO: fix
-     BreakableStatement(BreakableStatement), // TODO: more stuff */
+    // BreakableStatement(BreakableStatement),
+    ContinueStatement(ContinueStatement), // TODO: complete
 }
 
 // TODO: test
@@ -61,9 +61,11 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
         <|>
         (i -> expression_statement(i, &yield_params).map(Statement::ExpressionStatement))
         <|>
-        (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))));
+        (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))))
     //     <|>
     //     (i -> breakable_statement(i, &params).map(Statement::BreakableStatement));
+        <|>
+        (i -> continue_statement(i, &params).map(Statement::ContinueStatement));
 
     //     // TODO: more statements
 
@@ -2347,7 +2349,38 @@ fn for_binding<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<
 
 // 13.8 The continue Statement
 
-// TODO: complete
+enum ContinueStatement {
+    Continue(SemiColon),
+    Labelled(Vec<CommonDelim>, LabelIdentifier, SemiColon),
+}
+
+// TODO: test
+fn continue_statement<I: U8Input>(i: ESInput<I>,
+                                  params: &Parameters)
+                                  -> ESParseResult<I, ContinueStatement> {
+
+    ensure_params!(params; "continue"; Parameter::Yield);
+
+    or(i,
+       |i| {
+        parse!{i;
+            string(b"continue");
+            let semi_colon = semicolon();
+
+            ret ContinueStatement::Continue(semi_colon)
+        }
+    },
+       |i| {
+        parse!{i;
+            string(b"continue");
+            let delim = common_delim_no_line_term_required();
+            let ident = label_identifier(&params);
+            let semi_colon = semicolon();
+
+            ret ContinueStatement::Labelled(delim, ident, semi_colon)
+        }
+    })
+}
 
 // 13.9 The break Statement
 
