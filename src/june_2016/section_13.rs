@@ -29,9 +29,11 @@ enum Statement {
     BlockStatement(BlockStatement),
     VariableStatement(VariableStatement),
     EmptyStatement(EmptyStatement),
-    ExpressionStatement(ExpressionStatement), /* TODO: fix
-                                               *     IfStatement(Box<IfStatement>),
-                                               *     BreakableStatement(BreakableStatement), // TODO: more stuff */
+    ExpressionStatement(ExpressionStatement),
+    IfStatement(Box<IfStatement>),
+
+     /* TODO: fix
+     BreakableStatement(BreakableStatement), // TODO: more stuff */
 }
 
 // TODO: test
@@ -57,9 +59,9 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
         <|>
         (i -> empty_statement(i).map(Statement::EmptyStatement))
         <|>
-        (i -> expression_statement(i, &yield_params).map(Statement::ExpressionStatement));
-    //     <|>
-    //     (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))))
+        (i -> expression_statement(i, &yield_params).map(Statement::ExpressionStatement))
+        <|>
+        (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))));
     //     <|>
     //     (i -> breakable_statement(i, &params).map(Statement::BreakableStatement));
 
