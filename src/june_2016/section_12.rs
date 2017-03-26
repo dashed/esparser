@@ -3193,14 +3193,14 @@ fn conditional_expression<I: U8Input>(i: ESInput<I>,
 
 // AssignmentExpression
 
-enum AssignmentExpression {
-    ConditionalExpression(Box<ConditionalExpression>),
+pub enum AssignmentExpression {
+    ConditionalExpression(Box<ConditionalExpression>), // TODO: complete
 }
 
 // TODO: test
-fn assignment_expression<I: U8Input>(i: ESInput<I>,
-                                     params: &Parameters)
-                                     -> ESParseResult<I, AssignmentExpression> {
+pub fn assignment_expression<I: U8Input>(i: ESInput<I>,
+                                         params: &Parameters)
+                                         -> ESParseResult<I, AssignmentExpression> {
 
     if is_debug_mode!() {
         // validation

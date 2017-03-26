@@ -14,7 +14,8 @@ use super::types::{Parameters, Parameter};
 use super::section_11::{common_delim, common_delim_required, CommonDelim, SemiColon, semicolon};
 use super::section_12::{initializer, Initializer, binding_identifier, BindingIdentifier,
                         PropertyName, property_name, elision, Elision, Expression, expression,
-                        LeftHandSideExpression, left_hand_side_expression};
+                        LeftHandSideExpression, left_hand_side_expression, AssignmentExpression,
+                        assignment_expression};
 use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
 use parsers::error_location::ErrorLocation;
 
@@ -1501,12 +1502,79 @@ enum IterationStatement {
           Vec<CommonDelim>,
           Statement),
 
-    ForVarIn,
-    ForDeclarationIn,
+    ForVarIn(/* for */
+             Vec<CommonDelim>,
+             /* ( */
+             Vec<CommonDelim>,
+             /* var */
+             Vec<CommonDelim>,
+             ForBinding,
+             Vec<CommonDelim>,
+             /* in */
+             Vec<CommonDelim>,
+             Expression,
+             Vec<CommonDelim>,
+             /* ) */
+             Vec<CommonDelim>,
+             Statement),
 
-    ForOf,
-    ForVarOf,
-    ForDeclarationOf,
+    ForDeclarationIn(/* for */
+                     Vec<CommonDelim>,
+                     /* ( */
+                     Vec<CommonDelim>,
+                     ForDeclaration,
+                     Vec<CommonDelim>,
+                     /* in */
+                     Vec<CommonDelim>,
+                     Expression,
+                     Vec<CommonDelim>,
+                     /* ) */
+                     Vec<CommonDelim>,
+                     Statement),
+
+    ForOf(/* for */
+          Vec<CommonDelim>,
+          /* ( */
+          Vec<CommonDelim>,
+          LeftHandSideExpression,
+          Vec<CommonDelim>,
+          /* of */
+          Vec<CommonDelim>,
+          AssignmentExpression,
+          Vec<CommonDelim>,
+          /* ) */
+          Vec<CommonDelim>,
+          Statement),
+
+    ForVarOf(/* for */
+             Vec<CommonDelim>,
+             /* ( */
+             Vec<CommonDelim>,
+             /* var */
+             Vec<CommonDelim>,
+             ForBinding,
+             Vec<CommonDelim>,
+             /* of */
+             Vec<CommonDelim>,
+             AssignmentExpression,
+             Vec<CommonDelim>,
+             /* ) */
+             Vec<CommonDelim>,
+             Statement),
+
+    ForDeclarationOf(/* for */
+                     Vec<CommonDelim>,
+                     /* ( */
+                     Vec<CommonDelim>,
+                     ForDeclaration,
+                     Vec<CommonDelim>,
+                     /* of */
+                     Vec<CommonDelim>,
+                     AssignmentExpression,
+                     Vec<CommonDelim>,
+                     /* ) */
+                     Vec<CommonDelim>,
+                     Statement),
 }
 
 // TODO: test
@@ -1516,20 +1584,19 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
 
     ensure_params!(params; "iteration_statement"; Parameter::Return; Parameter::Yield);
 
-    let expr_params = {
-        let mut expr_params = params.clone();
-
-        expr_params.remove(&Parameter::Return);
-        expr_params.insert(Parameter::In);
-
-        expr_params
-    };
-    let expr_params = &expr_params;
-
     fn do_while<I: U8Input>(i: ESInput<I>,
-                            params: &Parameters,
-                            expr_params: &Parameters)
+                            params: &Parameters)
                             -> ESParseResult<I, IterationStatement> {
+
+        let expr_params = {
+            let mut expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                expr_params.insert(Parameter::Yield);
+            }
+            expr_params.insert(Parameter::In);
+            expr_params
+        };
+
         parse!{i;
 
             string(b"do");
@@ -1548,7 +1615,7 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
 
             let delim_4 = common_delim();
 
-            let expr = expression(expr_params);
+            let expr = expression(&expr_params);
 
             let delim_5 = common_delim();
 
@@ -1563,9 +1630,18 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
     }
 
     fn while_parse<I: U8Input>(i: ESInput<I>,
-                               params: &Parameters,
-                               expr_params: &Parameters)
+                               params: &Parameters)
                                -> ESParseResult<I, IterationStatement> {
+
+        let expr_params = {
+            let mut expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                expr_params.insert(Parameter::Yield);
+            }
+            expr_params.insert(Parameter::In);
+            expr_params
+        };
+
         parse!{i;
 
             string(b"while");
@@ -1593,13 +1669,23 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
     }
 
     fn for_loop<I: U8Input>(i: ESInput<I>,
-                            params: &Parameters,
-                            expr_params: &Parameters)
+                            params: &Parameters)
                             -> ESParseResult<I, IterationStatement> {
 
+        let expr_params = {
+            let mut expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                expr_params.insert(Parameter::Yield);
+            }
+            expr_params.insert(Parameter::In);
+            expr_params
+        };
+
         let init_expr_params = {
-            let mut init_expr_params = expr_params.clone();
-            init_expr_params.remove(&Parameter::In);
+            let mut init_expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                init_expr_params.insert(Parameter::Yield);
+            }
             init_expr_params
         };
 
@@ -1676,13 +1762,23 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
     }
 
     fn for_var_loop<I: U8Input>(i: ESInput<I>,
-                                params: &Parameters,
-                                expr_params: &Parameters)
+                                params: &Parameters)
                                 -> ESParseResult<I, IterationStatement> {
 
+        let expr_params = {
+            let mut expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                expr_params.insert(Parameter::Yield);
+            }
+            expr_params.insert(Parameter::In);
+            expr_params
+        };
+
         let init_expr_params = {
-            let mut init_expr_params = expr_params.clone();
-            init_expr_params.remove(&Parameter::In);
+            let mut init_expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                init_expr_params.insert(Parameter::Yield);
+            }
             init_expr_params
         };
 
@@ -1746,18 +1842,27 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
     }
 
     fn for_declaration_loop<I: U8Input>(i: ESInput<I>,
-                                        params: &Parameters,
-                                        expr_params: &Parameters)
+                                        params: &Parameters)
                                         -> ESParseResult<I, IterationStatement> {
 
+        let expr_params = {
+            let mut expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                expr_params.insert(Parameter::Yield);
+            }
+            expr_params.insert(Parameter::In);
+            expr_params
+        };
+
         let init_expr_params = {
-            let mut init_expr_params = expr_params.clone();
-            init_expr_params.remove(&Parameter::In);
+            let mut init_expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                init_expr_params.insert(Parameter::Yield);
+            }
             init_expr_params
         };
 
         parse!{i;
-
 
             string(b"for");
 
@@ -1806,22 +1911,398 @@ fn iteration_statement<I: U8Input>(i: ESInput<I>,
         }
     }
 
-    let parse_result = parse!{i;
+    fn for_in<I: U8Input>(i: ESInput<I>,
+                          params: &Parameters)
+                          -> ESParseResult<I, IterationStatement> {
+
+        let lhs_expr_params = {
+            let mut lhs_expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                lhs_expr_params.insert(Parameter::Yield);
+            }
+            lhs_expr_params
+        };
+
+        let expr_params = {
+            let mut expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                expr_params.insert(Parameter::Yield);
+            }
+            expr_params.insert(Parameter::In);
+            expr_params
+        };
+
+        parse!{i;
+
+            string(b"for");
+
+            let delim_1 = common_delim();
+
+            string(b"(");
+
+            let delim_2 = common_delim();
+
+            let lhs_expr = (i -> {
+                either(i, |i| or(i, |i| string(i, b"let"), |i| string(i, b"[")),
+                    |i| left_hand_side_expression(i, &lhs_expr_params))
+                    .bind(|i, result| -> ESParseResult<I, LeftHandSideExpression> {
+                        match result {
+                            // TODO: err
+                            Either::Left(_) => i.err("".into()),
+                            Either::Right(lhs_expr) => i.ret(lhs_expr)
+                        }
+                    })
+            });
+
+            let delim_3 = common_delim();
+
+            string(b"in");
+
+            let delim_4 = common_delim();
+
+            let expr = expression(&expr_params);
+
+            let delim_5 = common_delim();
+
+            string(b")");
+
+            let delim_6 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                IterationStatement::ForIn(delim_1, delim_2, lhs_expr, delim_3, delim_4, expr, delim_5, delim_6, stmt)
+            }
+
+        }
+
+    }
+
+    fn for_var_in<I: U8Input>(i: ESInput<I>,
+                              params: &Parameters)
+                              -> ESParseResult<I, IterationStatement> {
+
+        let for_binding_params = {
+            let mut for_binding_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                for_binding_params.insert(Parameter::Yield);
+            }
+            for_binding_params
+        };
+
+        let expr_params = {
+            let mut expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                expr_params.insert(Parameter::Yield);
+            }
+            expr_params.insert(Parameter::In);
+            expr_params
+        };
+
+        parse!{i;
+
+            string(b"for");
+
+            let delim_1 = common_delim();
+
+            string(b"(");
+
+            let delim_2 = common_delim();
+
+            string(b"var");
+
+            let delim_3 = common_delim();
+
+            let for_binding = for_binding(&for_binding_params);
+
+            let delim_4 = common_delim();
+
+            string(b"in");
+
+            let delim_5 = common_delim();
+
+            let expr = expression(&expr_params);
+
+            let delim_6 = common_delim();
+
+            string(b")");
+
+            let delim_7 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                IterationStatement::ForVarIn(delim_1, delim_2, delim_3, for_binding, delim_4, delim_5, expr, delim_6, delim_7, stmt)
+            }
+
+        }
+
+    }
+
+    fn for_declaration_in<I: U8Input>(i: ESInput<I>,
+                                      params: &Parameters)
+                                      -> ESParseResult<I, IterationStatement> {
+
+        let for_decl_params = {
+            let mut for_decl_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                for_decl_params.insert(Parameter::Yield);
+            }
+            for_decl_params
+        };
+
+        let expr_params = {
+            let mut expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                expr_params.insert(Parameter::Yield);
+            }
+            expr_params.insert(Parameter::In);
+            expr_params
+        };
+
+        parse!{i;
+
+            string(b"for");
+
+            let delim_1 = common_delim();
+
+            string(b"(");
+
+            let delim_2 = common_delim();
+
+            let for_declaration = for_declaration(&for_decl_params);
+
+            let delim_3 = common_delim();
+
+            string(b"in");
+
+            let delim_4 = common_delim();
+
+            let expr = expression(&expr_params);
+
+            let delim_5 = common_delim();
+
+            string(b")");
+
+            let delim_6 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                IterationStatement::ForDeclarationIn(delim_1, delim_2, for_declaration, delim_3, delim_4, expr, delim_5, delim_6, stmt)
+            }
+
+        }
+
+    }
+
+    fn for_of<I: U8Input>(i: ESInput<I>,
+                          params: &Parameters)
+                          -> ESParseResult<I, IterationStatement> {
+
+        let lhs_expr_params = {
+            let mut lhs_expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                lhs_expr_params.insert(Parameter::Yield);
+            }
+            lhs_expr_params
+        };
+
+        let expr_params = {
+            let mut expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                expr_params.insert(Parameter::Yield);
+            }
+            expr_params.insert(Parameter::In);
+            expr_params
+        };
+
+        parse!{i;
+
+            string(b"for");
+
+            let delim_1 = common_delim();
+
+            string(b"(");
+
+            let delim_2 = common_delim();
+
+            let lhs_expr = (i -> {
+                either(i, |i| string(i, b"let"),
+                    |i| left_hand_side_expression(i, &lhs_expr_params))
+                    .bind(|i, result| -> ESParseResult<I, LeftHandSideExpression> {
+                        match result {
+                            // TODO: err
+                            Either::Left(_) => i.err("".into()),
+                            Either::Right(lhs_expr) => i.ret(lhs_expr)
+                        }
+                    })
+            });
+
+            let delim_3 = common_delim();
+
+            string(b"of");
+
+            let delim_4 = common_delim();
+
+            let expr = assignment_expression(&expr_params);
+
+            let delim_5 = common_delim();
+
+            string(b")");
+
+            let delim_6 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                IterationStatement::ForOf(delim_1, delim_2, lhs_expr, delim_3, delim_4, expr, delim_5, delim_6, stmt)
+            }
+
+        }
+
+    }
+
+    fn for_var_of<I: U8Input>(i: ESInput<I>,
+                              params: &Parameters)
+                              -> ESParseResult<I, IterationStatement> {
+
+        let for_binding_params = {
+            let mut for_binding_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                for_binding_params.insert(Parameter::Yield);
+            }
+            for_binding_params
+        };
+
+        let expr_params = {
+            let mut expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                expr_params.insert(Parameter::Yield);
+            }
+            expr_params.insert(Parameter::In);
+            expr_params
+        };
+
+        parse!{i;
+
+            string(b"for");
+
+            let delim_1 = common_delim();
+
+            string(b"(");
+
+            let delim_2 = common_delim();
+
+            string(b"var");
+
+            let delim_3 = common_delim();
+
+            let for_binding = for_binding(&for_binding_params);
+
+            let delim_4 = common_delim();
+
+            string(b"of");
+
+            let delim_5 = common_delim();
+
+            let expr = assignment_expression(&expr_params);
+
+            let delim_6 = common_delim();
+
+            string(b")");
+
+            let delim_7 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                IterationStatement::ForVarOf(delim_1, delim_2, delim_3, for_binding, delim_4, delim_5, expr, delim_6, delim_7, stmt)
+            }
+
+        }
+
+    }
+
+    fn for_declaration_of<I: U8Input>(i: ESInput<I>,
+                                      params: &Parameters)
+                                      -> ESParseResult<I, IterationStatement> {
+
+        let for_declaration_params = {
+            let mut for_declaration_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                for_declaration_params.insert(Parameter::Yield);
+            }
+            for_declaration_params
+        };
+
+        let expr_params = {
+            let mut expr_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                expr_params.insert(Parameter::Yield);
+            }
+            expr_params.insert(Parameter::In);
+            expr_params
+        };
+
+        parse!{i;
+
+            string(b"for");
+
+            let delim_1 = common_delim();
+
+            string(b"(");
+
+            let delim_2 = common_delim();
+
+            let for_declaration = for_declaration(&for_declaration_params);
+
+            let delim_3 = common_delim();
+
+            string(b"of");
+
+            let delim_4 = common_delim();
+
+            let expr = assignment_expression(&expr_params);
+
+            let delim_5 = common_delim();
+
+            string(b")");
+
+            let delim_6 = common_delim();
+
+            let stmt = statement(&params);
+
+            ret {
+                IterationStatement::ForDeclarationOf(delim_1, delim_2, for_declaration, delim_3, delim_4, expr, delim_5, delim_6, stmt)
+            }
+
+        }
+
+    }
+
+    parse!{i;
 
         let iteration_statement: IterationStatement =
 
-            do_while(&params, &expr_params) <|>
-            while_parse(&params, &expr_params) <|>
+            do_while(&params) <|>
+            while_parse(&params) <|>
 
-            for_loop(&params, &expr_params) <|>
-            for_var_loop(&params, &expr_params) <|>
-            for_declaration_loop(&params, &expr_params);
+            for_loop(&params) <|>
+            for_var_loop(&params) <|>
+            for_declaration_loop(&params) <|>
+
+            for_in(&params) <|>
+            for_var_in(&params) <|>
+            for_declaration_in(&params) <|>
+
+            for_of(&params) <|>
+            for_var_of(&params) <|>
+            for_declaration_of(&params);
 
 
         ret iteration_statement
-    };
-
-    parse_result
+    }
 }
 
 // ForDeclaration
