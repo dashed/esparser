@@ -2398,6 +2398,31 @@ fn continue_statement<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
+// DefaultClause
+
+struct DefaultClause(/* default */ Vec<CommonDelim>, /* : */ Vec<CommonDelim>, Option<StatementList>);
+
+// TODO: test
+fn default_clause<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, DefaultClause> {
+
+    ensure_params!(params; "default_clause"; Parameter::Yield; Parameter::Return);
+
+    parse!{i;
+
+        string(b"default");
+
+        let delim_1 = common_delim();
+
+        string(b":");
+
+        let delim_2 = common_delim();
+
+        let stmt = option(|i| statement_list(i, params).map(Some), None);
+
+        ret DefaultClause(delim_1, delim_2, stmt)
+    }
+}
+
 // 13.13 Labelled Statements
 
 // TODO: complete
