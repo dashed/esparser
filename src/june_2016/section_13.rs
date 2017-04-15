@@ -2398,6 +2398,73 @@ fn continue_statement<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
+// CaseClauses
+
+pub struct CaseClauses(CaseClause, Vec<CaseClauseRest>);
+
+impl CaseClauses {
+    fn new(rhs_val: CaseClause) -> Self {
+        CaseClauses(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: CaseClausesDelim, rhs_val: CaseClause) -> Self {
+
+        let CaseClauses(head, rest) = self;
+        let mut rest = rest;
+
+        let CaseClausesDelim(delim) = operator_delim;
+        let rhs_val = CaseClauseRest(delim, rhs_val);
+
+        rest.push(rhs_val);
+
+        CaseClauses(head, rest)
+    }
+}
+
+struct CaseClauseRest(Vec<CommonDelim>, CaseClause);
+
+struct CaseClausesDelim(Vec<CommonDelim>);
+
+generate_list_parser!(
+    CaseClauses;
+    CaseClauseRest;
+    CaseClausesState;
+    CaseClausesDelim;
+    CaseClause);
+
+// TODO: test
+fn case_clauses<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, CaseClauses> {
+
+    ensure_params!(params; "case_clauses"; Parameter::Return; Parameter::Yield);
+
+    type Accumulator = Rc<RefCell<CaseClausesState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        parse!{i;
+
+            let delim = common_delim();
+
+            ret {
+                let delim = CaseClausesDelim(delim);
+
+                accumulator.borrow_mut().add_delim(delim);
+                ()
+            }
+        }
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        case_clause(i, &params).bind(|i, rhs| {
+            accumulator.borrow_mut().add_item(rhs);
+            i.ret(())
+        })
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
+
 // CaseClause
 
 struct CaseClause(/* case */
