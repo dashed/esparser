@@ -66,7 +66,7 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
         <|>
         (i -> breakable_statement(i, &params).map(|x| Statement::BreakableStatement(Box::new(x))))
         <|>
-        (i -> continue_statement(i, &params).map(Statement::ContinueStatement));
+        (i -> continue_statement(i, &yield_params).map(Statement::ContinueStatement));
 
     //     // TODO: more statements
 
