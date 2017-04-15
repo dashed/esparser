@@ -2400,7 +2400,13 @@ fn continue_statement<I: U8Input>(i: ESInput<I>,
 
 // CaseClause
 
-struct CaseClause(/* case */ Vec<CommonDelim>, Expression, Vec<CommonDelim>, /* : */ Vec<CommonDelim>, Option<StatementList>);
+struct CaseClause(/* case */
+                  Vec<CommonDelim>,
+                  Expression,
+                  Vec<CommonDelim>,
+                  /* : */
+                  Vec<CommonDelim>,
+                  Option<StatementList>);
 
 // TODO: test
 fn case_clause<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, CaseClause> {
@@ -2438,10 +2444,16 @@ fn case_clause<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<
 
 // DefaultClause
 
-struct DefaultClause(/* default */ Vec<CommonDelim>, /* : */ Vec<CommonDelim>, Option<StatementList>);
+struct DefaultClause(/* default */
+                     Vec<CommonDelim>,
+                     /* : */
+                     Vec<CommonDelim>,
+                     Option<StatementList>);
 
 // TODO: test
-fn default_clause<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, DefaultClause> {
+fn default_clause<I: U8Input>(i: ESInput<I>,
+                              params: &Parameters)
+                              -> ESParseResult<I, DefaultClause> {
 
     ensure_params!(params; "default_clause"; Parameter::Yield; Parameter::Return);
 
