@@ -32,7 +32,7 @@ enum Statement {
     EmptyStatement(EmptyStatement),
     ExpressionStatement(ExpressionStatement),
     IfStatement(Box<IfStatement>),
-    // BreakableStatement(BreakableStatement),
+    BreakableStatement(Box<BreakableStatement>),
     ContinueStatement(ContinueStatement), // TODO: complete
 }
 
@@ -62,8 +62,8 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
         (i -> expression_statement(i, &yield_params).map(Statement::ExpressionStatement))
         <|>
         (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))))
-    //     <|>
-    //     (i -> breakable_statement(i, &params).map(Statement::BreakableStatement));
+        <|>
+        (i -> breakable_statement(i, &params).map(|x| Statement::BreakableStatement(Box::new(x))))
         <|>
         (i -> continue_statement(i, &params).map(Statement::ContinueStatement));
 
@@ -99,7 +99,26 @@ fn declaration<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<
 
 // TODO: HoistableDeclaration
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-BreakableStatement
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-HoistableDeclaration
+
+// BreakableStatement
+
+enum BreakableStatement {
+    IterationStatement(IterationStatement),
+    SwitchStatement(SwitchStatement),
+}
+
+// TODO: test
+fn breakable_statement<I: U8Input>(i: ESInput<I>,
+                                   params: &Parameters)
+                                   -> ESParseResult<I, BreakableStatement> {
+
+    ensure_params!(params; "breakable_statement"; Parameter::Return; Parameter::Yield);
+
+    or(i,
+       |i| iteration_statement(i, &params).map(BreakableStatement::IterationStatement),
+       |i| switch_statement(i, &params).map(BreakableStatement::SwitchStatement))
+}
 
 // 13.2 Block
 
