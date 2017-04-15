@@ -2398,6 +2398,44 @@ fn continue_statement<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
+// CaseClause
+
+struct CaseClause(/* case */ Vec<CommonDelim>, Expression, Vec<CommonDelim>, /* : */ Vec<CommonDelim>, Option<StatementList>);
+
+// TODO: test
+fn case_clause<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, CaseClause> {
+
+    ensure_params!(params; "case_clause"; Parameter::Yield; Parameter::Return);
+
+    let in_params = {
+        let mut in_params = Parameters::new();
+        in_params.insert(Parameter::In);
+        if params.contains(&Parameter::Yield) {
+            in_params.insert(Parameter::Yield);
+        }
+        in_params
+    };
+
+    parse!{i;
+
+        string(b"case");
+
+        let delim_1 = common_delim();
+
+        let expr = expression(&in_params);
+
+        let delim_2 = common_delim();
+
+        string(b":");
+
+        let delim_3 = common_delim();
+
+        let stmt = option(|i| statement_list(i, params).map(Some), None);
+
+        ret CaseClause(delim_1, expr, delim_2, delim_3, stmt)
+    }
+}
+
 // DefaultClause
 
 struct DefaultClause(/* default */ Vec<CommonDelim>, /* : */ Vec<CommonDelim>, Option<StatementList>);
