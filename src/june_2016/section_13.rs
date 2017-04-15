@@ -2406,6 +2406,69 @@ fn continue_statement<I: U8Input>(i: ESInput<I>,
 
 // TODO: complete
 
+// CaseBlock
+
+enum CaseBlock {
+    NoDefault(Vec<CommonDelim>, Option<CaseClauses>, Vec<CommonDelim>),
+    WithDefault(Vec<CommonDelim>,
+                Option<CaseClauses>,
+                Vec<CommonDelim>,
+                DefaultClause,
+                Vec<CommonDelim>,
+                Option<CaseClauses>,
+                Vec<CommonDelim>),
+}
+
+// TODO: test
+fn case_block<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, CaseBlock> {
+
+    ensure_params!(params; "case_block"; Parameter::Return; Parameter::Yield);
+
+    or(i,
+       |i| {
+        parse!{i;
+
+            string(b"{");
+
+            let delim_1 = common_delim();
+
+            let cases = (i -> case_clauses(i, &params).map(Some));
+
+            let delim_2 = common_delim();
+
+            string(b"}");
+
+            ret CaseBlock::NoDefault(delim_1, cases, delim_2)
+        }
+    },
+       |i| {
+
+        parse!{i;
+
+            string(b"{");
+
+            let delim_1 = common_delim();
+
+            let cases_1 = (i -> case_clauses(i, &params).map(Some));
+
+            let delim_2 = common_delim();
+
+            let default_case = default_clause(&params);
+
+            let delim_3 = common_delim();
+
+            let cases_2 = (i -> case_clauses(i, &params).map(Some));
+
+            let delim_4 = common_delim();
+
+            string(b"}");
+
+            ret CaseBlock::WithDefault(delim_1, cases_1, delim_2, default_case, delim_3, cases_2, delim_4)
+
+        }
+    })
+}
+
 // CaseClauses
 
 pub struct CaseClauses(CaseClause, Vec<CaseClauseRest>);
