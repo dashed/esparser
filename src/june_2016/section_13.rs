@@ -155,7 +155,7 @@ fn block<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Blo
 
 // StatementList
 
-pub struct StatementList(StatementListItem, Vec<StatementListItem>);
+pub struct StatementList(StatementListItem, Vec<StatementListItemRest>);
 
 impl StatementList {
     fn new(rhs_val: StatementListItem) -> Self {
@@ -167,17 +167,23 @@ impl StatementList {
         let StatementList(head, rest) = self;
         let mut rest = rest;
 
+        let StatementListDelim(delim) = operator_delim;
+
+        let rhs_val = StatementListItemRest(delim, rhs_val);
+
         rest.push(rhs_val);
 
         StatementList(head, rest)
     }
 }
 
-struct StatementListDelim;
+struct StatementListDelim(Vec<CommonDelim>);
+
+struct StatementListItemRest(Vec<CommonDelim>, StatementListItem);
 
 generate_list_parser!(
     StatementList;
-    StatementListItem; /* rest */
+    StatementListItemRest;
     StatementListState;
     StatementListDelim;
     StatementListItem);
@@ -200,8 +206,10 @@ pub fn statement_list<I: U8Input>(i: ESInput<I>,
 
     #[inline]
     fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
-        accumulator.borrow_mut().add_delim(StatementListDelim);
-        i.ret(())
+        common_delim(i).map(|delim| {
+            accumulator.borrow_mut().add_delim(StatementListDelim(delim));
+            ()
+        })
     }
 
     #[inline]
