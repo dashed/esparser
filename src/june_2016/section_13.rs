@@ -2404,7 +2404,54 @@ fn continue_statement<I: U8Input>(i: ESInput<I>,
 
 // 13.12 The switch Statement
 
-// TODO: complete
+// SwitchStatement
+
+struct SwitchStatement(Vec<CommonDelim>,
+                       Vec<CommonDelim>,
+                       Expression,
+                       Vec<CommonDelim>,
+                       Vec<CommonDelim>,
+                       CaseBlock);
+
+// TODO: test
+fn switch_statement<I: U8Input>(i: ESInput<I>,
+                                params: &Parameters)
+                                -> ESParseResult<I, SwitchStatement> {
+
+    ensure_params!(params; "switch_statement"; Parameter::Return; Parameter::Yield);
+
+    let in_params = {
+        let mut in_params = Parameters::new();
+        in_params.insert(Parameter::In);
+        if params.contains(&Parameter::Yield) {
+            in_params.insert(Parameter::Yield);
+        }
+        in_params
+    };
+
+    parse!{i;
+
+        string(b"switch");
+
+        let delim_1 = common_delim();
+
+        string(b"(");
+
+        let delim_2 = common_delim();
+
+        let expr = expression(&in_params);
+
+        let delim_3 = common_delim();
+
+        string(b")");
+
+        let delim_4 = common_delim();
+
+        let block = case_block(&params);
+
+        ret SwitchStatement(delim_1, delim_2, expr, delim_3, delim_4, block)
+    }
+}
 
 // CaseBlock
 
