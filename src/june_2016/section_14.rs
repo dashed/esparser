@@ -13,7 +13,8 @@ use chomp::prelude::Either;
 use super::types::{Parameters, Parameter};
 use super::section_11::{common_delim, common_delim_required, CommonDelim, SemiColon, semicolon};
 use super::section_12::{initializer, Initializer, binding_identifier, BindingIdentifier,
-                        PropertyName, property_name};
+                        PropertyName, property_name, left_hand_side_expression,
+                        LeftHandSideExpression};
 use super::section_13::{statement_list, StatementList, binding_element, BindingElement,
                         binding_rest_element, BindingRestElement};
 use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
@@ -977,6 +978,29 @@ fn generator_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, GeneratorBody> 
 // 14.5 Class Definitions
 
 // TODO: complete
+
+// ClassHeritage
+
+struct ClassHeritage(Vec<CommonDelim>, LeftHandSideExpression);
+
+// TODO: test
+fn class_heritage<I: U8Input>(i: ESInput<I>,
+                              params: &Parameters)
+                              -> ESParseResult<I, ClassHeritage> {
+
+    ensure_params!(params; "class_heritage"; Parameter::Yield);
+
+    parse!{i;
+
+        string(b"extends");
+
+        let delim = common_delim();
+
+        let lhs_expr = left_hand_side_expression(params);
+
+        ret ClassHeritage(delim, lhs_expr)
+    }
+}
 
 // ClassBody
 
