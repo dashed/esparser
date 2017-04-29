@@ -17,7 +17,8 @@ use super::section_12::{initializer, Initializer, binding_identifier, BindingIde
                         PropertyName, property_name, elision, Elision, Expression, expression,
                         LeftHandSideExpression, left_hand_side_expression, AssignmentExpression,
                         assignment_expression, label_identifier, LabelIdentifier};
-use super::section_14::{function_declaration, FunctionDeclaration};
+use super::section_14::{function_declaration, FunctionDeclaration, generator_declaration,
+                        GeneratorDeclaration};
 use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
 use parsers::error_location::ErrorLocation;
 
@@ -125,7 +126,7 @@ fn declaration<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<
 
 enum HoistableDeclaration {
     FunctionDeclaration(FunctionDeclaration),
-    GeneratorDeclaration, // TODO: todo-note
+    GeneratorDeclaration(GeneratorDeclaration),
 }
 
 // TODO: test
@@ -137,11 +138,8 @@ fn hoistable_declaration<I: U8Input>(i: ESInput<I>,
 
     or(i,
        |i| function_declaration(i, &params).map(HoistableDeclaration::FunctionDeclaration),
-       // TODO: todo-note
-       |i| function_declaration(i, &params).map(HoistableDeclaration::FunctionDeclaration))
+       |i| generator_declaration(i, &params).map(HoistableDeclaration::GeneratorDeclaration))
 }
-
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-HoistableDeclaration
 
 // BreakableStatement
 

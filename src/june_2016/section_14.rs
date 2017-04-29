@@ -115,7 +115,7 @@ pub fn function_declaration<I: U8Input>(i: ESInput<I>,
                        FunctionBody,
                        Vec<CommonDelim> /* } */);
 
-    let foo: ESParseResult<I, ReturnType> = parse!{i;
+    let parsed_func: ESParseResult<I, ReturnType> = parse!{i;
 
         string(b"function");
 
@@ -126,7 +126,7 @@ pub fn function_declaration<I: U8Input>(i: ESInput<I>,
 
         let delim_3 = common_delim();
 
-        let formal_params = formal_parameters(&params);
+        let formal_params = formal_parameters(&Parameters::new());
 
         let delim_4 = common_delim();
 
@@ -149,7 +149,7 @@ pub fn function_declaration<I: U8Input>(i: ESInput<I>,
         }
     };
 
-    foo.bind(|i, result| {
+    parsed_func.bind(|i, result| {
 
         let (name, delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7) =
             result;
@@ -236,7 +236,7 @@ pub fn function_expression<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Functi
                        FunctionBody,
                        Vec<CommonDelim> /* } */);
 
-    let foo: ESParseResult<I, ReturnType> = parse!{i;
+    let parsed_func: ESParseResult<I, ReturnType> = parse!{i;
 
         string(b"function");
 
@@ -258,7 +258,7 @@ pub fn function_expression<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Functi
 
         let delim_3 = common_delim();
 
-        let formal_params = formal_parameters(&params);
+        let formal_params = formal_parameters(&Parameters::new());
 
         let delim_4 = common_delim();
 
@@ -282,7 +282,7 @@ pub fn function_expression<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, Functi
 
     };
 
-    foo.bind(|i, result| {
+    parsed_func.bind(|i, result| {
 
         let (fn_name, delim_2, delim_3, formal_params, delim_4, delim_5, delim_6, body, delim_7) =
             result;
@@ -349,12 +349,7 @@ fn formal_parameters<I: U8Input>(i: ESInput<I>,
                                  params: &Parameters)
                                  -> ESParseResult<I, FormalParameters> {
 
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
-            panic!("misuse of formal_parameters");
-        }
-    }
+    ensure_params!(params; "formal_parameters"; Parameter::Yield);
 
     option(i,
            |i| formal_parameter_list(i, params).map(FormalParameters::FormalParameterList),
@@ -378,12 +373,7 @@ fn formal_parameter_list<I: U8Input>(i: ESInput<I>,
                                      params: &Parameters)
                                      -> ESParseResult<I, FormalParameterList> {
 
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
-            panic!("misuse of formal_parameter_list");
-        }
-    }
+    ensure_params!(params; "formal_parameter_list"; Parameter::Yield);
 
     or(i,
        |i| function_rest_parameter(i, &params).map(FormalParameterList::FunctionRestParameter),
@@ -556,12 +546,8 @@ struct FunctionBody(FunctionStatementList);
 
 // TODO: test
 fn function_body<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, FunctionBody> {
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
-            panic!("misuse of function_body");
-        }
-    }
+
+    ensure_params!(params; "function_body"; Parameter::Yield);
 
     function_statement_list(i, params).map(FunctionBody)
 }
@@ -626,18 +612,11 @@ pub enum MethodDefinition {
 }
 
 // TODO: test
-// http://www.ecma-international.org/ecma-262/7.0/#prod-MethodDefinition
 pub fn method_definition<I: U8Input>(i: ESInput<I>,
                                      params: &Parameters)
                                      -> ESParseResult<I, MethodDefinition> {
 
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
-            panic!("misuse of method_definition");
-        }
-
-    }
+    ensure_params!(params; "method_definition"; Parameter::Yield);
 
     #[inline]
     fn method_definition<I: U8Input>(i: ESInput<I>,
@@ -652,7 +631,7 @@ pub fn method_definition<I: U8Input>(i: ESInput<I>,
             token(b'(');
             let delim_2 = common_delim();
 
-            let formal_params = strict_formal_parameters(&params);
+            let formal_params = strict_formal_parameters(&Parameters::new());
 
             let delim_3 = common_delim();
             token(b')');
@@ -660,7 +639,7 @@ pub fn method_definition<I: U8Input>(i: ESInput<I>,
             token(b'{');
             let delim_5 = common_delim();
 
-            let body = function_body(&params);
+            let body = function_body(&Parameters::new());
 
             let delim_6 = common_delim();
             token(b'}');
@@ -698,7 +677,7 @@ pub fn method_definition<I: U8Input>(i: ESInput<I>,
             token(b'{');
             let delim_5 = common_delim();
 
-            let body = function_body(&params);
+            let body = function_body(&Parameters::new());
 
             let delim_6 = common_delim();
             token(b'}');
@@ -739,7 +718,7 @@ pub fn method_definition<I: U8Input>(i: ESInput<I>,
             token(b'{');
             let delim_6 = common_delim();
 
-            let body = function_body(&params);
+            let body = function_body(&Parameters::new());
 
             let delim_7 = common_delim();
             token(b'}');
@@ -793,12 +772,7 @@ fn generator_method<I: U8Input>(i: ESInput<I>,
                                 params: &Parameters)
                                 -> ESParseResult<I, GeneratorMethod> {
 
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
-            panic!("misuse of generator_method");
-        }
-    }
+    ensure_params!(params; "generator_method"; Parameter::Yield);
 
     parse!{i;
 
@@ -831,9 +805,154 @@ fn generator_method<I: U8Input>(i: ESInput<I>,
 
 }
 
+// GeneratorDeclaration
 
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-GeneratorDeclaration
+pub enum GeneratorDeclaration {
+    Named(Vec<CommonDelim>,
+          Vec<CommonDelim>,
+          BindingIdentifier,
+          Vec<CommonDelim>,
+          Vec<CommonDelim>,
+          FormalParameters,
+          Vec<CommonDelim>,
+          Vec<CommonDelim>,
+          Vec<CommonDelim>,
+          GeneratorBody,
+          Vec<CommonDelim>),
+    Anonymous(Vec<CommonDelim>,
+              Vec<CommonDelim>,
+              Vec<CommonDelim>,
+              FormalParameters,
+              Vec<CommonDelim>,
+              Vec<CommonDelim>,
+              Vec<CommonDelim>,
+              GeneratorBody,
+              Vec<CommonDelim>),
+}
 
+// TODO: test
+pub fn generator_declaration<I: U8Input>(i: ESInput<I>,
+                                         params: &Parameters)
+                                         -> ESParseResult<I, GeneratorDeclaration> {
+
+    ensure_params!(params; "generator_declaration"; Parameter::Yield; Parameter::Default);
+
+    fn named<I: U8Input>(i: ESInput<I>,
+                         params: &Parameters)
+                         -> ESParseResult<I, GeneratorDeclaration> {
+
+        let yield_params = {
+            let mut yield_params = Parameters::new();
+
+            if params.contains(&Parameter::Yield) {
+                yield_params.insert(Parameter::Yield);
+            }
+
+            yield_params
+        };
+
+        let formal_params = {
+            let mut formal_params = Parameters::new();
+            formal_params.insert(Parameter::Yield);
+            formal_params
+        };
+
+        parse!{i;
+
+            string(b"function");
+
+            let delim_1 = common_delim();
+
+            string(b"*");
+
+            let delim_2 = common_delim();
+
+            let name = binding_identifier(&yield_params);
+
+            let delim_3 = common_delim();
+
+            string(b"(");
+
+            let delim_4 = common_delim();
+
+            let func_formal_params = formal_parameters(&formal_params);
+
+            let delim_5 = common_delim();
+
+            string(b")");
+
+            let delim_6 = common_delim();
+
+            string(b"{");
+
+            let delim_7 = common_delim();
+
+            let body = generator_body();
+
+            let delim_8 = common_delim();
+
+            string(b"}");
+
+            ret GeneratorDeclaration::Named(delim_1, delim_2, name, delim_3, delim_4,
+                func_formal_params, delim_5, delim_6, delim_7, body, delim_8)
+        }
+    }
+
+    fn anonymous<I: U8Input>(i: ESInput<I>,
+                             params: &Parameters)
+                             -> ESParseResult<I, GeneratorDeclaration> {
+
+        let formal_params = {
+            let mut formal_params = Parameters::new();
+            formal_params.insert(Parameter::Yield);
+            formal_params
+        };
+
+        parse!{i;
+
+            string(b"function");
+
+            let delim_1 = common_delim();
+
+            string(b"*");
+
+            let delim_2 = common_delim();
+
+            string(b"(");
+
+            let delim_3 = common_delim();
+
+            let func_formal_params = formal_parameters(&formal_params);
+
+            let delim_4 = common_delim();
+
+            string(b")");
+
+            let delim_5 = common_delim();
+
+            string(b"{");
+
+            let delim_6 = common_delim();
+
+            let body = generator_body();
+
+            let delim_7 = common_delim();
+
+            string(b"}");
+
+            ret GeneratorDeclaration::Anonymous(delim_1, delim_2, delim_3, func_formal_params, delim_4,
+                delim_5, delim_6, body, delim_7)
+        }
+    }
+
+    if params.contains(&Parameter::Default) {
+        return or(i, |i| named(i, &params), |i| anonymous(i, &params));
+    }
+
+    named(i, params)
+}
+
+// TODO: GeneratorExpression
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-GeneratorExpression
 
 // GeneratorBody
@@ -843,8 +962,14 @@ struct GeneratorBody(FunctionBody);
 // TODO: test
 fn generator_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, GeneratorBody> {
 
-    let mut params = Parameters::new();
-    params.insert(Parameter::Yield);
+    let params = {
+        let mut params = Parameters::new();
+        params.insert(Parameter::Yield);
+        params
+    };
 
     function_body(i, &params).map(GeneratorBody)
 }
+
+// TODO: YieldExpression
+// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-YieldExpression
