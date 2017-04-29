@@ -11,10 +11,11 @@ use chomp::prelude::Either;
 // local imports
 
 use super::types::{Parameters, Parameter};
-use super::section_11::{common_delim, common_delim_required, CommonDelim, SemiColon, semicolon};
+use super::section_11::{common_delim, common_delim_required, common_delim_no_line_term,
+                        CommonDelim, SemiColon, semicolon};
 use super::section_12::{initializer, Initializer, binding_identifier, BindingIdentifier,
                         PropertyName, property_name, left_hand_side_expression,
-                        LeftHandSideExpression};
+                        LeftHandSideExpression, assignment_expression, AssignmentExpression};
 use super::section_13::{statement_list, StatementList, binding_element, BindingElement,
                         binding_rest_element, BindingRestElement};
 use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
@@ -972,8 +973,89 @@ fn generator_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, GeneratorBody> 
     function_body(i, &params).map(GeneratorBody)
 }
 
-// TODO: YieldExpression
-// TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-YieldExpression
+// YieldExpression
+
+pub enum YieldExpression {
+    Yield,
+    YieldGenerator(Vec<CommonDelim>, AssignmentExpression),
+    YieldIterable(Vec<CommonDelim>, Vec<CommonDelim>, AssignmentExpression),
+}
+
+// TODO: test
+pub fn yield_expression<I: U8Input>(i: ESInput<I>,
+                                    params: &Parameters)
+                                    -> ESParseResult<I, YieldExpression> {
+
+    ensure_params!(params; "yield_expression"; Parameter::In);
+
+    let assignment_expression_params = {
+        let mut assignment_expression_params = params.clone();
+        assignment_expression_params.insert(Parameter::Yield);
+        assignment_expression_params
+    };
+
+    fn yield_generator<I: U8Input>(i: ESInput<I>,
+                                   params: &Parameters)
+                                   -> ESParseResult<I, YieldExpression> {
+
+        let assignment_expression_params = {
+            let mut assignment_expression_params = params.clone();
+            assignment_expression_params.insert(Parameter::Yield);
+            assignment_expression_params
+        };
+
+        parse!{i;
+
+            string(b"yield");
+
+            let delim = common_delim_no_line_term();
+
+            let expr = assignment_expression(&assignment_expression_params);
+
+            ret YieldExpression::YieldGenerator(delim, expr)
+
+        }
+    }
+
+    fn yield_iterable<I: U8Input>(i: ESInput<I>,
+                                  params: &Parameters)
+                                  -> ESParseResult<I, YieldExpression> {
+
+        let assignment_expression_params = {
+            let mut assignment_expression_params = params.clone();
+            assignment_expression_params.insert(Parameter::Yield);
+            assignment_expression_params
+        };
+
+        parse!{i;
+
+            string(b"yield");
+
+            let delim_1 = common_delim_no_line_term();
+
+            string(b"*");
+
+            let delim_2 = common_delim();
+
+            let expr = assignment_expression(&assignment_expression_params);
+
+            ret YieldExpression::YieldIterable(delim_1, delim_2, expr)
+
+        }
+    }
+
+    parse!{i;
+
+        let result = yield_iterable(&params)
+            <|>
+            yield_generator(&params)
+            <|>
+            (i -> string(i, b"yield").map(|_| YieldExpression::Yield));
+
+        ret result
+    }
+
+}
 
 // 14.5 Class Definitions
 

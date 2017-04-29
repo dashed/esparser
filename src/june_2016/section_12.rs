@@ -3123,13 +3123,7 @@ fn conditional_expression<I: U8Input>(i: ESInput<I>,
                                       params: &Parameters)
                                       -> ESParseResult<I, ConditionalExpression> {
 
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::In) ||
-             params.contains(&Parameter::Yield)) {
-            panic!("misuse of conditional_expression");
-        }
-    }
+    ensure_params!(params; "conditional_expression"; Parameter::In; Parameter::Yield);
 
     #[inline]
     fn conditional<I: U8Input>(i: ESInput<I>,
@@ -3200,13 +3194,7 @@ pub fn assignment_expression<I: U8Input>(i: ESInput<I>,
                                          params: &Parameters)
                                          -> ESParseResult<I, AssignmentExpression> {
 
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::In) ||
-             params.contains(&Parameter::Yield)) {
-            panic!("misuse of assignment_expression");
-        }
-    }
+    ensure_params!(params; "assignment_expression"; Parameter::In; Parameter::Yield);
 
     parse!{i;
 
