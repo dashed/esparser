@@ -18,7 +18,7 @@ use super::section_11::{reserved_word, identifier_name, IdentifierName, CommonDe
                         TemplateMiddle, template_tail, TemplateTail, template_head, TemplateHead,
                         NoSubstitutionTemplate, no_substitution_template};
 use super::section_14::{method_definition, MethodDefinition, function_expression,
-                        FunctionExpression};
+                        FunctionExpression, YieldExpression, yield_expression};
 use super::types::{Parameters, Parameter};
 use parsers::error_location::ErrorLocation;
 
@@ -3187,6 +3187,7 @@ fn conditional_expression<I: U8Input>(i: ESInput<I>,
 
 pub enum AssignmentExpression {
     ConditionalExpression(Box<ConditionalExpression>), // TODO: complete
+    YieldExpression(Box<YieldExpression>),
 }
 
 // TODO: test
@@ -3196,10 +3197,28 @@ pub fn assignment_expression<I: U8Input>(i: ESInput<I>,
 
     ensure_params!(params; "assignment_expression"; Parameter::In; Parameter::Yield);
 
+    let in_params = {
+        let mut in_params = Parameters::new();
+        if params.contains(&Parameter::In) {
+            in_params.insert(Parameter::In);
+        }
+        in_params
+    };
+
     parse!{i;
 
         let result = (i -> conditional_expression(i, params)
-            .map(|x| AssignmentExpression::ConditionalExpression(Box::new(x))));
+            .map(|x| AssignmentExpression::ConditionalExpression(Box::new(x))))
+            <|>
+            (i -> {
+                if params.contains(&Parameter::Yield) {
+                    yield_expression(i, &in_params).map(|x| AssignmentExpression::YieldExpression(Box::new(x)))
+                } else {
+                    i.err({
+                        ESParseError::Failure(ErrorChain::new("next parser"))
+                    })
+                }
+            });
 
         // TODO: complete
 
