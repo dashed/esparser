@@ -978,6 +978,68 @@ fn generator_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, GeneratorBody> 
 
 // TODO: complete
 
+// ClassElementList
+
+struct ClassElementList(ClassElement, Vec<ClassElementListRest>);
+
+impl ClassElementList {
+    fn new(rhs_val: ClassElement) -> Self {
+        ClassElementList(rhs_val, vec![])
+    }
+
+    fn add_item(self, operator_delim: ClassElementListDelim, rhs_val: ClassElement) -> Self {
+
+        let ClassElementList(head, rest) = self;
+        let mut rest = rest;
+
+        let ClassElementListDelim(delim) = operator_delim;
+
+        let rhs_val = ClassElementListRest(delim, rhs_val);
+
+        rest.push(rhs_val);
+
+        ClassElementList(head, rest)
+    }
+}
+
+struct ClassElementListDelim(Vec<CommonDelim>);
+
+struct ClassElementListRest(Vec<CommonDelim>, ClassElement);
+
+generate_list_parser!(
+    ClassElementList;
+    ClassElementListRest;
+    ClassElementListState;
+    ClassElementListDelim;
+    ClassElement);
+
+// TODO: test
+fn class_element_list<I: U8Input>(i: ESInput<I>,
+                                  params: &Parameters)
+                                  -> ESParseResult<I, ClassElementList> {
+
+    ensure_params!(params; "class_element_list"; Parameter::Yield);
+
+    type Accumulator = Rc<RefCell<ClassElementListState>>;
+
+    #[inline]
+    fn delimiter<I: U8Input>(i: ESInput<I>, accumulator: Accumulator) -> ESParseResult<I, ()> {
+        common_delim(i).map(|delim| {
+            accumulator.borrow_mut().add_delim(ClassElementListDelim(delim));
+            ()
+        })
+    }
+
+    #[inline]
+    let reducer = |i: ESInput<I>, accumulator: Accumulator| -> ESParseResult<I, ()> {
+        class_element(i, &params).bind(|i, rhs| {
+            accumulator.borrow_mut().add_item(rhs);
+            i.ret(())
+        })
+    };
+
+    parse_list(i, delimiter, reducer).map(|x| x.unwrap())
+}
 
 // ClassElement
 
