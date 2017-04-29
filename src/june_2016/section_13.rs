@@ -34,7 +34,8 @@ enum Statement {
     IfStatement(Box<IfStatement>),
     BreakableStatement(Box<BreakableStatement>),
     ContinueStatement(ContinueStatement),
-    BreakStatement(BreakStatement), // TODO: complete
+    BreakStatement(BreakStatement),
+    ReturnStatement(ReturnStatement), // TODO: complete
 }
 
 // TODO: test
@@ -42,39 +43,61 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
 
     ensure_params!(params; "statement"; Parameter::Return; Parameter::Yield);
 
-    let yield_params = {
-        let mut yield_params = Parameters::new();
+    fn parsers<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Statement> {
 
-        if params.contains(&Parameter::Yield) {
-            yield_params.insert(Parameter::Yield);
+        let yield_params = {
+            let mut yield_params = Parameters::new();
+
+            if params.contains(&Parameter::Yield) {
+                yield_params.insert(Parameter::Yield);
+            }
+
+            yield_params
+        };
+
+        parse!{i;
+
+            let stmt =
+            (i -> block_statement(i, &params).map(Statement::BlockStatement))
+            <|>
+            (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement))
+            <|>
+            (i -> empty_statement(i).map(Statement::EmptyStatement))
+            <|>
+            (i -> expression_statement(i, &yield_params).map(Statement::ExpressionStatement))
+            <|>
+            (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))))
+            <|>
+            (i -> breakable_statement(i, &params).map(|x| Statement::BreakableStatement(Box::new(x))))
+            <|>
+            (i -> continue_statement(i, &yield_params).map(Statement::ContinueStatement))
+            <|>
+            (i -> break_statement(i, &yield_params).map(Statement::BreakStatement));
+
+        //     // TODO: more statements
+
+            ret stmt
         }
-
-        yield_params
-    };
-
-    parse!{i;
-
-        let stmt =
-        (i -> block_statement(i, &params).map(Statement::BlockStatement))
-        <|>
-        (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement))
-        <|>
-        (i -> empty_statement(i).map(Statement::EmptyStatement))
-        <|>
-        (i -> expression_statement(i, &yield_params).map(Statement::ExpressionStatement))
-        <|>
-        (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))))
-        <|>
-        (i -> breakable_statement(i, &params).map(|x| Statement::BreakableStatement(Box::new(x))))
-        <|>
-        (i -> continue_statement(i, &yield_params).map(Statement::ContinueStatement))
-        <|>
-        (i -> break_statement(i, &yield_params).map(Statement::BreakStatement));
-
-    //     // TODO: more statements
-
-        ret stmt
     }
+
+    if params.contains(&Parameter::Return) {
+
+        let yield_params = {
+            let mut yield_params = Parameters::new();
+
+            if params.contains(&Parameter::Yield) {
+                yield_params.insert(Parameter::Yield);
+            }
+
+            yield_params
+        };
+
+        return or(i,
+                  |i| parsers(i, &params),
+                  |i| return_statement(i, &yield_params).map(Statement::ReturnStatement));
+    }
+
+    parsers(i, &params)
 }
 
 // Declaration
@@ -1311,6 +1334,7 @@ fn expression_statement<I: U8Input>(i: ESInput<I>,
            |i| -> ESParseResult<I, ()> {
         parse!{i;
 
+                // TODO: double check
                 string(b"{") <|>
                 string(b"function") <|>
                 string(b"class") <|>
@@ -2395,20 +2419,24 @@ fn continue_statement<I: U8Input>(i: ESInput<I>,
     or(i,
        |i| {
         parse!{i;
-            string(b"continue");
-            let semi_colon = semicolon();
 
-            ret ContinueStatement::Continue(semi_colon)
-        }
-    },
-       |i| {
-        parse!{i;
             string(b"continue");
             let delim = common_delim_no_line_term_required();
             let ident = label_identifier(&params);
             let semi_colon = semicolon();
 
             ret ContinueStatement::Labelled(delim, ident, semi_colon)
+
+        }
+    },
+       |i| {
+        parse!{i;
+
+            string(b"continue");
+            let semi_colon = semicolon();
+
+            ret ContinueStatement::Continue(semi_colon)
+
         }
     })
 }
@@ -2418,7 +2446,7 @@ fn continue_statement<I: U8Input>(i: ESInput<I>,
 enum BreakStatement {
     Break(SemiColon),
     // TODO: better name
-    LabelledBreak(Vec<CommonDelim>, SemiColon),
+    LabelledBreak(Vec<CommonDelim>, LabelIdentifier, SemiColon),
 }
 
 // TODO: test
@@ -2440,7 +2468,7 @@ fn break_statement<I: U8Input>(i: ESInput<I>,
 
             let semi_colon = semicolon();
 
-            ret BreakStatement::LabelledBreak(delim, semi_colon)
+            ret BreakStatement::LabelledBreak(delim, ident, semi_colon)
 
         }
     },
@@ -2459,7 +2487,55 @@ fn break_statement<I: U8Input>(i: ESInput<I>,
 
 // 13.10 The return Statement
 
-// TODO: complete
+enum ReturnStatement {
+    Return(SemiColon),
+    ReturnWithValue(Vec<CommonDelim>, Expression, SemiColon),
+}
+
+// TODO: test
+fn return_statement<I: U8Input>(i: ESInput<I>,
+                                params: &Parameters)
+                                -> ESParseResult<I, ReturnStatement> {
+
+    ensure_params!(params; "return_statement"; Parameter::Yield);
+
+
+    let expr_params = {
+        let mut expr_params = Parameters::new();
+        if params.contains(&Parameter::Yield) {
+            expr_params.insert(Parameter::Yield);
+        }
+        expr_params.insert(Parameter::In);
+        expr_params
+    };
+
+    or(i,
+       |i| {
+        parse!{i;
+
+            string(b"return");
+
+            let delim = common_delim_no_line_term_required();
+
+            let expr = expression(&expr_params);
+
+            let semi_colon = semicolon();
+
+            ret ReturnStatement::ReturnWithValue(delim, expr, semi_colon)
+
+        }
+    },
+       |i| {
+        parse!{i;
+
+            string(b"return");
+
+            let semi_colon = semicolon();
+
+            ret ReturnStatement::Return(semi_colon)
+        }
+    })
+}
 
 // 13.11 The with Statement
 
