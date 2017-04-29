@@ -20,7 +20,7 @@ use super::section_12::{initializer, Initializer, binding_identifier, BindingIde
 use super::section_14::{function_declaration, FunctionDeclaration, generator_declaration,
                         GeneratorDeclaration, class_declaration, ClassDeclaration};
 use parsers::{ESInput, ESParseResult, ESParseError, ErrorChain, parse_list, token, option, string,
-              on_error, either, or};
+              on_error, either, or, look_ahead};
 use parsers::error_location::ErrorLocation;
 
 // 13 ECMAScript Language: Statements and Declarations
@@ -1344,11 +1344,11 @@ fn expression_statement<I: U8Input>(i: ESInput<I>,
         parse!{i;
 
                 // TODO: double check
-                string(b"{") <|>
-                string(b"function") <|>
-                string(b"class") <|>
-                string(b"let") <|>
-                string(b"[");
+                look_ahead(|i| string(i, b"{")) <|>
+                look_ahead(|i| string(i, b"function")) <|>
+                look_ahead(|i| string(i, b"class")) <|>
+                look_ahead(|i| string(i, b"let")) <|>
+                look_ahead(|i| string(i, b"["));
 
                 ret {()}
             }
