@@ -973,3 +973,52 @@ fn generator_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, GeneratorBody> 
 
 // TODO: YieldExpression
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-YieldExpression
+
+// 14.5 Class Definitions
+
+// TODO: complete
+
+
+// ClassElement
+
+enum ClassElement {
+    MethodDefinition(MethodDefinition),
+    StaticMethodDefinition(Vec<CommonDelim>, MethodDefinition),
+    Empty(SemiColon),
+}
+
+// TODO: test
+fn class_element<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, ClassElement> {
+
+    ensure_params!(params; "class_element"; Parameter::Yield);
+
+    fn static_element<I: U8Input>(i: ESInput<I>,
+                                  params: &Parameters)
+                                  -> ESParseResult<I, ClassElement> {
+        parse!{i;
+
+            string(b"static");
+
+            let delim = common_delim();
+
+            let method = method_definition(&params);
+
+            ret ClassElement::StaticMethodDefinition(delim, method)
+        }
+    }
+
+    fn empty_element<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, ClassElement> {
+        semicolon(i).map(ClassElement::Empty)
+    }
+
+    parse!{i;
+
+        let elem = (i -> method_definition(i, &params).map(ClassElement::MethodDefinition))
+            <|>
+            static_element(&params)
+            <|>
+            empty_element();
+
+        ret elem
+    }
+}
