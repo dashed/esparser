@@ -322,7 +322,7 @@ fn statement_list_item<I: U8Input>(i: ESInput<I>,
 
 // LexicalDeclaration
 
-struct LexicalDeclaration(LetOrConst, Vec<CommonDelim>, BindingList);
+struct LexicalDeclaration(LetOrConst, Vec<CommonDelim>, BindingList, SemiColon);
 
 // TODO: test
 fn lexical_declaration<I: U8Input>(i: ESInput<I>,
@@ -339,8 +339,10 @@ fn lexical_declaration<I: U8Input>(i: ESInput<I>,
 
         let list = binding_list(params);
 
+        let semi_colon = semicolon();
+
         ret {
-            LexicalDeclaration(let_or_const, delim, list)
+            LexicalDeclaration(let_or_const, delim, list, semi_colon)
         }
     }
 }
@@ -460,8 +462,12 @@ fn lexical_binding<I: U8Input>(i: ESInput<I>,
     ensure_params!(params; "lexical_binding"; Parameter::In; Parameter::Yield);
 
     let binding_params = {
-        let mut binding_params = params.clone();
-        binding_params.remove(&Parameter::In);
+        let mut binding_params = Parameters::new();
+
+        if params.contains(&Parameter::Yield) {
+            binding_params.insert(Parameter::Yield);
+        }
+
         binding_params
     };
 
