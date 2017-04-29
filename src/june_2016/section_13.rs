@@ -19,7 +19,8 @@ use super::section_12::{initializer, Initializer, binding_identifier, BindingIde
                         assignment_expression, label_identifier, LabelIdentifier};
 use super::section_14::{function_declaration, FunctionDeclaration, generator_declaration,
                         GeneratorDeclaration, class_declaration, ClassDeclaration};
-use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
+use parsers::{ESInput, ESParseResult, ESParseError, ErrorChain, parse_list, token, option, string,
+              on_error, either, or};
 use parsers::error_location::ErrorLocation;
 
 // 13 ECMAScript Language: Statements and Declarations
@@ -45,61 +46,50 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
 
     ensure_params!(params; "statement"; Parameter::Return; Parameter::Yield);
 
-    fn parsers<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Statement> {
 
-        let yield_params = {
-            let mut yield_params = Parameters::new();
+    let yield_params = {
+        let mut yield_params = Parameters::new();
 
-            if params.contains(&Parameter::Yield) {
-                yield_params.insert(Parameter::Yield);
-            }
-
-            yield_params
-        };
-
-        parse!{i;
-
-            let stmt =
-            (i -> block_statement(i, &params).map(Statement::BlockStatement))
-            <|>
-            (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement))
-            <|>
-            (i -> empty_statement(i).map(Statement::EmptyStatement))
-            <|>
-            (i -> expression_statement(i, &yield_params).map(Statement::ExpressionStatement))
-            <|>
-            (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))))
-            <|>
-            (i -> breakable_statement(i, &params).map(|x| Statement::BreakableStatement(Box::new(x))))
-            <|>
-            (i -> continue_statement(i, &yield_params).map(Statement::ContinueStatement))
-            <|>
-            (i -> break_statement(i, &yield_params).map(Statement::BreakStatement));
-
-        //     // TODO: more statements
-
-            ret stmt
+        if params.contains(&Parameter::Yield) {
+            yield_params.insert(Parameter::Yield);
         }
-    }
 
-    if params.contains(&Parameter::Return) {
+        yield_params
+    };
 
-        let yield_params = {
-            let mut yield_params = Parameters::new();
+    parse!{i;
 
-            if params.contains(&Parameter::Yield) {
-                yield_params.insert(Parameter::Yield);
+        let stmt =
+        (i -> block_statement(i, &params).map(Statement::BlockStatement))
+        <|>
+        (i -> variable_statement(i, &yield_params).map(Statement::VariableStatement))
+        <|>
+        (i -> empty_statement(i).map(Statement::EmptyStatement))
+        <|>
+        (i -> expression_statement(i, &yield_params).map(Statement::ExpressionStatement))
+        <|>
+        (i -> if_statement(i, &params).map(|x| Statement::IfStatement(Box::new(x))))
+        <|>
+        (i -> breakable_statement(i, &params).map(|x| Statement::BreakableStatement(Box::new(x))))
+        <|>
+        (i -> continue_statement(i, &yield_params).map(Statement::ContinueStatement))
+        <|>
+        (i -> break_statement(i, &yield_params).map(Statement::BreakStatement))
+        <|>
+        (i -> {
+            if params.contains(&Parameter::Return) {
+                return_statement(i, &yield_params).map(Statement::ReturnStatement)
+            } else {
+                i.err({
+                    ESParseError::Failure(ErrorChain::new("next parser"))
+                })
             }
+        });
 
-            yield_params
-        };
+    //     // TODO: more statements
 
-        return or(i,
-                  |i| parsers(i, &params),
-                  |i| return_statement(i, &yield_params).map(Statement::ReturnStatement));
+        ret stmt
     }
-
-    parsers(i, &params)
 }
 
 // Declaration
@@ -123,7 +113,7 @@ fn declaration<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<
 
     parse!{i;
 
-        let decl = 
+        let decl =
             (i -> hoistable_declaration(i, &params).map(Declaration::HoistableDeclaration))
             <|>
             (i -> class_declaration(i, &params).map(Declaration::ClassDeclaration))
