@@ -562,17 +562,19 @@ struct FunctionStatementList(Option<StatementList>);
 fn function_statement_list<I: U8Input>(i: ESInput<I>,
                                        params: &Parameters)
                                        -> ESParseResult<I, FunctionStatementList> {
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
-            panic!("misuse of function_statement_list");
-        }
-    }
 
-    let mut params = params.clone();
-    params.insert(Parameter::Return);
+    ensure_params!(params; "function_statement_list"; Parameter::Yield);
 
-    option(i, |i| statement_list(i, &params).map(Some), None).map(FunctionStatementList)
+    let statement_list_params = {
+        let mut statement_list_params = params.clone();
+        statement_list_params.insert(Parameter::Return);
+        statement_list_params
+    };
+
+    option(i,
+           |i| statement_list(i, &statement_list_params).map(Some),
+           None)
+        .map(FunctionStatementList)
 }
 
 // 14.3 Method Definitions
