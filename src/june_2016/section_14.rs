@@ -978,6 +978,18 @@ fn generator_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, GeneratorBody> 
 
 // TODO: complete
 
+// ClassBody
+
+struct ClassBody(ClassElementList);
+
+// TODO: test
+fn class_body<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, ClassBody> {
+
+    ensure_params!(params; "class_body"; Parameter::Yield);
+
+    class_element_list(i, params).map(ClassBody)
+}
+
 // ClassElementList
 
 struct ClassElementList(ClassElement, Vec<ClassElementListRest>);
