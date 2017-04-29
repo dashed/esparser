@@ -979,15 +979,15 @@ fn generator_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, GeneratorBody> 
 
 // ClassDeclaration
 
-enum ClassDeclaration {
+pub enum ClassDeclaration {
     Named(Vec<CommonDelim>, BindingIdentifier, Vec<CommonDelim>, ClassTail),
     Anonymous(Vec<CommonDelim>, ClassTail),
 }
 
 // TODO: test
-fn class_declaration<I: U8Input>(i: ESInput<I>,
-                                 params: &Parameters)
-                                 -> ESParseResult<I, ClassDeclaration> {
+pub fn class_declaration<I: U8Input>(i: ESInput<I>,
+                                     params: &Parameters)
+                                     -> ESParseResult<I, ClassDeclaration> {
 
     ensure_params!(params; "class_declaration"; Parameter::Yield; Parameter::Default);
 

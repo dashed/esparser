@@ -18,7 +18,7 @@ use super::section_12::{initializer, Initializer, binding_identifier, BindingIde
                         LeftHandSideExpression, left_hand_side_expression, AssignmentExpression,
                         assignment_expression, label_identifier, LabelIdentifier};
 use super::section_14::{function_declaration, FunctionDeclaration, generator_declaration,
-                        GeneratorDeclaration};
+                        GeneratorDeclaration, class_declaration, ClassDeclaration};
 use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
 use parsers::error_location::ErrorLocation;
 
@@ -105,7 +105,9 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
 // Declaration
 
 enum Declaration {
-    HoistableDeclaration(HoistableDeclaration), // TODO: complete
+    HoistableDeclaration(HoistableDeclaration),
+    ClassDeclaration(ClassDeclaration),
+    LexicalDeclaration(LexicalDeclaration),
 }
 
 // TODO: test
@@ -113,10 +115,20 @@ fn declaration<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<
 
     ensure_params!(params; "declaration"; Parameter::Yield);
 
+    let lexical_declaration_params = {
+        let mut lexical_declaration_params = params.clone();
+        lexical_declaration_params.insert(Parameter::In);
+        lexical_declaration_params
+    };
+
     parse!{i;
 
-        // TODO: complete
-        let decl = (i -> hoistable_declaration(i, &params).map(Declaration::HoistableDeclaration));
+        let decl = 
+            (i -> hoistable_declaration(i, &params).map(Declaration::HoistableDeclaration))
+            <|>
+            (i -> class_declaration(i, &params).map(Declaration::ClassDeclaration))
+            <|>
+            (i -> lexical_declaration(i, &lexical_declaration_params).map(Declaration::LexicalDeclaration));
 
         ret decl
     }
