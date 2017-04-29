@@ -2387,7 +2387,7 @@ fn continue_statement<I: U8Input>(i: ESInput<I>,
                                   params: &Parameters)
                                   -> ESParseResult<I, ContinueStatement> {
 
-    ensure_params!(params; "continue"; Parameter::Yield);
+    ensure_params!(params; "continue_statement"; Parameter::Yield);
 
     or(i,
        |i| {
@@ -2412,7 +2412,45 @@ fn continue_statement<I: U8Input>(i: ESInput<I>,
 
 // 13.9 The break Statement
 
-// TODO: complete
+enum BreakStatement {
+    Break(SemiColon),
+    // TODO: better name
+    LabelledBreak(Vec<CommonDelim>, SemiColon)
+}
+
+// TODO: test
+fn break_statement<I: U8Input>(i: ESInput<I>,
+                                  params: &Parameters)
+                                  -> ESParseResult<I, BreakStatement> {
+
+    ensure_params!(params; "break_statement"; Parameter::Yield);
+
+    or(i, |i| {
+        parse!{i;
+
+            string(b"break");
+
+            let delim = common_delim_no_line_term_required();
+
+            let ident = label_identifier(&params);
+
+            let semi_colon = semicolon();
+
+            ret BreakStatement::LabelledBreak(delim, semi_colon)
+
+        }
+    }, |i| {
+        parse!{i;
+
+            string(b"break");
+
+            let semi_colon = semicolon();
+
+            ret BreakStatement::Break(semi_colon)
+        }
+    })
+
+}
 
 // 13.10 The return Statement
 

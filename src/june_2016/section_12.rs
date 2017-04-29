@@ -128,6 +128,8 @@ pub fn label_identifier<I: U8Input>(i: ESInput<I>,
                                     params: &Parameters)
                                     -> ESParseResult<I, LabelIdentifier> {
 
+    ensure_params!(params; "label_identifier"; Parameter::Yield);
+
     if !params.contains(&Parameter::Yield) {
 
         let result = either(i,
@@ -143,10 +145,6 @@ pub fn label_identifier<I: U8Input>(i: ESInput<I>,
             });
 
         return result;
-    }
-
-    if params.len() >= 2 {
-        panic!("misuse of binding_identifier");
     }
 
     identifier(i).map(|ident| LabelIdentifier::Identifier(ident))
