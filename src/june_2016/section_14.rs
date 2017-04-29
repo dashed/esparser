@@ -979,6 +979,49 @@ fn generator_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, GeneratorBody> 
 
 // TODO: complete
 
+// ClassTail
+
+struct ClassTail(Option<(ClassHeritage, Vec<CommonDelim>)>,
+                 Vec<CommonDelim>,
+                 Option<(ClassBody, Vec<CommonDelim>)>);
+
+// TODO: test
+fn class_tail<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, ClassTail> {
+
+    ensure_params!(params; "class_tail"; Parameter::Yield);
+
+    parse!{i;
+
+        let heritage = option(|i| -> ESParseResult<I, Option<(ClassHeritage, Vec<CommonDelim>)>> {
+            parse!{i;
+
+                let heritage = class_heritage(&params);
+                let delim = common_delim();
+
+                ret Some((heritage, delim))
+            }
+        }, None);
+
+        string(b"{");
+
+        let delim = common_delim();
+
+        let body = option(|i| -> ESParseResult<I, Option<(ClassBody, Vec<CommonDelim>)>> {
+            parse!{i;
+
+                let body = class_body(&params);
+                let delim = common_delim();
+
+                ret Some((body, delim))
+            }
+        }, None);
+
+        string(b"}");
+
+        ret ClassTail(heritage, delim, body)
+    }
+}
+
 // ClassHeritage
 
 struct ClassHeritage(Vec<CommonDelim>, LeftHandSideExpression);
