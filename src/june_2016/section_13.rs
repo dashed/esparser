@@ -17,6 +17,7 @@ use super::section_12::{initializer, Initializer, binding_identifier, BindingIde
                         PropertyName, property_name, elision, Elision, Expression, expression,
                         LeftHandSideExpression, left_hand_side_expression, AssignmentExpression,
                         assignment_expression, label_identifier, LabelIdentifier};
+use super::section_14::{function_declaration, FunctionDeclaration};
 use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
 use parsers::error_location::ErrorLocation;
 
@@ -102,29 +103,43 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
 
 // Declaration
 
-struct Declaration;
+enum Declaration {
+    HoistableDeclaration(HoistableDeclaration), // TODO: complete
+}
 
 // TODO: test
 fn declaration<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Declaration> {
 
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::Yield)) {
-            panic!("misuse of declaration");
-        }
-    }
+    ensure_params!(params; "declaration"; Parameter::Yield);
 
     parse!{i;
 
         // TODO: complete
+        let decl = (i -> hoistable_declaration(i, &params).map(Declaration::HoistableDeclaration));
 
-        ret {
-            Declaration
-        }
+        ret decl
     }
 }
 
-// TODO: HoistableDeclaration
+// HoistableDeclaration
+
+enum HoistableDeclaration {
+    FunctionDeclaration(FunctionDeclaration),
+    GeneratorDeclaration, // TODO: todo-note
+}
+
+// TODO: test
+fn hoistable_declaration<I: U8Input>(i: ESInput<I>,
+                                     params: &Parameters)
+                                     -> ESParseResult<I, HoistableDeclaration> {
+
+    ensure_params!(params; "hoistable_declaration"; Parameter::Default; Parameter::Yield);
+
+    or(i,
+       |i| function_declaration(i, &params).map(HoistableDeclaration::FunctionDeclaration),
+       // TODO: todo-note
+       |i| function_declaration(i, &params).map(HoistableDeclaration::FunctionDeclaration))
+}
 
 // TODO: http://www.ecma-international.org/ecma-262/7.0/#prod-HoistableDeclaration
 
@@ -262,7 +277,7 @@ pub fn statement_list<I: U8Input>(i: ESInput<I>,
 // TODO: fix
 enum StatementListItem {
     Statement(Statement),
-    Declaration(Declaration),
+    Declaration(Box<Declaration>),
 }
 
 // TODO: test
@@ -270,22 +285,22 @@ fn statement_list_item<I: U8Input>(i: ESInput<I>,
                                    params: &Parameters)
                                    -> ESParseResult<I, StatementListItem> {
 
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
-             params.contains(&Parameter::Return)) {
-            panic!("misuse of statement_list_item");
-        }
-    }
+    ensure_params!(params; "statement_list_item"; Parameter::Yield; Parameter::Return);
 
-    let mut yield_params = params.clone();
-    yield_params.remove(&Parameter::Return);
-    let yield_params = yield_params;
+    let yield_params = {
+        let mut yield_params = Parameters::new();
+
+        if params.contains(&Parameter::Yield) {
+            yield_params.insert(Parameter::Yield);
+        }
+
+        yield_params
+    };
 
     parse!{i;
 
         let item = (i -> statement(i, &params).map(StatementListItem::Statement)) <|>
-        (i -> declaration(i, &yield_params).map(StatementListItem::Declaration));
+        (i -> declaration(i, &yield_params).map(|x| StatementListItem::Declaration(Box::new(x))));
 
         ret item
     }

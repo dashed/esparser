@@ -27,7 +27,7 @@ use parsers::error_location::ErrorLocation;
 
 // FunctionDeclaration
 
-enum FunctionDeclaration {
+pub enum FunctionDeclaration {
     NamedFunction(/* function */
                   Vec<CommonDelim>,
                   BindingIdentifier,
@@ -58,17 +58,11 @@ enum FunctionDeclaration {
 }
 
 // TODO: test
-fn function_declaration<I: U8Input>(i: ESInput<I>,
-                                    params: &Parameters)
-                                    -> ESParseResult<I, FunctionDeclaration> {
+pub fn function_declaration<I: U8Input>(i: ESInput<I>,
+                                        params: &Parameters)
+                                        -> ESParseResult<I, FunctionDeclaration> {
 
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
-             params.contains(&Parameter::Default)) {
-            panic!("misuse of function_declaration");
-        }
-    }
+    ensure_params!(params; "function_declaration"; Parameter::Default; Parameter::Yield);
 
     #[inline]
     fn function_name<I: U8Input>
