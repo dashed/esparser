@@ -33,7 +33,8 @@ enum Statement {
     ExpressionStatement(ExpressionStatement),
     IfStatement(Box<IfStatement>),
     BreakableStatement(Box<BreakableStatement>),
-    ContinueStatement(ContinueStatement), // TODO: complete
+    ContinueStatement(ContinueStatement),
+    BreakStatement(BreakStatement), // TODO: complete
 }
 
 // TODO: test
@@ -66,7 +67,9 @@ fn statement<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I,
         <|>
         (i -> breakable_statement(i, &params).map(|x| Statement::BreakableStatement(Box::new(x))))
         <|>
-        (i -> continue_statement(i, &yield_params).map(Statement::ContinueStatement));
+        (i -> continue_statement(i, &yield_params).map(Statement::ContinueStatement))
+        <|>
+        (i -> break_statement(i, &yield_params).map(Statement::BreakStatement));
 
     //     // TODO: more statements
 
@@ -2415,17 +2418,18 @@ fn continue_statement<I: U8Input>(i: ESInput<I>,
 enum BreakStatement {
     Break(SemiColon),
     // TODO: better name
-    LabelledBreak(Vec<CommonDelim>, SemiColon)
+    LabelledBreak(Vec<CommonDelim>, SemiColon),
 }
 
 // TODO: test
 fn break_statement<I: U8Input>(i: ESInput<I>,
-                                  params: &Parameters)
-                                  -> ESParseResult<I, BreakStatement> {
+                               params: &Parameters)
+                               -> ESParseResult<I, BreakStatement> {
 
     ensure_params!(params; "break_statement"; Parameter::Yield);
 
-    or(i, |i| {
+    or(i,
+       |i| {
         parse!{i;
 
             string(b"break");
@@ -2439,7 +2443,8 @@ fn break_statement<I: U8Input>(i: ESInput<I>,
             ret BreakStatement::LabelledBreak(delim, semi_colon)
 
         }
-    }, |i| {
+    },
+       |i| {
         parse!{i;
 
             string(b"break");
