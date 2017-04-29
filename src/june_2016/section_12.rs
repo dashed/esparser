@@ -2442,6 +2442,8 @@ fn relational_expression<I: U8Input>(i: ESInput<I>,
 
             let operator = (i -> string(i, b"<=").map(|_| RelationalExpressionOperator::LessOrEqual)) <|>
                 (i -> string(i, b">=").map(|_| RelationalExpressionOperator::GreaterOrEqual)) <|>
+                (i -> string(i, b">").map(|_| RelationalExpressionOperator::Greater)) <|>
+                (i -> string(i, b"<").map(|_| RelationalExpressionOperator::Less)) <|>
                 (i -> string(i, b"instanceof").map(|_| RelationalExpressionOperator::GreaterOrEqual)) <|>
                 (i -> {
                     if has_in {
@@ -2452,9 +2454,7 @@ fn relational_expression<I: U8Input>(i: ESInput<I>,
                             ESParseError::Failure(ErrorChain::new(""))
                         })
                     }
-                }) <|>
-                (i -> string(i, b">").map(|_| RelationalExpressionOperator::Greater)) <|>
-                (i -> string(i, b"<").map(|_| RelationalExpressionOperator::Less));
+                });
 
             ret operator
         }
