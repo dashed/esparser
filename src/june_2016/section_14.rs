@@ -18,7 +18,8 @@ use super::section_12::{initializer, Initializer, binding_identifier, BindingIde
                         LeftHandSideExpression, assignment_expression, AssignmentExpression};
 use super::section_13::{statement_list, StatementList, binding_element, BindingElement,
                         binding_rest_element, BindingRestElement};
-use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or};
+use parsers::{ESInput, ESParseResult, parse_list, token, option, string, on_error, either, or,
+              look_ahead};
 use parsers::error_location::ErrorLocation;
 
 // 14 ECMAScript Language: Functions and Classes
@@ -575,6 +576,58 @@ fn function_statement_list<I: U8Input>(i: ESInput<I>,
            |i| statement_list(i, &statement_list_params).map(Some),
            None)
         .map(FunctionStatementList)
+}
+
+// 14.2 Arrow Function Definitions
+
+// TODO: complete
+
+// ConciseBody
+
+// TODO: better names
+enum ConciseBody {
+    FunctionBody(Vec<CommonDelim>, FunctionBody, Vec<CommonDelim>),
+    AssignmentExpression(AssignmentExpression),
+}
+
+// TODO: test
+fn concise_body<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, ConciseBody> {
+
+    ensure_params!(params; "concise_body"; Parameter::In);
+
+    either(i,
+           |i| {
+               // left
+               look_ahead(i, |i| string(i, b"{"))
+           },
+           |i| {
+               // right
+               i.ret(())
+           })
+        .bind(|i, result| {
+            match result {
+                Either::Left(_) => {
+                    assignment_expression(i, &params).map(ConciseBody::AssignmentExpression)
+                }
+                Either::Right(_) => {
+                    parse!{i;
+
+                        string(b"{");
+
+                        let delim_start = common_delim();
+
+                        let body = function_body(&Parameters::new());
+
+                        let delim_end = common_delim();
+
+                        string(b"}");
+
+                        ret ConciseBody::FunctionBody(delim_start, body, delim_end)
+
+                    }
+                }
+            }
+        })
 }
 
 // 14.3 Method Definitions
