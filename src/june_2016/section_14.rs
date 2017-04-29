@@ -977,7 +977,78 @@ fn generator_body<I: U8Input>(i: ESInput<I>) -> ESParseResult<I, GeneratorBody> 
 
 // 14.5 Class Definitions
 
-// TODO: complete
+// ClassDeclaration
+
+enum ClassDeclaration {
+    Named(Vec<CommonDelim>, BindingIdentifier, Vec<CommonDelim>, ClassTail),
+    Anonymous(Vec<CommonDelim>, ClassTail),
+}
+
+// TODO: test
+fn class_declaration<I: U8Input>(i: ESInput<I>,
+                                 params: &Parameters)
+                                 -> ESParseResult<I, ClassDeclaration> {
+
+    ensure_params!(params; "class_declaration"; Parameter::Yield; Parameter::Default);
+
+    fn named<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, ClassDeclaration> {
+
+        let yield_params = {
+            let mut yield_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                yield_params.insert(Parameter::Yield);
+            }
+            yield_params
+        };
+
+        parse!{i;
+
+            string(b"class");
+
+            let delim_1 = common_delim();
+
+            let name = binding_identifier(&yield_params);
+
+            let delim_2 = common_delim();
+
+            let tail = class_tail(&yield_params);
+
+            ret ClassDeclaration::Named(delim_1, name, delim_2, tail)
+        }
+    }
+
+    fn anonymous<I: U8Input>(i: ESInput<I>,
+                             params: &Parameters)
+                             -> ESParseResult<I, ClassDeclaration> {
+
+        let yield_params = {
+            let mut yield_params = Parameters::new();
+            if params.contains(&Parameter::Yield) {
+                yield_params.insert(Parameter::Yield);
+            }
+            yield_params
+        };
+
+        parse!{i;
+
+            string(b"class");
+
+            let delim = common_delim();
+
+            let tail = class_tail(&yield_params);
+
+            ret ClassDeclaration::Anonymous(delim, tail)
+        }
+    }
+
+    if params.contains(&Parameter::Default) {
+        return or(i, |i| named(i, &params), |i| anonymous(i, &params));
+    }
+
+    named(i, params)
+}
+
+// TODO: ClassExpression
 
 // ClassTail
 
