@@ -178,12 +178,7 @@ struct Block(/* { */
 // TODO: test
 fn block<I: U8Input>(i: ESInput<I>, params: &Parameters) -> ESParseResult<I, Block> {
 
-    if is_debug_mode!() {
-        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
-             params.contains(&Parameter::Return)) {
-            panic!("misuse of block");
-        }
-    }
+    ensure_params!(params; "block"; Parameter::Yield; Parameter::Return);
 
     parse!{i;
 
@@ -239,14 +234,7 @@ pub fn statement_list<I: U8Input>(i: ESInput<I>,
                                   params: &Parameters)
                                   -> ESParseResult<I, StatementList> {
 
-
-    if is_debug_mode!() {
-        // validation
-        if !(params.is_empty() || params.contains(&Parameter::Yield) ||
-             params.contains(&Parameter::Return)) {
-            panic!("misuse of statement_list");
-        }
-    }
+    ensure_params!(params; "statement_list"; Parameter::Yield; Parameter::Return);
 
     type Accumulator = Rc<RefCell<StatementListState>>;
 
@@ -2498,7 +2486,6 @@ fn return_statement<I: U8Input>(i: ESInput<I>,
                                 -> ESParseResult<I, ReturnStatement> {
 
     ensure_params!(params; "return_statement"; Parameter::Yield);
-
 
     let expr_params = {
         let mut expr_params = Parameters::new();
